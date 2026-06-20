@@ -76,7 +76,14 @@ export default function CharacterSheet() {
   const [rollMod, setRollMod] = useState("0");
   const [rollLabel, setRollLabel] = useState("");
   const [rollingDice, setRollingDice] = useState<string | null>(null);
-  const [lastRoll, setLastRoll] = useState<{ total: number; isCrit: boolean; diceType: string; result: number } | null>(null);
+  const [lastRoll, setLastRoll] = useState<{
+    rawRoll: number;
+    modifier: number;
+    total: number;
+    isCrit: boolean;
+    diceType: string;
+    label: string;
+  } | null>(null);
 
   if (isLoading) {
     return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
@@ -107,8 +114,9 @@ export default function CharacterSheet() {
     }
   };
 
-  const handleRoll = (diceType: string, label?: string, statValue?: number) => {
+  const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number) => {
     const rollKey = label || diceType;
+    const modifier = autoModifier !== undefined ? autoModifier : (parseInt(rollMod) || 0);
     setRollingDice(rollKey);
     setLastRoll(null);
     createRoll.mutate(
@@ -116,7 +124,7 @@ export default function CharacterSheet() {
         id,
         data: {
           diceType,
-          modifier: parseInt(rollMod) || 0,
+          modifier,
           label: label || (rollLabel || undefined),
           ...(statValue !== undefined ? { statValue } : {}),
         }
@@ -125,10 +133,12 @@ export default function CharacterSheet() {
         onSuccess: (data) => {
           setTimeout(() => {
             setLastRoll({
+              rawRoll: data.result,
+              modifier,
               total: data.total,
               isCrit: (data as any).isCrit ?? false,
               diceType,
-              result: data.result,
+              label: label || rollLabel || diceType,
             });
             setRollingDice(null);
             queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(id) });
@@ -142,8 +152,9 @@ export default function CharacterSheet() {
 
   const handleStatRoll = (statKey: string, statLabel: string) => {
     const statValue = (character as any)[statKey] as number;
+    const autoModifier = Math.floor(statValue / 3);
     const diceType = getDiceLabel(statValue);
-    handleRoll(diceType, `${statLabel} Roll`, statValue);
+    handleRoll(diceType, `${statLabel} Roll`, statValue, autoModifier);
   };
 
   return (
@@ -316,27 +327,43 @@ export default function CharacterSheet() {
               </div>
 
               {/* Result display */}
-              <div className="mt-8 p-6 border-2 border-dashed border-border/50 rounded-lg text-center relative min-h-[130px] flex flex-col items-center justify-center">
+              <div className="mt-2 p-6 border-2 border-dashed border-border/50 rounded-lg text-center relative min-h-[150px] flex flex-col items-center justify-center">
                 {rollingDice ? (
                   <Dice5 className="w-12 h-12 animate-spin text-primary opacity-50" />
                 ) : lastRoll ? (
-                  <div className="animate-in zoom-in duration-300 space-y-1">
-                    {lastRoll.isCrit && (
-                      <span className="text-xs font-bold tracking-widest uppercase text-yellow-500 animate-in fade-in">
-                        Critical Hit!
-                      </span>
-                    )}
+                  <div className="animate-in zoom-in duration-300 w-full">
+                    {/* Label */}
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3 font-semibold">
+                      {lastRoll.isCrit ? "Critical Hit!" : lastRoll.label}
+                    </p>
+
+                    {/* Breakdown row: roll + modifier */}
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <div className="text-center">
+                        <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Roll</span>
+                        <span className="text-2xl font-mono font-semibold text-foreground">{lastRoll.rawRoll}</span>
+                      </div>
+                      {lastRoll.modifier !== 0 && (
+                        <>
+                          <span className="text-xl text-muted-foreground font-light mt-3">+</span>
+                          <div className="text-center">
+                            <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Mod</span>
+                            <span className="text-2xl font-mono font-semibold text-primary">{lastRoll.modifier}</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className={`h-px w-24 mx-auto my-2 ${lastRoll.isCrit ? "bg-yellow-500/50" : "bg-primary/30"}`} />
+
+                    {/* Total — dominant */}
                     <div>
-                      <span className="text-sm text-muted-foreground block uppercase tracking-widest">Total</span>
-                      <span className={`text-6xl font-serif font-bold ${lastRoll.isCrit ? "text-yellow-500" : "text-primary"}`}>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground block">Total</span>
+                      <span className={`text-7xl font-serif font-bold leading-none ${lastRoll.isCrit ? "text-yellow-500" : "text-primary"}`}>
                         {lastRoll.total}
                       </span>
                     </div>
-                    {lastRoll.isCrit && (
-                      <p className="text-xs text-muted-foreground font-mono">
-                        stat cap + bonus roll
-                      </p>
-                    )}
                   </div>
                 ) : (
                   <span className="text-muted-foreground text-sm font-serif italic">The dice await your command.</span>
