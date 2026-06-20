@@ -29,9 +29,25 @@ const STATS = [
   { key: "charisma",  label: "CHA", desc: "Presence & social ability" },
 ];
 
-function getDieSize(stat: number): number {
-  if (stat <= 4) return 4;
-  return Math.ceil(stat / 2) * 2;
+// Standard DnD dice tiers
+function dieForValue(v: number): number {
+  if (v <= 4) return 4;
+  if (v <= 6) return 6;
+  if (v <= 8) return 8;
+  if (v <= 10) return 10;
+  if (v <= 12) return 12;
+  return 20;
+}
+
+// Returns all dice for a stat, e.g. stat 21 → [20, 4]
+function getStatDiceSizes(stat: number): number[] {
+  if (stat <= 20) return [dieForValue(stat)];
+  return [20, ...getStatDiceSizes(stat - 20)];
+}
+
+// Human-readable label, e.g. "d20+d4"
+function getDiceLabel(stat: number): string {
+  return getStatDiceSizes(stat).map(d => `d${d}`).join("+");
 }
 
 export default function CharacterSheet() {
@@ -126,8 +142,7 @@ export default function CharacterSheet() {
 
   const handleStatRoll = (statKey: string, statLabel: string) => {
     const statValue = (character as any)[statKey] as number;
-    const dieSize = getDieSize(statValue);
-    const diceType = `d${dieSize}`;
+    const diceType = getDiceLabel(statValue);
     handleRoll(diceType, `${statLabel} Roll`, statValue);
   };
 
@@ -197,7 +212,6 @@ export default function CharacterSheet() {
             <div className="grid grid-cols-4 gap-3">
               {STATS.map((stat) => {
                 const value = (character as any)[stat.key] as number;
-                const dieSize = getDieSize(value);
                 const mod = Math.floor(value / 3);
                 const isRolling = rollingDice === `${stat.label} Roll`;
                 return (
@@ -205,7 +219,7 @@ export default function CharacterSheet() {
                     key={stat.key}
                     onClick={() => handleStatRoll(stat.key, stat.label)}
                     disabled={!!rollingDice}
-                    title={`${stat.desc} — rolls d${dieSize}`}
+                    title={`${stat.desc} — rolls ${getDiceLabel(value)}`}
                     className={`
                       relative bg-card border rounded-lg p-4 text-center transition-all group
                       ${isRolling
@@ -223,7 +237,7 @@ export default function CharacterSheet() {
                       +{mod}
                     </div>
                     <div className="mt-1 text-[10px] text-muted-foreground font-mono opacity-60">
-                      d{dieSize}
+                      {getDiceLabel(value)}
                     </div>
                   </button>
                 );

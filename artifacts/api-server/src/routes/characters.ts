@@ -138,34 +138,60 @@ router.post("/characters/:id/rolls", async (req, res): Promise<void> => {
     return;
   }
 
-  // Derive die size from diceType string (e.g. "d12" → 12)
-  const diceTypeStr = parsed.data.diceType;
-  const sides = parseInt(diceTypeStr.replace("d", ""), 10) || 20;
-
-  const rollResult = Math.floor(Math.random() * sides) + 1;
   const modifier = parsed.data.modifier ?? 0;
   const statValue = (parsed.data as any).statValue as number | undefined;
 
-  let result = rollResult;
+  // Standard DnD die tiers
+  function dieForValue(v: number): number {
+    if (v <= 4) return 4;
+    if (v <= 6) return 6;
+    if (v <= 8) return 8;
+    if (v <= 10) return 10;
+    if (v <= 12) return 12;
+    return 20;
+  }
+
+  // Recursively build dice list: stat > 20 adds a d20 (cap 20) + dice for remainder
+  function getStatDice(s: number): Array<{ sides: number; cap: number }> {
+    if (s <= 20) return [{ sides: dieForValue(s), cap: s }];
+    return [{ sides: 20, cap: 20 }, ...getStatDice(s - 20)];
+  }
+
+  function rollOneDie(sides: number, cap: number): { rolled: number; result: number; wasCrit: boolean; bonus: number } {
+    const rolled = Math.floor(Math.random() * sides) + 1;
+    if (rolled > cap) {
+      const bonus = Math.floor(Math.random() * sides) + 1;
+      return { rolled, result: cap, wasCrit: true, bonus };
+    }
+    return { rolled, result: rolled, wasCrit: false, bonus: 0 };
+  }
+
+  let result: number;
   let total: number;
   let isCrit = false;
   let critBonus: number | null = null;
+  let diceTypeStr = parsed.data.diceType;
 
   if (statValue !== undefined) {
-    // Stat-based roll: crit when roll exceeds the stat cap
-    if (rollResult > statValue) {
-      // Critical hit — roll again and add to stat cap
-      isCrit = true;
-      const secondRoll = Math.floor(Math.random() * sides) + 1;
-      critBonus = secondRoll;
-      result = statValue;
-      total = statValue + secondRoll + modifier;
-    } else {
-      result = rollResult;
-      total = rollResult + modifier;
+    const dice = getStatDice(statValue);
+    diceTypeStr = dice.map(d => `d${d.sides}`).join("+");
+    let rollTotal = 0;
+    let anyCrit = false;
+    let totalCritBonus = 0;
+    for (const die of dice) {
+      const r = rollOneDie(die.sides, die.cap);
+      rollTotal += r.result + r.bonus;
+      if (r.wasCrit) { anyCrit = true; totalCritBonus += r.bonus; }
     }
+    result = rollTotal;
+    isCrit = anyCrit;
+    critBonus = anyCrit ? totalCritBonus : null;
+    total = rollTotal + modifier;
   } else {
-    total = rollResult + modifier;
+    const sides = parseInt(diceTypeStr.replace("d", ""), 10) || 20;
+    const rolled = Math.floor(Math.random() * sides) + 1;
+    result = rolled;
+    total = rolled + modifier;
   }
 
   const [roll] = await db
