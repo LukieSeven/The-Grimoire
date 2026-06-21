@@ -131,6 +131,7 @@ export default function CharacterSheet() {
     modifier: number;
     total: number;
     isCrit: boolean;
+    critBonus: number;
     diceType: string;
     label: string;
   } | null>(null);
@@ -187,6 +188,7 @@ export default function CharacterSheet() {
               modifier,
               total: data.total ?? 0,
               isCrit: (data as any).isCrit ?? false,
+              critBonus: (data as any).critBonus ?? 0,
               diceType,
               label: label || rollLabel || diceType,
             });
@@ -453,22 +455,44 @@ export default function CharacterSheet() {
               </div>
 
               {/* Result display */}
-              <div className="mt-2 p-6 border-2 border-dashed border-border/50 rounded-lg text-center relative min-h-[150px] flex flex-col items-center justify-center">
+              <div className={`mt-2 p-6 border-2 border-dashed rounded-lg text-center relative min-h-[150px] flex flex-col items-center justify-center transition-colors duration-300 ${lastRoll?.isCrit ? "border-yellow-500/40 bg-yellow-500/5" : "border-border/50"}`}>
                 {rollingDice ? (
                   <Dice5 className="w-12 h-12 animate-spin text-primary opacity-50" />
                 ) : lastRoll ? (
                   <div className="animate-in zoom-in duration-300 w-full">
-                    {/* Label */}
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3 font-semibold">
-                      {lastRoll.isCrit ? "Critical Hit!" : lastRoll.label}
-                    </p>
+                    {/* Label / crit banner */}
+                    {lastRoll.isCrit ? (
+                      <p className="text-xs font-bold tracking-[0.25em] uppercase text-yellow-500 mb-3 animate-in fade-in">
+                        ✦ Critical Hit! ✦
+                      </p>
+                    ) : (
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-3 font-semibold">
+                        {lastRoll.label}
+                      </p>
+                    )}
 
-                    {/* Breakdown row: roll + modifier */}
-                    <div className="flex items-center justify-center gap-2 mb-1">
+                    {/* Breakdown row */}
+                    <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
+                      {/* Base roll */}
                       <div className="text-center">
                         <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Roll</span>
-                        <span className="text-2xl font-mono font-semibold text-foreground">{lastRoll.rawRoll}</span>
+                        <span className="text-2xl font-mono font-semibold text-foreground">
+                          {lastRoll.isCrit ? lastRoll.rawRoll - lastRoll.critBonus : lastRoll.rawRoll}
+                        </span>
                       </div>
+
+                      {/* Crit bonus */}
+                      {lastRoll.isCrit && lastRoll.critBonus > 0 && (
+                        <>
+                          <span className="text-xl text-yellow-500/70 font-light mt-3">+</span>
+                          <div className="text-center">
+                            <span className="text-[10px] text-yellow-500/70 block uppercase tracking-wider">Crit</span>
+                            <span className="text-2xl font-mono font-semibold text-yellow-500">{lastRoll.critBonus}</span>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Stat modifier */}
                       {lastRoll.modifier !== 0 && (
                         <>
                           <span className="text-xl text-muted-foreground font-light mt-3">+</span>
@@ -481,7 +505,7 @@ export default function CharacterSheet() {
                     </div>
 
                     {/* Divider */}
-                    <div className={`h-px w-24 mx-auto my-2 ${lastRoll.isCrit ? "bg-yellow-500/50" : "bg-primary/30"}`} />
+                    <div className={`h-px w-28 mx-auto my-2 ${lastRoll.isCrit ? "bg-yellow-500/40" : "bg-primary/30"}`} />
 
                     {/* Total — dominant */}
                     <div>

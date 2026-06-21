@@ -196,7 +196,7 @@ router.post("/characters/:id/rolls", async (req, res): Promise<void> => {
   const modifier = parsed.data.modifier ?? 0;
   const statValue = (parsed.data as any).statValue as number | undefined;
 
-  // Standard DnD die tiers
+  // Stat → die size mapping
   function dieForValue(v: number): number {
     if (v <= 4) return 4;
     if (v <= 6) return 6;
@@ -206,19 +206,22 @@ router.post("/characters/:id/rolls", async (req, res): Promise<void> => {
     return 20;
   }
 
-  // Recursively build dice list: stat > 20 adds a d20 (cap 20) + dice for remainder
-  function getStatDice(s: number): Array<{ sides: number; cap: number }> {
-    if (s <= 20) return [{ sides: dieForValue(s), cap: s }];
-    return [{ sides: 20, cap: 20 }, ...getStatDice(s - 20)];
+  // Stat > 20 stacks a d20 + die for the remainder
+  function getStatDiceSides(s: number): number[] {
+    if (s <= 20) return [dieForValue(s)];
+    return [20, ...getStatDiceSides(s - 20)];
   }
 
-  function rollOneDie(sides: number, cap: number): { rolled: number; result: number; wasCrit: boolean; bonus: number } {
+  // Exploding die: rolling the max face is a crit — add another roll of the same die.
+  // That bonus roll can itself crit, chaining indefinitely.
+  function rollExploding(sides: number): { total: number; bonus: number; isCrit: boolean } {
     const rolled = Math.floor(Math.random() * sides) + 1;
-    if (rolled > cap) {
-      const bonus = Math.floor(Math.random() * sides) + 1;
-      return { rolled, result: cap, wasCrit: true, bonus };
+    if (rolled === sides) {
+      const chain = rollExploding(sides);
+      // bonus = everything added on top of the first roll
+      return { total: rolled + chain.total, isCrit: true, bonus: chain.total };
     }
-    return { rolled, result: rolled, wasCrit: false, bonus: 0 };
+    return { total: rolled, bonus: 0, isCrit: false };
   }
 
   let result: number;
@@ -228,15 +231,15 @@ router.post("/characters/:id/rolls", async (req, res): Promise<void> => {
   let diceTypeStr = parsed.data.diceType;
 
   if (statValue !== undefined) {
-    const dice = getStatDice(statValue);
-    diceTypeStr = dice.map(d => `d${d.sides}`).join("+");
+    const diceSides = getStatDiceSides(statValue);
+    diceTypeStr = diceSides.map(d => `d${d}`).join("+");
     let rollTotal = 0;
     let anyCrit = false;
     let totalCritBonus = 0;
-    for (const die of dice) {
-      const r = rollOneDie(die.sides, die.cap);
-      rollTotal += r.result + r.bonus;
-      if (r.wasCrit) { anyCrit = true; totalCritBonus += r.bonus; }
+    for (const sides of diceSides) {
+      const r = rollExploding(sides);
+      rollTotal += r.total;
+      if (r.isCrit) { anyCrit = true; totalCritBonus += r.bonus; }
     }
     result = rollTotal;
     isCrit = anyCrit;
