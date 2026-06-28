@@ -11,6 +11,7 @@ import {
   Roll,
   Note,
   getAdjustedStats,
+  SessionRecap,
 } from "../lib/storage";
 
 // ── Query Keys ────────────────────────────────────────────
@@ -24,6 +25,7 @@ export const getListInventoryQueryKey = (charId: number) => ["inventory", charId
 export const getListEssencesQueryKey = (charId: number) => ["essences", charId];
 export const getListAbilitiesQueryKey = (charId: number) => ["abilities", charId];
 export const getListSkillsQueryKey = (charId: number) => ["skills", charId];
+export const getListRecapsQueryKey = () => ["recaps"];
 
 // ── Characters ────────────────────────────────────────────
 
@@ -478,12 +480,29 @@ export function useListRecentRolls() {
 export function useCreateRoll() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: number; data: { diceType: string; modifier?: number; label?: string; statValue?: number } }) => {
+    mutationFn: (data: {
+      id: number;
+      data: {
+        diceType: string;
+        modifier?: number;
+        label?: string;
+        statValue?: number;
+        familiarId?: string | number;
+      };
+    }) => {
       const charId = data.id;
-      const { diceType, modifier = 0, label, statValue } = data.data;
+      const { diceType, modifier = 0, label, statValue, familiarId } = data.data;
       
       const char = storage.getCharacter(charId);
       if (!char) throw new Error("Character not found");
+
+      let rollingEntity: any = char;
+      if (familiarId !== undefined) {
+        const fam = char.familiars?.find(f => f.id === familiarId);
+        if (fam) {
+          rollingEntity = fam;
+        }
+      }
 
       function dieForValue(v: number): number {
         if (v <= 4) return 4;
@@ -509,7 +528,73 @@ export function useCreateRoll() {
       let isCrit = false;
       let diceTypeStr = diceType;
 
-      if (statValue !== undefined) {
+      const hasStatPrefix = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"].some(p => diceType.toLowerCase().includes(p));
+      const hasOperators = /[+\-*/]/.test(diceType);
+
+      if (statValue === undefined && (hasStatPrefix || hasOperators)) {
+        // Advanced Math/Stat-Based formula parser
+        let expression = diceType.replace(/\s+/g, "").toLowerCase();
+        const statsKeys = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
+        const statPrefixes = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"];
+        let diceDescriptionParts: string[] = [];
+        let rollDetailsParts: string[] = [];
+
+        const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
+          const diceSides = getStatDiceSides(statVal);
+          let sum = 0;
+          const rolls: number[] = [];
+          let crit = false;
+          for (const sides of diceSides) {
+            const r = rollOnce(sides);
+            sum += r.result;
+            rolls.push(r.result);
+            if (r.isCrit) crit = true;
+          }
+          const desc = diceSides.map((sides, i) => `d${sides}(${rolls[i]})`).join("+");
+          return { total: sum, desc, isCrit: crit };
+        };
+
+        // A. Resolve stats
+        for (let i = 0; i < statPrefixes.length; i++) {
+          const prefix = statPrefixes[i];
+          const statKey = statsKeys[i];
+          const regex = new RegExp(prefix, "g");
+          
+          if (regex.test(expression)) {
+            const statVal = (rollingEntity[statKey] !== undefined ? rollingEntity[statKey] : 10) as number;
+            const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statVal);
+            if (crit) isCrit = true;
+            expression = expression.split(prefix).join(String(rolledSum));
+            diceDescriptionParts.push(`${prefix.toUpperCase()}(${desc})`);
+            rollDetailsParts.push(`${prefix.toUpperCase()}:${rolledSum}`);
+          }
+        }
+
+        // B. Resolve standard dice
+        const diceRegex = /d(\d+)/g;
+        let match;
+        while ((match = diceRegex.exec(expression)) !== null) {
+          const sides = parseInt(match[1], 10);
+          const r = rollOnce(sides);
+          if (r.isCrit) isCrit = true;
+          expression = expression.replace(match[0], String(r.result));
+          diceDescriptionParts.push(`d${sides}(${r.result})`);
+          rollDetailsParts.push(`d${sides}:${r.result}`);
+        }
+
+        // C. Evaluate expression
+        let evaluated = 0;
+        if (/^[0-9+\-*/().]+$/.test(expression)) {
+          try {
+            evaluated = new Function(`return (${expression})`)();
+          } catch {
+            evaluated = 0;
+          }
+        }
+        result = Math.floor(evaluated);
+        total = result + modifier;
+        diceTypeStr = diceDescriptionParts.join(" + ") || diceType;
+      } else if (statValue !== undefined) {
         const diceSides = getStatDiceSides(statValue);
         diceTypeStr = diceSides.map(d => `d${d}`).join("+");
         let rollTotal = 0;
@@ -544,6 +629,40 @@ export function useCreateRoll() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(data.characterId) });
       queryClient.invalidateQueries({ queryKey: getListRecentRollsQueryKey() });
+    },
+  });
+}
+
+// ── Session Recaps ────────────────────────────────────────
+
+export function useListRecaps() {
+  return useQuery<SessionRecap[]>({
+    queryKey: getListRecapsQueryKey(),
+    queryFn: () => storage.getRecaps(),
+  });
+}
+
+export function useCreateRecap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string; content: string }) => {
+      return Promise.resolve(storage.createRecap(data.title, data.content));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListRecapsQueryKey() });
+    },
+  });
+}
+
+export function useDeleteRecap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) => {
+      storage.deleteRecap(id);
+      return Promise.resolve();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListRecapsQueryKey() });
     },
   });
 }

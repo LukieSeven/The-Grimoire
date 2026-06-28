@@ -1,28 +1,31 @@
 import { useState } from "react";
-import { useListCharacters, useListRecentRolls, useCreateCharacter } from "@/hooks/useStorage";
+import { useListCharacters, useCreateCharacter, useListRecaps, useCreateRecap, useDeleteRecap } from "@/hooks/useStorage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Dice5, AlertCircle, Loader2, Plus, Sparkles, Shield } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Trash2, BookOpen } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 
 export default function Dashboard() {
   const { data: characters, isLoading: loadingChars } = useListCharacters();
-  const { data: recentRolls, isLoading: loadingRolls } = useListRecentRolls();
+  const { data: recaps, isLoading: loadingRecaps } = useListRecaps();
   const createCharacter = useCreateCharacter();
+  const createRecap = useCreateRecap();
+  const deleteRecap = useDeleteRecap();
   const [, setLocation] = useLocation();
 
   const [isOpen, setIsOpen] = useState(false);
 
   // Form State
   const [name, setName] = useState("");
-  const [className, setClassName] = useState("");
+  const [rank, setRank] = useState("Iron");
   const [race, setRace] = useState("Human");
-  const [level, setLevel] = useState(1);
   const [speed, setSpeed] = useState(30);
+  const [resistances, setResistances] = useState("");
+  const [immunities, setImmunities] = useState("");
   
   // Base Stats (Default: 10)
   const [power, setPower] = useState(10);
@@ -37,17 +40,21 @@ export default function Dashboard() {
   const [background, setBackground] = useState("");
   const [backstory, setBackstory] = useState("");
 
+  // Session Recaps Form State
+  const [recapTitle, setRecapTitle] = useState("");
+  const [recapContent, setRecapContent] = useState("");
+  const [isAddingRecap, setIsAddingRecap] = useState(false);
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    // Derived max values calculated automatically by parser formulas
     createCharacter.mutate(
       {
         name,
-        className,
+        rank,
         race,
-        level,
+        level: 1, // All characters start at level 1
         speed,
         power,
         vitality,
@@ -62,6 +69,8 @@ export default function Dashboard() {
         currentMana: spirit * 10 + willpower * 5,
         currentDt: endurance * 2,
         dtBonus: 0,
+        resistances,
+        immunities,
         background: background || null,
         backstory: backstory || null,
         hpFormula: "Vitality * 10 + Endurance * 5",
@@ -75,16 +84,18 @@ export default function Dashboard() {
         precisionTraining: 0,
         willpowerTraining: 0,
         charismaTraining: 0,
+        familiars: [],
       },
       {
         onSuccess: (char) => {
           setIsOpen(false);
           // Reset form fields
           setName("");
-          setClassName("");
+          setRank("Iron");
           setRace("Human");
-          setLevel(1);
           setSpeed(30);
+          setResistances("");
+          setImmunities("");
           setPower(10);
           setVitality(10);
           setSpirit(10);
@@ -97,6 +108,21 @@ export default function Dashboard() {
           setBackstory("");
           // Navigate to character sheet
           setLocation(`/characters/${char.id}`);
+        },
+      }
+    );
+  };
+
+  const handleAddRecapSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!recapTitle.trim() || !recapContent.trim()) return;
+    createRecap.mutate(
+      { title: recapTitle, content: recapContent },
+      {
+        onSuccess: () => {
+          setRecapTitle("");
+          setRecapContent("");
+          setIsAddingRecap(false);
         },
       }
     );
@@ -140,11 +166,11 @@ export default function Dashboard() {
         {/* Ethereal New Character Dialog Trigger */}
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-base font-serif font-bold tracking-wide px-6 py-5 rounded-none border border-primary/60 animate-ethereal-pulse shadow-lg transition-transform cursor-pointer">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-base font-serif font-bold tracking-wide px-6 py-5 rounded-md border border-primary/60 animate-ethereal-pulse shadow-lg transition-transform cursor-pointer">
               <Plus className="w-5 h-5 mr-2" /> New Character
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none">
+          <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-3xl text-primary font-bold tracking-wide border-b border-border/30 pb-2">
                 Forge a Hero
@@ -162,25 +188,29 @@ export default function Dashboard() {
                     onChange={e => setName(e.target.value)} 
                     placeholder="e.g. Garrick the Bold" 
                     required 
-                    className="bg-background border-border/60 rounded-none h-9 text-sm" 
+                    className="bg-background border-border/60 rounded-md h-9 text-sm" 
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Class</label>
-                  <Input 
-                    value={className} 
-                    onChange={e => setClassName(e.target.value)} 
-                    placeholder="e.g. Defender, Mage, Rogue" 
-                    required 
-                    className="bg-background border-border/60 rounded-none h-9 text-sm" 
-                  />
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Rank</label>
+                  <select 
+                    value={rank} 
+                    onChange={e => setRank(e.target.value)} 
+                    className="w-full h-9 rounded-md border border-border/60 bg-background px-3 py-1 text-sm shadow-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="Iron">Iron</option>
+                    <option value="Bronze">Bronze</option>
+                    <option value="Silver">Silver</option>
+                    <option value="Gold">Gold</option>
+                    <option value="Diamond">Diamond</option>
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Race</label>
                   <select 
                     value={race} 
                     onChange={e => setRace(e.target.value)} 
-                    className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-sm shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full h-9 rounded-md border border-border/60 bg-background px-3 py-1 text-sm shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     <option value="Human">Human</option>
                     <option value="Elf">Elf</option>
@@ -192,19 +222,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Levels & Speed */}
-              <div className="grid grid-cols-2 gap-4 border-t border-border/20 pt-4">
-                <div>
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Starting Level</label>
-                  <Input 
-                    type="number" 
-                    min={1} 
-                    value={level} 
-                    onChange={e => setLevel(Number(e.target.value))} 
-                    required 
-                    className="bg-background border-border/60 rounded-none font-mono h-9 text-sm" 
-                  />
-                </div>
+              {/* Speed & Resistances */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-border/20 pt-4">
                 <div>
                   <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Speed (Feet)</label>
                   <Input 
@@ -214,7 +233,25 @@ export default function Dashboard() {
                     value={speed} 
                     onChange={e => setSpeed(Number(e.target.value))} 
                     required 
-                    className="bg-background border-border/60 rounded-none font-mono h-9 text-sm" 
+                    className="bg-background border-border/60 rounded-md font-mono h-9 text-sm" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Resistances</label>
+                  <Input 
+                    value={resistances} 
+                    onChange={e => setResistances(e.target.value)} 
+                    placeholder="e.g. Fire, Slash" 
+                    className="bg-background border-border/60 rounded-md h-9 text-sm" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Immunities</label>
+                  <Input 
+                    value={immunities} 
+                    onChange={e => setImmunities(e.target.value)} 
+                    placeholder="e.g. Poison, Fear" 
+                    className="bg-background border-border/60 rounded-md h-9 text-sm" 
                   />
                 </div>
               </div>
@@ -233,15 +270,15 @@ export default function Dashboard() {
                     { label: "Willpower (WIL)", val: willpower, set: setWillpower },
                     { label: "Charisma (CHA)", val: charisma, set: setCharisma },
                   ].map(stat => (
-                    <div key={stat.label} className="bg-background/40 p-2.5 rounded-none border border-border/40 text-center">
+                    <div key={stat.label} className="bg-background/40 p-2.5 rounded-md border border-border/40 text-center">
                       <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1.5">{stat.label}</label>
                       <Input 
                         type="number" 
-                        min={1} 
+                        min={0} 
                         max={30}
                         value={stat.val} 
-                        onChange={e => stat.set(Math.min(30, Math.max(1, Number(e.target.value))))} 
-                        className="text-center font-mono h-8 bg-background rounded-none text-sm"
+                        onChange={e => stat.set(Math.min(30, Math.max(0, Number(e.target.value))))} 
+                        className="text-center font-mono h-8 bg-background rounded-md text-sm"
                       />
                     </div>
                   ))}
@@ -256,7 +293,7 @@ export default function Dashboard() {
                     value={background} 
                     onChange={e => setBackground(e.target.value)} 
                     placeholder="e.g. Captain of the Guard" 
-                    className="bg-background border-border/60 rounded-none h-9 text-sm" 
+                    className="bg-background border-border/60 rounded-md h-9 text-sm" 
                   />
                 </div>
                 <div>
@@ -265,15 +302,15 @@ export default function Dashboard() {
                     value={backstory} 
                     onChange={e => setBackstory(e.target.value)} 
                     placeholder="Describe their origin, motives, and path..." 
-                    className="bg-background border-border/60 rounded-none min-h-[80px] text-sm" 
+                    className="bg-background border-border/60 rounded-md min-h-[80px] text-sm" 
                   />
                 </div>
               </div>
 
               {/* Action Buttons */}
               <div className="flex justify-end gap-2 border-t border-border/20 pt-4">
-                <Button type="button" variant="ghost" onClick={() => setIsOpen(false)} className="rounded-none font-serif text-sm">Cancel</Button>
-                <Button type="submit" className="bg-primary text-primary-foreground font-serif text-sm rounded-none">Forge Hero</Button>
+                <Button type="button" variant="ghost" onClick={() => setIsOpen(false)} className="rounded-md font-serif text-sm">Cancel</Button>
+                <Button type="submit" className="bg-primary text-primary-foreground font-serif text-sm rounded-md">Forge Hero</Button>
               </div>
             </form>
           </DialogContent>
@@ -297,7 +334,7 @@ export default function Dashboard() {
                 <button 
                   key={char.id} 
                   onClick={() => setLocation(`/characters/${char.id}`)}
-                  className="w-full text-left rounded-none border border-border/50 bg-card/60 backdrop-blur hover:border-primary/60 transition-colors duration-250 cursor-pointer group"
+                  className="w-full text-left rounded-md border border-border/50 bg-card/60 backdrop-blur hover:border-primary/60 transition-colors duration-250 cursor-pointer group"
                 >
                   <div className="p-5 flex items-start justify-between">
                     <div>
@@ -305,7 +342,7 @@ export default function Dashboard() {
                         {char.name}
                       </h3>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                        Lvl {char.level} · {char.race} · {char.className}
+                        Lvl {char.level} · {char.race} · {char.rank}
                       </p>
                     </div>
                     <div className="text-right">
@@ -319,13 +356,13 @@ export default function Dashboard() {
               ))}
             </div>
           ) : (
-            <Card className="bg-card/30 border-dashed border-border/50 rounded-none">
+            <Card className="bg-card/30 border-dashed border-border/50 rounded-md">
               <CardContent className="flex flex-col items-center justify-center p-12 text-center">
                 <AlertCircle className="w-10 h-10 text-muted-foreground/60 mb-3" />
                 <p className="text-muted-foreground font-serif italic mb-4">No heroes have joined the party yet.</p>
                 <Button 
                   variant="outline" 
-                  className="border-primary/50 text-primary rounded-none font-serif text-sm"
+                  className="border-primary/50 text-primary rounded-md font-serif text-sm"
                   onClick={() => setIsOpen(true)}
                 >
                   Forge a Hero
@@ -335,40 +372,85 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Recent fate columns (1/3 width) */}
+        {/* Session Recaps Column (1/3 width) - Labeled "Recent Fate" */}
         <div className="space-y-6">
           <h2 className="text-2xl font-serif font-bold text-foreground border-b border-border/20 pb-2">Recent Fate</h2>
           
-          <Card className="bg-card/60 backdrop-blur border-border/50 rounded-none">
-            <CardHeader className="pb-3 border-b border-border/30">
+          <Card className="bg-card/60 backdrop-blur border border-border/50 rounded-md">
+            <CardHeader className="pb-3 border-b border-border/30 flex flex-row items-center justify-between">
               <CardTitle className="text-xs font-bold text-muted-foreground flex items-center uppercase tracking-widest">
-                <Dice5 className="w-4 h-4 mr-2 text-primary" /> 
-                Table History
+                <BookOpen className="w-4 h-4 mr-2 text-primary" /> 
+                Session Recaps
               </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-primary px-2"
+                onClick={() => setIsAddingRecap(!isAddingRecap)}
+              >
+                {isAddingRecap ? "Cancel" : "Add Recap"}
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
-              {loadingRolls ? (
+              {/* Add recap form inline */}
+              {isAddingRecap && (
+                <form onSubmit={handleAddRecapSubmit} className="p-4 border-b border-border/30 bg-background/50 space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Recap Title</label>
+                    <Input
+                      value={recapTitle}
+                      onChange={e => setRecapTitle(e.target.value)}
+                      placeholder="e.g. Session 14: The Forest Camp"
+                      required
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Recap Content</label>
+                    <Textarea
+                      value={recapContent}
+                      onChange={e => setRecapContent(e.target.value)}
+                      placeholder="Briefly state what occurred during the session..."
+                      required
+                      className="min-h-[80px] text-xs bg-background"
+                    />
+                  </div>
+                  <Button type="submit" size="sm" className="w-full text-xs h-8">Save Recap</Button>
+                </form>
+              )}
+
+              {loadingRecaps ? (
                 <div className="p-6 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-              ) : recentRolls && recentRolls.length > 0 ? (
+              ) : recaps && recaps.length > 0 ? (
                 <div className="divide-y divide-border/20 max-h-[500px] overflow-y-auto pr-1">
-                  {recentRolls.map(roll => (
-                    <div key={roll.id} className="p-4 hover:bg-accent/10 transition-colors">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="font-semibold text-xs text-foreground uppercase tracking-wide">{roll.characterName}</span>
-                        <span className="text-xl font-serif font-bold text-primary leading-none">{roll.total}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono">
-                        <span>
-                          {roll.label ? `${roll.label} ` : ''}({roll.diceType}{roll.modifier ? (roll.modifier > 0 ? `+${roll.modifier}` : roll.modifier) : ''})
+                  {recaps.map(recap => (
+                    <div key={recap.id} className="p-4 hover:bg-accent/5 transition-colors group relative">
+                      <div className="flex justify-between items-start mb-1.5 pr-6">
+                        <span className="font-serif font-bold text-sm text-foreground leading-tight">{recap.title}</span>
+                        <span className="text-[9px] text-muted-foreground whitespace-nowrap ml-2">
+                          {format(new Date(recap.createdAt), "MMM d, yyyy")}
                         </span>
-                        <span>{format(new Date(roll.rolledAt), "HH:mm")}</span>
                       </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed font-sans whitespace-pre-wrap">
+                        {recap.content}
+                      </p>
+                      {/* Delete button */}
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this session recap permanently?")) {
+                            deleteRecap.mutate({ id: recap.id });
+                          }
+                        }}
+                        className="absolute right-3 top-3 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="p-6 text-center text-xs text-muted-foreground font-serif italic">
-                  The dice have not been cast.
+                  No session recaps have been logged yet.
                 </div>
               )}
             </CardContent>

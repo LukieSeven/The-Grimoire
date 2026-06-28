@@ -20,6 +20,7 @@ export interface FamiliarAbility {
 }
 
 export interface Familiar {
+  id: string | number;
   name: string;
   className: string;
   race: string;
@@ -41,12 +42,14 @@ export interface Familiar {
   manaFormula: string;
   dtFormula: string;
   abilities: FamiliarAbility[];
+  resistances?: string;
+  immunities?: string;
 }
 
 export interface Character {
   id: number;
   name: string;
-  className: string;
+  rank: string;
   race: string;
   level: number;
   maxHp: number;
@@ -78,7 +81,9 @@ export interface Character {
   willpowerTraining: number;
   charismaTraining: number;
   favorites?: (FavoriteSlot | null)[];
-  familiar?: Familiar | null;
+  familiars?: Familiar[];
+  resistances?: string;
+  immunities?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -131,6 +136,7 @@ export interface Ability {
   rollFormula: string;
   linkedStat: string;
   assignedToQuickRolls: boolean;
+  level?: number;
 }
 
 export interface Skill {
@@ -163,6 +169,13 @@ export interface Note {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SessionRecap {
+  id: number;
+  title: string;
+  content: string;
+  createdAt: string;
 }
 
 // ── Math Formula Parser ───────────────────────────────────
@@ -250,6 +263,7 @@ const KEYS = {
   skills: "aetherborne_skills",
   rolls: "aetherborne_rolls",
   notes: "aetherborne_notes",
+  recaps: "aetherborne_recaps",
 };
 
 // ── Computed Character Helper ─────────────────────────────
@@ -362,7 +376,43 @@ export const storage = {
   // Characters
   getCharacters(): Character[] {
     initializeDefaultSample();
-    return getList<Character>(KEYS.characters);
+    const chars = getList<Character>(KEYS.characters);
+    let migrated = false;
+    chars.forEach((c: any) => {
+      // 1. className -> rank
+      if (c.className !== undefined && c.rank === undefined) {
+        c.rank = c.className === "Defender" || c.className === "Mage" || c.className === "Rogue" ? "Iron" : c.className;
+        delete c.className;
+        migrated = true;
+      }
+      if (!c.rank) {
+        c.rank = "Iron";
+        migrated = true;
+      }
+      // 2. single familiar -> familiars array
+      if (c.familiar !== undefined && c.familiars === undefined) {
+        c.familiars = c.familiar ? [{ ...c.familiar, id: Date.now() }] : [];
+        delete c.familiar;
+        migrated = true;
+      }
+      if (!c.familiars) {
+        c.familiars = [];
+        migrated = true;
+      }
+      // 3. resistances / immunities init
+      if (c.resistances === undefined) {
+        c.resistances = "";
+        migrated = true;
+      }
+      if (c.immunities === undefined) {
+        c.immunities = "";
+        migrated = true;
+      }
+    });
+    if (migrated) {
+      setList(KEYS.characters, chars);
+    }
+    return chars;
   },
 
   getCharacter(id: number): Character | null {
@@ -643,6 +693,31 @@ export const storage = {
     setList(KEYS.rolls, list);
     return roll;
   },
+
+  // Session Recaps
+  getRecaps(): SessionRecap[] {
+    initializeDefaultSample();
+    return getList<SessionRecap>(KEYS.recaps).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  createRecap(title: string, content: string): SessionRecap {
+    const list = getList<SessionRecap>(KEYS.recaps);
+    const newId = list.length > 0 ? Math.max(...list.map(r => r.id)) + 1 : 1;
+    const recap: SessionRecap = {
+      id: newId,
+      title,
+      content,
+      createdAt: new Date().toISOString()
+    };
+    list.push(recap);
+    setList(KEYS.recaps, list);
+    return recap;
+  },
+
+  deleteRecap(id: number): void {
+    const list = getList<SessionRecap>(KEYS.recaps).filter(r => r.id !== id);
+    setList(KEYS.recaps, list);
+  },
 };
 
 // ── JSON Import / Export Functions ─────────────────────────
@@ -776,7 +851,7 @@ function initializeDefaultSample(): void {
   const char: Character = {
     id: 1,
     name: "Garrick the Shieldbearer",
-    className: "Defender",
+    rank: "Iron",
     race: "Human",
     level: 5,
     maxHp: 150,
@@ -806,6 +881,9 @@ function initializeDefaultSample(): void {
     precisionTraining: 0,
     willpowerTraining: 3,
     charismaTraining: 0,
+    resistances: "Slash, Bludgeon",
+    immunities: "Fear",
+    familiars: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -876,6 +954,7 @@ function initializeDefaultSample(): void {
       rollFormula: "d6",
       linkedStat: "willpower",
       assignedToQuickRolls: true,
+      level: 1,
     },
     {
       id: 2,
@@ -889,6 +968,7 @@ function initializeDefaultSample(): void {
       rollFormula: "2d6",
       linkedStat: "power",
       assignedToQuickRolls: true,
+      level: 1,
     },
   ];
   setList(KEYS.abilities, abilities);
@@ -915,6 +995,17 @@ function initializeDefaultSample(): void {
     },
   ];
   setList(KEYS.notes, notes);
+
+  // Recaps
+  const recaps: SessionRecap[] = [
+    {
+      id: 1,
+      title: "Session 1: Siege of the Blackwood Forest",
+      content: "The party successfully defended the eastern gate ruins from a wild night beast raid. Garrick held the gate line with his tower shield. The campfire burns low...",
+      createdAt: new Date().toISOString(),
+    },
+  ];
+  setList(KEYS.recaps, recaps);
 
   safeStorage.setItem("aetherborne_initialized", "true");
 }

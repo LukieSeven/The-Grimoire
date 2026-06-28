@@ -17,11 +17,13 @@ export function EditCharacterDialog({ character }: Props) {
 
   // Form State
   const [name, setName] = useState(character.name);
-  const [className, setClassName] = useState(character.className);
+  const [rank, setRank] = useState(character.rank || "Iron");
   const [race, setRace] = useState(character.race);
   const [level, setLevel] = useState(character.level);
   const [speed, setSpeed] = useState(character.speed);
   const [dtBonus, setDtBonus] = useState(character.dtBonus);
+  const [resistances, setResistances] = useState(character.resistances || "");
+  const [immunities, setImmunities] = useState(character.immunities || "");
 
   // Stats
   const [power, setPower] = useState(character.power);
@@ -45,11 +47,13 @@ export function EditCharacterDialog({ character }: Props) {
   useEffect(() => {
     if (character) {
       setName(character.name);
-      setClassName(character.className);
+      setRank(character.rank || "Iron");
       setRace(character.race);
       setLevel(character.level);
       setSpeed(character.speed);
       setDtBonus(character.dtBonus);
+      setResistances(character.resistances || "");
+      setImmunities(character.immunities || "");
       setPower(character.power);
       setVitality(character.vitality);
       setSpirit(character.spirit);
@@ -73,11 +77,13 @@ export function EditCharacterDialog({ character }: Props) {
         id: character.id,
         data: {
           name,
-          className,
+          rank,
           race,
           level,
           speed,
           dtBonus,
+          resistances,
+          immunities,
           power,
           vitality,
           spirit,
@@ -106,7 +112,7 @@ export function EditCharacterDialog({ character }: Props) {
           <Edit2 className="w-4 h-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-y-auto bg-card border-border shadow-2xl">
+      <DialogContent className="sm:max-w-[750px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md">
         <DialogHeader>
           <DialogTitle className="font-serif text-2xl text-primary font-bold">
             Forge Hero Attributes
@@ -121,8 +127,18 @@ export function EditCharacterDialog({ character }: Props) {
               <Input value={name} onChange={e => setName(e.target.value)} required className="bg-background" />
             </div>
             <div>
-              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Class</label>
-              <Input value={className} onChange={e => setClassName(e.target.value)} required className="bg-background" />
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Rank</label>
+              <select
+                value={rank}
+                onChange={e => setRank(e.target.value)}
+                className="w-full bg-background border border-input h-10 px-3 rounded-md text-sm outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="Iron">Iron</option>
+                <option value="Bronze">Bronze</option>
+                <option value="Silver">Silver</option>
+                <option value="Gold">Gold</option>
+                <option value="Diamond">Diamond</option>
+              </select>
             </div>
             <div>
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Race</label>
@@ -146,6 +162,18 @@ export function EditCharacterDialog({ character }: Props) {
             </div>
           </div>
 
+          {/* Resistances & Immunities */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/30 pt-4">
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Resistances</label>
+              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Slash" className="bg-background" />
+            </div>
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Immunities</label>
+              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Fear" className="bg-background" />
+            </div>
+          </div>
+
           {/* Attributes */}
           <div className="border-t border-border/30 pt-4">
             <h3 className="text-xs font-bold text-primary uppercase tracking-widest mb-3">Base Stats</h3>
@@ -160,14 +188,14 @@ export function EditCharacterDialog({ character }: Props) {
                 { label: "Willpower (WIL)", val: willpower, set: setWillpower },
                 { label: "Charisma (CHA)", val: charisma, set: setCharisma },
               ].map(stat => (
-                <div key={stat.label} className="bg-background/40 p-2.5 rounded-lg border border-border/40 text-center">
+                <div key={stat.label} className="bg-background/40 p-2.5 rounded-md border border-border/40 text-center">
                   <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1.5">{stat.label}</label>
                   <Input
                     type="number"
-                    min={1}
+                    min={0}
                     max={30}
                     value={stat.val}
-                    onChange={e => stat.set(Math.min(30, Math.max(1, Number(e.target.value))))}
+                    onChange={e => stat.set(Math.min(30, Math.max(0, Number(e.target.value))))}
                     className="text-center font-mono h-8 bg-background"
                   />
                 </div>

@@ -144,6 +144,9 @@ export default function CharacterSheet() {
   // Skills mutator
   const updateSkillMut = useUpdateSkill();
 
+  // Abilities mutator
+  const updateAbilityMut = useUpdateAbility();
+
   // ── Tab State ─────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "essences" | "abilities" | "notes" | "familiar">("stats");
 
@@ -184,35 +187,53 @@ export default function CharacterSheet() {
 
   // ── Familiar Inputs State (Creation) ───────────────────────
   const [famName, setFamName] = useState("");
-  const [famClassName, setFamClassName] = useState("");
+  const [famClassName, setFamClassName] = useState("Iron"); // Used for Rank select dropdown!
   const [famRace, setFamRace] = useState("");
   const [famLevel, setFamLevel] = useState(1);
   const [famSpeed, setFamSpeed] = useState(25);
-  const [famPower, setFamPower] = useState(8);
-  const [famVitality, setFamVitality] = useState(8);
-  const [famSpirit, setFamSpirit] = useState(6);
-  const [famAgility, setFamAgility] = useState(8);
-  const [famEndurance, setFamEndurance] = useState(8);
-  const [famPrecision, setFamPrecision] = useState(8);
-  const [famWillpower, setFamWillpower] = useState(8);
-  const [famCharisma, setFamCharisma] = useState(6);
+  const [famPower, setFamPower] = useState(10);
+  const [famVitality, setFamVitality] = useState(10);
+  const [famSpirit, setFamSpirit] = useState(10);
+  const [famAgility, setFamAgility] = useState(10);
+  const [famEndurance, setFamEndurance] = useState(10);
+  const [famPrecision, setFamPrecision] = useState(10);
+  const [famWillpower, setFamWillpower] = useState(10);
+  const [famCharisma, setFamCharisma] = useState(10);
   const [famHpFormula, setFamHpFormula] = useState("Vitality * 8");
   const [famManaFormula, setFamManaFormula] = useState("Spirit * 5");
   const [famDtFormula, setFamDtFormula] = useState("Endurance * 1");
+  const [famResistances, setFamResistances] = useState("");
+  const [famImmunities, setFamImmunities] = useState("");
+  const [isAddingFamiliar, setIsAddingFamiliar] = useState(false);
 
-  // ── Familiar HUD Inputs State ──────────────────────────────
-  const [famHpAdd, setFamHpAdd] = useState("");
-  const [famHpRemove, setFamHpRemove] = useState("");
-  const [famHpBuff, setFamHpBuff] = useState("");
-  const [famDtAdd, setFamDtAdd] = useState("");
-  const [famDtRemove, setFamDtRemove] = useState("");
-  const [famDtBuff, setFamDtBuff] = useState("");
-  const [famManaAdd, setFamManaAdd] = useState("");
-  const [famManaRemove, setFamManaRemove] = useState("");
-  const [famManaBuff, setFamManaBuff] = useState("");
+  // ── Multiple Familiars HUD & Expansion State ───────────────
+  const [expandedFamiliars, setExpandedFamiliars] = useState<Record<string | number, boolean>>({});
+  const [famDtFlashes, setFamDtFlashes] = useState<Record<string | number, "hit" | "restore" | null>>({});
+  const [famDamageResults, setFamDamageResults] = useState<Record<string | number, { hpLost: number; absorbed: boolean } | null>>({});
+  const [famInputs, setFamInputs] = useState<Record<string | number, {
+    hpAdd?: string;
+    hpRemove?: string;
+    hpBuff?: string;
+    dtAdd?: string;
+    dtRemove?: string;
+    dtBuff?: string;
+    manaAdd?: string;
+    manaRemove?: string;
+    manaBuff?: string;
+  }>>({});
+
+  const updateFamInput = (famId: string | number, field: string, value: string) => {
+    setFamInputs(prev => ({
+      ...prev,
+      [famId]: {
+        ...(prev[famId] || {}),
+        [field]: value
+      }
+    }));
+  };
 
   // ── Familiar Ability Creator ───────────────────────────────
-  const [isAddingFamAbility, setIsAddingFamAbility] = useState(false);
+  const [isAddingFamAbility, setIsAddingFamAbility] = useState<Record<string | number, boolean>>({});
   const [famAbilityName, setFamAbilityName] = useState("");
   const [famAbilityDesc, setFamAbilityDesc] = useState("");
   const [famAbilityCost, setFamAbilityCost] = useState(0);
@@ -245,6 +266,7 @@ export default function CharacterSheet() {
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
   const [noteCat, setNoteCat] = useState<string>("general");
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   // ── Roll state ────────────────────────────────────────────
   const [rollTab, setRollTab] = useState<"stats" | "dice" | "history">("stats");
@@ -297,7 +319,7 @@ export default function CharacterSheet() {
     };
   };
 
-  const famMax = character.familiar ? getFamiliarMaxValues(character.familiar) : { maxHp: 1, maxMana: 0, maxDt: 0 };
+  // famMax is calculated dynamically per-familiar
 
   // ── HP Adjustments ────────────────────────────────────────
   const handleHpAdd = () => {
@@ -416,61 +438,76 @@ export default function CharacterSheet() {
     updateChar.mutate({ id, data: { currentMana: maxMana } });
   };
 
-  // ── Familiar Adjustments Mutator Helper ───────────────────
-  const updateFamiliarData = (updatedFam: Familiar | null) => {
-    updateChar.mutate({ id, data: { familiar: updatedFam } });
+  // ── Multiple Familiars Adjustments Mutator Helper ───────────
+  const updateFamiliarData = (famId: string | number, updatedFam: Familiar | null) => {
+    const list = character.familiars ? [...character.familiars] : [];
+    if (updatedFam === null) {
+      // Release familiar
+      const filtered = list.filter(f => f.id !== famId);
+      updateChar.mutate({ id, data: { familiars: filtered } });
+      toast.success("Companion released.");
+    } else {
+      // Save familiar modifications
+      const idx = list.findIndex(f => f.id === famId);
+      if (idx !== -1) {
+        list[idx] = updatedFam;
+        updateChar.mutate({ id, data: { familiars: list } });
+      }
+    }
   };
 
   // ── Familiar HP Adjustments ───────────────────────────────
-  const handleFamHpAdd = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famHpAdd);
+  const handleFamHpAdd = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.hpAdd || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = Math.min(famMax.maxHp, character.familiar.currentHp + amount);
-    updateFamiliarData({ ...character.familiar, currentHp: next });
-    setFamHpAdd("");
+    const fMax = getFamiliarMaxValues(fam);
+    const next = Math.min(fMax.maxHp, fam.currentHp + amount);
+    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    updateFamInput(fam.id, "hpAdd", "");
   };
 
-  const handleFamHpRemove = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famHpRemove);
+  const handleFamHpRemove = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.hpRemove || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = Math.max(0, character.familiar.currentHp - amount);
-    updateFamiliarData({ ...character.familiar, currentHp: next });
-    setFamHpRemove("");
+    const next = Math.max(0, fam.currentHp - amount);
+    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    updateFamInput(fam.id, "hpRemove", "");
   };
 
-  const handleFamHpBuff = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famHpBuff);
+  const handleFamHpBuff = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.hpBuff || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = character.familiar.currentHp + amount;
-    updateFamiliarData({ ...character.familiar, currentHp: next });
-    setFamHpBuff("");
+    const next = fam.currentHp + amount;
+    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    updateFamInput(fam.id, "hpBuff", "");
   };
 
-  const handleFamFullRestoreHp = () => {
-    if (!character.familiar) return;
-    updateFamiliarData({ ...character.familiar, currentHp: famMax.maxHp });
+  const handleFamFullRestoreHp = (fam: Familiar) => {
+    const fMax = getFamiliarMaxValues(fam);
+    updateFamiliarData(fam.id, { ...fam, currentHp: fMax.maxHp });
   };
 
   // ── Familiar DT Adjustments ───────────────────────────────
-  const handleFamDtAdd = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famDtAdd);
+  const handleFamDtAdd = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.dtAdd || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = Math.min(famMax.maxDt, character.familiar.currentDt + amount);
-    updateFamiliarData({ ...character.familiar, currentDt: next });
-    setFamDtAdd("");
+    const fMax = getFamiliarMaxValues(fam);
+    const next = Math.min(fMax.maxDt, fam.currentDt + amount);
+    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    updateFamInput(fam.id, "dtAdd", "");
   };
 
-  const handleFamDtRemove = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famDtRemove);
+  const handleFamDtRemove = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.dtRemove || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
 
-    let dtVal = character.familiar.currentDt;
-    let hpVal = character.familiar.currentHp;
+    let dtVal = fam.currentDt;
+    let hpVal = fam.currentHp;
     let hpLost = 0;
     let absorbed = true;
 
@@ -483,68 +520,93 @@ export default function CharacterSheet() {
       dtVal -= amount;
     }
 
-    setFamDamageResult({ hpLost, absorbed });
-    setFamDtFlash("hit");
-    updateFamiliarData({ ...character.familiar, currentHp: hpVal, currentDt: dtVal });
-    setFamDtRemove("");
-    setTimeout(() => { setFamDtFlash(null); }, 600);
+    setFamDamageResults(prev => ({
+      ...prev,
+      [fam.id]: { hpLost, absorbed }
+    }));
+    
+    setFamDtFlashes(prev => ({
+      ...prev,
+      [fam.id]: "hit"
+    }));
+
+    updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
+    updateFamInput(fam.id, "dtRemove", "");
+    
+    setTimeout(() => {
+      setFamDtFlashes(prev => ({
+        ...prev,
+        [fam.id]: null
+      }));
+    }, 600);
   };
 
-  const handleFamDtBuff = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famDtBuff);
+  const handleFamDtBuff = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.dtBuff || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = character.familiar.currentDt + amount;
-    updateFamiliarData({ ...character.familiar, currentDt: next });
-    setFamDtBuff("");
+    const next = fam.currentDt + amount;
+    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    updateFamInput(fam.id, "dtBuff", "");
   };
 
-  const handleFamRestoreDt = () => {
-    if (!character.familiar) return;
-    setFamDtFlash("restore");
-    setFamDamageResult(null);
-    updateFamiliarData({ ...character.familiar, currentDt: famMax.maxDt });
-    setTimeout(() => { setFamDtFlash(null); }, 600);
+  const handleFamRestoreDt = (fam: Familiar) => {
+    const fMax = getFamiliarMaxValues(fam);
+    setFamDtFlashes(prev => ({
+      ...prev,
+      [fam.id]: "restore"
+    }));
+    setFamDamageResults(prev => {
+      const copy = { ...prev };
+      delete copy[fam.id];
+      return copy;
+    });
+    updateFamiliarData(fam.id, { ...fam, currentDt: fMax.maxDt });
+    setTimeout(() => {
+      setFamDtFlashes(prev => ({
+        ...prev,
+        [fam.id]: null
+      }));
+    }, 600);
   };
 
   // ── Familiar Mana Adjustments ─────────────────────────────
-  const handleFamManaAdd = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famManaAdd);
+  const handleFamManaAdd = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.manaAdd || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = Math.min(famMax.maxMana, character.familiar.currentMana + amount);
-    updateFamiliarData({ ...character.familiar, currentMana: next });
-    setFamManaAdd("");
+    const fMax = getFamiliarMaxValues(fam);
+    const next = Math.min(fMax.maxMana, fam.currentMana + amount);
+    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    updateFamInput(fam.id, "manaAdd", "");
   };
 
-  const handleFamManaRemove = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famManaRemove);
+  const handleFamManaRemove = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.manaRemove || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = Math.max(0, character.familiar.currentMana - amount);
-    updateFamiliarData({ ...character.familiar, currentMana: next });
-    setFamManaRemove("");
+    const next = Math.max(0, fam.currentMana - amount);
+    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    updateFamInput(fam.id, "manaRemove", "");
   };
 
-  const handleFamManaBuff = () => {
-    if (!character.familiar) return;
-    const amount = parseInt(famManaBuff);
+  const handleFamManaBuff = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.manaBuff || "";
+    const amount = parseInt(inputVal);
     if (isNaN(amount) || amount <= 0) return;
-    const next = character.familiar.currentMana + amount;
-    updateFamiliarData({ ...character.familiar, currentMana: next });
-    setFamManaBuff("");
+    const next = fam.currentMana + amount;
+    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    updateFamInput(fam.id, "manaBuff", "");
   };
 
-  const handleFamFullRestoreMana = () => {
-    if (!character.familiar) return;
-    updateFamiliarData({ ...character.familiar, currentMana: famMax.maxMana });
+  const handleFamFullRestoreMana = (fam: Familiar) => {
+    const fMax = getFamiliarMaxValues(fam);
+    updateFamiliarData(fam.id, { ...fam, currentMana: fMax.maxMana });
   };
 
-  // ── Delete character ──────────────────────────────────────
+  // ── Delete character (Styled Trigger) ─────────────────────
   const handleDelete = () => {
-    if (confirm("Permanently delete this character?")) {
-      deleteChar.mutate({ id }, { onSuccess: () => setLocation("/") });
-    }
+    setIsDeleteOpen(true);
   };
 
   // ── Dice rolling handlers ─────────────────────────────────
@@ -645,28 +707,96 @@ export default function CharacterSheet() {
     }
   };
 
-  // ── Familiar Rolls ────────────────────────────────────────
-  const handleFamiliarStatRoll = (statKey: string, statLabel: string, val: number) => {
-    const mod = Math.floor(val / 3);
-    const dice = getDiceLabel(val);
-    handleRoll(dice, `Fam: ${statLabel} Roll`, undefined, mod);
+  const handleAbilityLevelChange = (abilityId: number, direction: "up" | "down") => {
+    const targetAb = abilities.find(a => a.id === abilityId);
+    if (!targetAb) return;
+    const curLevel = targetAb.level || 1;
+    const nextLevel = direction === "up" ? curLevel + 1 : Math.max(1, curLevel - 1);
+    updateAbilityMut.mutate({
+      id: abilityId,
+      data: { level: nextLevel }
+    });
   };
 
-  const handleFamiliarAbilityRoll = (ability: FamiliarAbility) => {
-    if (!character.familiar) return;
-    const curMana = character.familiar.currentMana;
+  // ── Familiar Rolls ────────────────────────────────────────
+  const handleFamiliarStatRoll = (famId: string | number, statKey: string, statLabel: string, val: number) => {
+    const mod = Math.floor(val / 3);
+    const dice = getDiceLabel(val);
+    setRollingDice(`fam-${famId}-${statLabel}`);
+    setLastRoll(null);
+    setCritChain(null);
+
+    createRoll.mutate(
+      { 
+        id, 
+        data: { 
+          diceType: dice, 
+          modifier: mod, 
+          label: `Fam: ${statLabel} Roll`, 
+          familiarId: famId 
+        } 
+      },
+      {
+        onSuccess: (data) => {
+          setTimeout(() => {
+            const rolled = data.result ?? 0;
+            const wasCrit = (data as any).isCrit ?? false;
+            if (wasCrit) {
+              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled });
+            } else {
+              setLastRoll({ rawRoll: rolled, modifier: mod, total: rolled + mod, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll` });
+            }
+            setRollingDice(null);
+          }, 600);
+        },
+        onError: () => setRollingDice(null)
+      }
+    );
+  };
+
+  const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility) => {
+    const curMana = fam.currentMana;
     if (curMana < ability.cost) {
-      toast.error(`Familiar not enough mana! Requires ${ability.cost} MP`);
+      toast.error(`${fam.name} not enough Mana! Requires ${ability.cost} MP`);
       return;
     }
     const nextMana = curMana - ability.cost;
-    updateFamiliarData({ ...character.familiar, currentMana: nextMana });
+    updateFamiliarData(fam.id, { ...fam, currentMana: nextMana });
 
     if (ability.rollFormula) {
-      const mod = Math.floor((character.familiar as any)[ability.linkedStat || "power"] / 3) || 0;
-      handleRoll(ability.rollFormula, `Fam: ${ability.name} Cast`, undefined, mod);
+      setRollingDice(`fam-ability-${ability.id}`);
+      setLastRoll(null);
+      setCritChain(null);
+
+      createRoll.mutate(
+        { 
+          id, 
+          data: { 
+            diceType: ability.rollFormula, 
+            modifier: 0, 
+            label: `Fam: ${ability.name} Cast`, 
+            familiarId: fam.id 
+          } 
+        },
+        {
+          onSuccess: (data) => {
+            setTimeout(() => {
+              const rolled = data.result ?? 0;
+              const wasCrit = (data as any).isCrit ?? false;
+              const chainDie = ability.rollFormula.split("+").pop() ?? ability.rollFormula;
+              if (wasCrit) {
+                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled });
+              } else {
+                setLastRoll({ rawRoll: rolled, modifier: 0, total: rolled, hadCrit: false, maxChainCount: -1, diceType: ability.rollFormula, label: `Fam: ${ability.name} Cast` });
+              }
+              setRollingDice(null);
+            }, 600);
+          },
+          onError: () => setRollingDice(null)
+        }
+      );
     } else {
-      toast.success(`Familiar used ${ability.name}!`);
+      toast.success(`${fam.name} used ${ability.name}!`);
     }
   };
 
@@ -687,19 +817,25 @@ export default function CharacterSheet() {
       const skill = skills.find(s => s.id === Number(slot.targetId));
       if (skill) handleSkillRoll(skill);
       else toast.error("Skill not found");
-    } else if (slot.type === "familiar-attribute" && character.familiar) {
-      const statVal = (character.familiar as any)[slot.targetId] as number;
-      handleFamiliarStatRoll(slot.targetId as string, String(slot.targetId).toUpperCase(), statVal);
-    } else if (slot.type === "familiar-ability" && character.familiar) {
-      const ability = character.familiar.abilities.find(a => a.id === Number(slot.targetId));
-      if (ability) handleFamiliarAbilityRoll(ability);
-      else toast.error("Familiar ability not found");
+    } else if (slot.type === "familiar-attribute" && slot.familiarId !== undefined) {
+      const fam = character.familiars?.find(f => f.id === slot.familiarId);
+      if (fam) {
+        const statVal = (fam as any)[slot.targetId] as number;
+        handleFamiliarStatRoll(fam.id, slot.targetId as string, String(slot.targetId).toUpperCase(), statVal);
+      } else toast.error("Familiar not found");
+    } else if (slot.type === "familiar-ability" && slot.familiarId !== undefined) {
+      const fam = character.familiars?.find(f => f.id === slot.familiarId);
+      if (fam) {
+        const ability = fam.abilities.find(a => a.id === Number(slot.targetId));
+        if (ability) handleFamiliarAbilityRoll(fam, ability);
+        else toast.error("Familiar ability not found");
+      } else toast.error("Familiar not found");
     }
   };
 
-  const handleAssignFavorite = (slotIdx: number, type: FavoriteSlot["type"], targetId: string | number, label: string) => {
+  const handleAssignFavorite = (slotIdx: number, type: FavoriteSlot["type"], targetId: string | number, label: string, familiarId?: string | number) => {
     const cur = [...getFavorites(character, equipment, abilities)];
-    cur[slotIdx] = { type, targetId, label };
+    cur[slotIdx] = { type, targetId, label, familiarId };
     updateChar.mutate({ id, data: { favorites: cur } });
     setAssigningSlotIndex(null);
     toast.success(`Slot #${slotIdx + 1} assigned successfully!`);
@@ -819,7 +955,7 @@ export default function CharacterSheet() {
     }
   };
 
-  // ── Familiar Binder ───────────────────────────────────────
+  // ── Familiar Binder (Multiple Companions) ─────────────────
   const handleBindFamiliar = (e: React.FormEvent) => {
     e.preventDefault();
     if (!famName.trim()) return;
@@ -841,6 +977,7 @@ export default function CharacterSheet() {
     const calculatedDt = Math.max(0, evaluateFormula(famDtFormula || "Endurance * 1", vars));
 
     const newFam: Familiar = {
+      id: Date.now(),
       name: famName,
       className: famClassName || "Companion",
       race: famRace || "Beast",
@@ -861,23 +998,50 @@ export default function CharacterSheet() {
       hpFormula: famHpFormula || "Vitality * 8",
       manaFormula: famManaFormula || "Spirit * 5",
       dtFormula: famDtFormula || "Endurance * 1",
+      resistances: famResistances,
+      immunities: famImmunities,
       abilities: []
     };
 
-    updateFamiliarData(newFam);
-    toast.success(`Familiar ${newFam.name} bound successfully!`);
+    const list = character.familiars ? [...character.familiars] : [];
+    list.push(newFam);
+    updateChar.mutate({ id, data: { familiars: list } }, {
+      onSuccess: () => {
+        setFamName("");
+        setFamClassName("Iron");
+        setFamRace("");
+        setFamLevel(1);
+        setFamSpeed(25);
+        setFamPower(10);
+        setFamVitality(10);
+        setFamSpirit(10);
+        setFamAgility(10);
+        setFamEndurance(10);
+        setFamPrecision(10);
+        setFamWillpower(10);
+        setFamCharisma(10);
+        setFamHpFormula("Vitality * 8");
+        setFamManaFormula("Spirit * 5");
+        setFamDtFormula("Endurance * 1");
+        setFamResistances("");
+        setFamImmunities("");
+        setIsAddingFamiliar(false);
+        toast.success(`Familiar ${newFam.name} bound successfully!`);
+      }
+    });
   };
 
-  const handleReleaseFamiliar = () => {
-    if (confirm("Release your familiar companion?")) {
-      updateFamiliarData(null);
-      toast.success("Familiar released.");
+  const handleReleaseFamiliar = (famId: string | number) => {
+    if (confirm("Release this familiar companion permanently?")) {
+      updateFamiliarData(famId, null);
     }
   };
 
-  const handleCreateFamAbility = (e: React.FormEvent) => {
+  const handleCreateFamAbility = (famId: string | number, e: React.FormEvent) => {
     e.preventDefault();
-    if (!character.familiar || !famAbilityName.trim()) return;
+    const list = character.familiars ? [...character.familiars] : [];
+    const fam = list.find(f => f.id === famId);
+    if (!fam || !famAbilityName.trim()) return;
 
     const newAb: FamiliarAbility = {
       id: Date.now(),
@@ -893,22 +1057,25 @@ export default function CharacterSheet() {
     };
 
     const updated = {
-      ...character.familiar,
-      abilities: [...(character.familiar.abilities || []), newAb]
+      ...fam,
+      abilities: [...(fam.abilities || []), newAb]
     };
-    updateFamiliarData(updated);
+    updateFamiliarData(famId, updated);
     setFamAbilityName("");
     setFamAbilityDesc("");
     setFamAbilityCost(0);
     setFamAbilityFormula("");
-    setIsAddingFamAbility(false);
+    setIsAddingFamAbility(prev => ({ ...prev, [famId]: false }));
     toast.success("Familiar ability added.");
   };
 
-  const handleDeleteFamAbility = (abId: number) => {
-    if (!character.familiar) return;
-    const filtered = character.familiar.abilities.filter(a => a.id !== abId);
-    updateFamiliarData({ ...character.familiar, abilities: filtered });
+  const handleDeleteFamAbility = (famId: string | number, abId: number) => {
+    const list = character.familiars ? [...character.familiars] : [];
+    const fam = list.find(f => f.id === famId);
+    if (!fam) return;
+
+    const filtered = fam.abilities.filter(a => a.id !== abId);
+    updateFamiliarData(famId, { ...fam, abilities: filtered });
     toast.success("Familiar ability removed.");
   };
 
@@ -985,8 +1152,22 @@ export default function CharacterSheet() {
                     {character.name}
                   </h1>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                    Level {character.level} · {character.race} · {character.className}
+                    Level {character.level} · {character.race} · {character.rank}
                   </p>
+                  {(character.resistances || character.immunities) && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-sans mt-2">
+                      {character.resistances && (
+                        <span>
+                          <strong className="text-foreground uppercase tracking-wider text-[10px]">Resistances:</strong> {character.resistances}
+                        </span>
+                      )}
+                      {character.immunities && (
+                        <span>
+                          <strong className="text-foreground uppercase tracking-wider text-[10px]">Immunities:</strong> {character.immunities}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
@@ -997,63 +1178,8 @@ export default function CharacterSheet() {
               {/* Resource Management HUD grids */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
-                {/* 1. HP (Health) */}
-                <div className="rounded-none border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    <Heart className="w-4 h-4 text-destructive" /> Health (HP)
-                  </div>
-                  <div className="text-center py-1">
-                    <span className={`text-4xl font-mono font-bold ${hp && hp > maxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
-                      {hp ?? character.currentHp}
-                    </span>
-                    <span className="text-xs text-muted-foreground font-mono"> /{maxHp}</span>
-                  </div>
-                  <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > maxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
-                  
-                  {/* hp quick actions: add/remove/buff */}
-                  <div className="space-y-2 mt-1">
-                    <div className="flex gap-1.5">
-                      <Input
-                        type="number" min="0" value={hpAdd} placeholder="Heal val"
-                        onChange={e => setHpAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                      />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                        onClick={handleHpAdd} disabled={!hpAdd}>
-                        Heal
-                      </Button>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Input
-                        type="number" min="0" value={hpRemove} placeholder="Dmg val"
-                        onChange={e => setHpRemove(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                      />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
-                        onClick={handleHpRemove} disabled={!hpRemove}>
-                        Dmg
-                      </Button>
-                    </div>
-                    <div className="flex gap-1.5">
-                      <Input
-                        type="number" min="0" value={hpBuff} placeholder="Buff val"
-                        onChange={e => setHpBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                      />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                        onClick={handleHpBuff} disabled={!hpBuff}>
-                        Buff
-                      </Button>
-                    </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
-                      onClick={handleFullRestoreHp}>
-                      Full Restore HP
-                    </Button>
-                  </div>
-                </div>
-
-                {/* 2. DT (Damage Threshold) */}
-                <div className={`rounded-none border p-3 flex flex-col justify-between gap-3 transition-colors duration-200 ${
+                {/* 1. DT (Damage Threshold) - Ordered First */}
+                <div className={`rounded-md border p-3 flex flex-col justify-between gap-3 transition-colors duration-200 ${
                   dtFlash === "hit" ? "border-destructive/70 bg-destructive/10"
                   : dtFlash === "restore" ? "border-primary/70 bg-primary/10"
                   : "border-border/40 bg-background/30"
@@ -1079,20 +1205,20 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={dtAdd} placeholder="Add val"
                         onChange={e => setDtAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleDtAdd} disabled={!dtAdd}>
                         Add
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={dtRemove} placeholder="Hit val"
+                        type="number" min="0" value={dtRemove} placeholder="DMG Val"
                         onChange={e => { setDtRemove(e.target.value); setDamageResult(null); }}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleApplyDamage} disabled={!dtRemove || applyDamageMut.isPending}>
                         Hit
                       </Button>
@@ -1101,27 +1227,87 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={dtBuff} placeholder="Buff val"
                         onChange={e => setDtBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleDtBuff} disabled={!dtBuff}>
                         Buff
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
                       onClick={handleRestoreDt}>
                       Full Restore DT
                     </Button>
-                    {damageResult && (
-                      <p className={`text-[10px] font-mono text-center mt-1 ${damageResult.absorbed ? "text-primary" : "text-destructive"}`}>
-                        {damageResult.absorbed ? "✦ Absorbed" : damageResult.hpLost > 0 ? `−${damageResult.hpLost} HP` : "DT hit"}
-                      </p>
-                    )}
+                    {/* Fixed Height Container to prevent layout shifts */}
+                    <div className="h-4 flex items-center justify-center mt-1">
+                      {damageResult && (
+                        <p className={`text-[10px] font-mono text-center ${damageResult.absorbed ? "text-primary" : "text-destructive"}`}>
+                          {damageResult.absorbed ? "✦ Absorbed" : damageResult.hpLost > 0 ? `−${damageResult.hpLost} HP` : "DT hit"}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* 3. Mana (MP) */}
-                <div className="rounded-none border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
+                {/* 2. HP (Health) - Ordered Second */}
+                <div className="rounded-md border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    <Heart className="w-4 h-4 text-destructive" /> Health (HP)
+                  </div>
+                  <div className="text-center py-1">
+                    <span className={`text-4xl font-mono font-bold ${hp && hp > maxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
+                      {hp ?? character.currentHp}
+                    </span>
+                    <span className="text-xs text-muted-foreground font-mono"> /{maxHp}</span>
+                  </div>
+                  <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > maxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
+                  
+                  {/* hp quick actions: add/remove/buff */}
+                  <div className="space-y-2 mt-1">
+                    <div className="flex gap-1.5">
+                      <Input
+                        type="number" min="0" value={hpAdd} placeholder="Heal val"
+                        onChange={e => setHpAdd(e.target.value)}
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                      />
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                        onClick={handleHpAdd} disabled={!hpAdd}>
+                        Heal
+                      </Button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Input
+                        type="number" min="0" value={hpRemove} placeholder="Dmg val"
+                        onChange={e => setHpRemove(e.target.value)}
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                      />
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                        onClick={handleHpRemove} disabled={!hpRemove}>
+                        Dmg
+                      </Button>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Input
+                        type="number" min="0" value={hpBuff} placeholder="Buff val"
+                        onChange={e => setHpBuff(e.target.value)}
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                      />
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                        onClick={handleHpBuff} disabled={!hpBuff}>
+                        Buff
+                      </Button>
+                    </div>
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                      onClick={handleFullRestoreHp}>
+                      Full Restore HP
+                    </Button>
+                    {/* Fixed Height placeholder to match DT layout height */}
+                    <div className="h-4 mt-1" />
+                  </div>
+                </div>
+
+                {/* 3. Mana (MP) - Ordered Third */}
+                <div className="rounded-md border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
                     <Sparkles className="w-4 h-4 text-blue-400" /> Mana (MP)
                   </div>
@@ -1139,9 +1325,9 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={manaAdd} placeholder="Add val"
                         onChange={e => setManaAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleManaAdd} disabled={!manaAdd}>
                         Add
                       </Button>
@@ -1150,9 +1336,9 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={manaRemove} placeholder="Use val"
                         onChange={e => setManaRemove(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleManaRemove} disabled={!manaRemove}>
                         Use
                       </Button>
@@ -1161,17 +1347,19 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={manaBuff} placeholder="Buff val"
                         onChange={e => setManaBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
+                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleManaBuff} disabled={!manaBuff}>
                         Buff
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
                       onClick={handleFullRestoreMana}>
                       Full Restore Mana
                     </Button>
+                    {/* Fixed Height placeholder to match DT layout height */}
+                    <div className="h-4 mt-1" />
                   </div>
                 </div>
 
@@ -1303,40 +1491,46 @@ export default function CharacterSheet() {
                     </div>
                   )}
 
-                  {/* Familiar Options (If present) */}
-                  {character.familiar && (
-                    <div className="space-y-3">
-                      <div>
-                        <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Familiar Attributes</h4>
-                        <div className="flex flex-wrap gap-1.5">
-                          {STATS.map(stat => {
-                            const val = (character.familiar as any)[stat.key] as number;
-                            return (
-                              <Button 
-                                key={stat.key} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-mono"
-                                onClick={() => handleAssignFavorite(assigningSlotIndex!, "familiar-attribute", stat.key, `Fam-${stat.label}`)}
-                              >
-                                Fam-{stat.label} (+{Math.floor(val/3)})
-                              </Button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      {character.familiar.abilities && character.familiar.abilities.length > 0 && (
-                        <div>
-                          <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Familiar Actions</h4>
-                          <div className="flex flex-wrap gap-1.5">
-                            {character.familiar.abilities.map(ab => (
-                              <Button 
-                                key={ab.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
-                                onClick={() => handleAssignFavorite(assigningSlotIndex!, "familiar-ability", ab.id, `Fam-${ab.name}`)}
-                              >
-                                Fam-{ab.name}
-                              </Button>
-                            ))}
+                  {/* Familiar Options (Multiple Companions) */}
+                  {character.familiars && character.familiars.length > 0 && (
+                    <div className="space-y-4 pt-2 border-t border-border/20">
+                      <h4 className="font-bold text-primary uppercase tracking-widest text-[10px]">Companion Familiars</h4>
+                      {character.familiars.map(fam => (
+                        <div key={fam.id} className="space-y-3 bg-background/40 p-2.5 rounded-md border border-border/30">
+                          <h5 className="font-serif font-bold text-xs text-primary">{fam.name} ({fam.race})</h5>
+                          <div>
+                            <h6 className="font-bold text-[9px] text-muted-foreground uppercase block mb-1">Attributes</h6>
+                            <div className="flex flex-wrap gap-1">
+                              {STATS.map(stat => {
+                                const val = (fam as any)[stat.key] as number;
+                                return (
+                                  <Button 
+                                    key={stat.key} variant="outline" size="sm" className="h-6 text-[9px] rounded-md font-mono"
+                                    onClick={() => handleAssignFavorite(assigningSlotIndex!, "familiar-attribute", stat.key, `${fam.name}:${stat.label}`, fam.id)}
+                                  >
+                                    {stat.label} (+{Math.floor(val/3)})
+                                  </Button>
+                                );
+                              })}
+                            </div>
                           </div>
+                          {fam.abilities && fam.abilities.length > 0 && (
+                            <div>
+                              <h6 className="font-bold text-[9px] text-muted-foreground uppercase block mb-1">Abilities</h6>
+                              <div className="flex flex-wrap gap-1">
+                                {fam.abilities.map(ab => (
+                                  <Button 
+                                    key={ab.id} variant="outline" size="sm" className="h-6 text-[9px] rounded-md font-serif"
+                                    onClick={() => handleAssignFavorite(assigningSlotIndex!, "familiar-ability", ab.id, `${fam.name}:${ab.name}`, fam.id)}
+                                  >
+                                    {ab.name}
+                                  </Button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ))}
                     </div>
                   )}
 
@@ -1572,7 +1766,7 @@ export default function CharacterSheet() {
           { key: "skills", label: "Skills Log", icon: BookText },
           { key: "inventory", label: "Bag / Gear", icon: Coins },
           { key: "essences", label: "Essence Confluence", icon: Layers },
-          { key: "abilities", label: "Shaped Spells", icon: Flame },
+          { key: "abilities", label: "Abilities", icon: Flame },
           { key: "notes", label: "Campaign Notes", icon: BookText },
           { key: "familiar", label: "Companion Familiar", icon: UserCheck }
         ].map((tab) => {
@@ -1978,35 +2172,54 @@ export default function CharacterSheet() {
           </div>
         )}
 
-        {/* TAB 5: SHAPED SPELLS */}
+        {/* TAB 5: ABILITIES */}
         {activeTab === "abilities" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2">
-              <h3 className="text-lg font-serif text-primary font-bold">Shaped Spells</h3>
+              <h3 className="text-lg font-serif text-primary font-bold">Abilities</h3>
               <EditAbilitiesDialog characterId={id} />
             </div>
 
             {abilities && abilities.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {abilities.map((ability) => (
-                  <Card key={ability.id} className="bg-card border-border/50 rounded-none">
+                  <Card key={ability.id} className="bg-card border-border/50 rounded-md">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex justify-between items-start">
                         <div>
                           <h4 className="font-serif text-xl font-bold text-primary leading-tight">{ability.name}</h4>
-                          <div className="flex flex-wrap gap-1.5 mt-1.5">
-                            <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ability.cost} MP</Badge>
-                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.range}</Badge>
-                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.speed}</Badge>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-md bg-background/50">{ability.cost} MP</Badge>
+                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-md bg-background/50">{ability.range}</Badge>
+                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-md bg-background/50">{ability.speed}</Badge>
+                            
+                            {/* Level Incrementer */}
+                            <div className="flex items-center gap-1 border border-border/50 px-1.5 py-0.5 rounded-md bg-background/50 text-[10px] font-semibold text-foreground font-mono">
+                              <span>Lvl: {ability.level || 1}</span>
+                              <button 
+                                type="button"
+                                onClick={() => handleAbilityLevelChange(ability.id, "down")} 
+                                className="w-3.5 h-3.5 flex items-center justify-center bg-accent hover:bg-accent/80 text-foreground rounded text-[9px] font-bold cursor-pointer ml-1"
+                              >
+                                -
+                              </button>
+                              <button 
+                                type="button"
+                                onClick={() => handleAbilityLevelChange(ability.id, "up")} 
+                                className="w-3.5 h-3.5 flex items-center justify-center bg-accent hover:bg-accent/80 text-foreground rounded text-[9px] font-bold cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                         </div>
 
                         <Button
                           size="sm"
                           onClick={() => handleAbilityRoll(ability)}
-                          className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-8 font-serif rounded-none cursor-pointer"
+                          className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-8 font-serif rounded-md cursor-pointer"
                         >
-                          <Dice5 className="w-3.5 h-3.5 mr-1" /> Cast Spell
+                          <Dice5 className="w-3.5 h-3.5 mr-1" /> Use Ability
                         </Button>
                       </div>
 
@@ -2019,8 +2232,8 @@ export default function CharacterSheet() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-10 bg-card/30 border border-dashed border-border/40 rounded-none text-sm text-muted-foreground/60 italic font-serif">
-                No shaped abilities prepared. Click "Edit Spells" to register spells.
+              <div className="text-center py-10 bg-card/30 border border-dashed border-border/40 rounded-md text-sm text-muted-foreground/60 italic font-serif">
+                No abilities registered yet. Click "Edit Abilities" to manage.
               </div>
             )}
           </div>
@@ -2095,9 +2308,9 @@ export default function CharacterSheet() {
                 <div className="space-y-3 overflow-y-auto flex-1 pr-1 max-h-[460px]">
                   {filteredNotes && filteredNotes.length > 0 ? (
                     filteredNotes.map(note => (
-                      <Card key={note.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all relative group rounded-none">
+                      <Card key={note.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all relative group rounded-md">
                         <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer" onClick={() => deleteNote.mutate({ id: note.id, charId: id })}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-md cursor-pointer" onClick={() => deleteNote.mutate({ id: note.id, charId: id })}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
                         </div>
@@ -2105,7 +2318,7 @@ export default function CharacterSheet() {
                           <div className="flex justify-between items-start">
                             <div>
                               <h4 className="font-serif text-lg font-bold text-primary">{note.title}</h4>
-                              <Badge variant="outline" className="text-[8px] uppercase tracking-wider text-muted-foreground mt-1 border-border/50 rounded-none bg-background/50">
+                              <Badge variant="outline" className="text-[8px] uppercase tracking-wider text-muted-foreground mt-1 border-border/50 rounded-md bg-background/50">
                                 {note.category === "npc" ? "👤 Person / NPC" : note.category === "location" ? "📍 Place / Location" : note.category === "item" ? "📦 Thing / Item" : note.category === "lore" ? "📜 Fact / Lore" : "📝 General"}
                               </Badge>
                             </div>
@@ -2123,46 +2336,65 @@ export default function CharacterSheet() {
             </div>
           </div>
         )}
-
         {/* TAB 7: COMPANION FAMILIAR */}
         {activeTab === "familiar" && (
           <div className="space-y-4">
             
-            {/* If no familiar exists, render binder creation form */}
-            {!character.familiar ? (
-              <Card className="bg-card border-border/50 rounded-none max-w-3xl mx-auto">
+            {/* If no familiar exists or user clicked 'Add', render binding creation card */}
+            {isAddingFamiliar || !character.familiars || character.familiars.length === 0 ? (
+              <Card className="bg-card border-border/50 rounded-md max-w-3xl mx-auto shadow-md">
                 <CardContent className="p-6 space-y-6">
-                  <div className="border-b border-border/30 pb-3">
-                    <h3 className="font-serif text-2xl text-primary font-bold">Summon & Bind Familiar</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Bound companions share your adventure and can execute actions and attacks directly from your Hotbar.</p>
+                  <div className="flex justify-between items-center border-b border-border/30 pb-3">
+                    <div>
+                      <h3 className="font-serif text-2xl text-primary font-bold">Add Companion Familiar</h3>
+                      <p className="text-xs text-muted-foreground mt-1">Companions share your adventure and can execute actions and attacks directly from your Hotbar.</p>
+                    </div>
+                    {character.familiars && character.familiars.length > 0 && (
+                      <Button variant="ghost" size="sm" onClick={() => setIsAddingFamiliar(false)} className="rounded-md">Cancel</Button>
+                    )}
                   </div>
 
                   <form onSubmit={handleBindFamiliar} className="space-y-4 text-xs">
                     
                     {/* Basic specs */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Companion Name</label>
-                        <Input value={famName} onChange={e => setFamName(e.target.value)} required placeholder="e.g. Rocky, Hedwig" className="bg-background rounded-none h-8 text-sm" />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Companion Type</label>
-                        <Input value={famClassName} onChange={e => setFamClassName(e.target.value)} placeholder="e.g. Earth Elemental, Hawk" className="bg-background rounded-none h-8 text-sm" />
+                        <Input value={famName} onChange={e => setFamName(e.target.value)} required placeholder="e.g. Rocky, Hedwig" className="bg-background rounded-md h-8 text-sm" />
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Species / Race</label>
-                        <Input value={famRace} onChange={e => setFamRace(e.target.value)} placeholder="e.g. Golem, Aviary" className="bg-background rounded-none h-8 text-sm" />
+                        <Input value={famRace} onChange={e => setFamRace(e.target.value)} placeholder="e.g. Golem, Aviary" className="bg-background rounded-md h-8 text-sm" />
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Starting Level</label>
-                        <Input type="number" min={1} value={famLevel} onChange={e => setFamLevel(Number(e.target.value))} required className="bg-background rounded-none h-8 text-sm font-mono" />
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Rank</label>
+                        <select 
+                          value={famClassName} 
+                          onChange={e => setFamClassName(e.target.value)} 
+                          className="w-full h-8 bg-background border border-input rounded-md px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          <option value="Iron">Iron</option>
+                          <option value="Bronze">Bronze</option>
+                          <option value="Silver">Silver</option>
+                          <option value="Gold">Gold</option>
+                          <option value="Diamond">Diamond</option>
+                        </select>
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Speed (Feet)</label>
-                        <Input type="number" min={5} step={5} value={famSpeed} onChange={e => setFamSpeed(Number(e.target.value))} required className="bg-background rounded-none h-8 text-sm font-mono" />
+                        <Input type="number" min={5} step={5} value={famSpeed} onChange={e => setFamSpeed(Number(e.target.value))} required className="bg-background rounded-md h-8 text-sm font-mono" />
+                      </div>
+                    </div>
+
+                    {/* Resistances & Immunities */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-border/20 pt-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Resistances</label>
+                        <Input value={famResistances} onChange={e => setFamResistances(e.target.value)} placeholder="e.g. Fire, Slashing" className="bg-background rounded-md h-8 text-sm" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Immunities</label>
+                        <Input value={famImmunities} onChange={e => setFamImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-md h-8 text-sm" />
                       </div>
                     </div>
 
@@ -2170,15 +2402,15 @@ export default function CharacterSheet() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-border/20 pt-4">
                       <div>
                         <label className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">HP Math Formula</label>
-                        <Input value={famHpFormula} onChange={e => setFamHpFormula(e.target.value)} placeholder="e.g. Vitality * 8" className="bg-background rounded-none h-8 text-sm font-mono" />
+                        <Input value={famHpFormula} onChange={e => setFamHpFormula(e.target.value)} placeholder="e.g. Vitality * 8" className="bg-background rounded-md h-8 text-sm font-mono" />
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">Mana Math Formula</label>
-                        <Input value={famManaFormula} onChange={e => setFamManaFormula(e.target.value)} placeholder="e.g. Spirit * 5" className="bg-background rounded-none h-8 text-sm font-mono" />
+                        <Input value={famManaFormula} onChange={e => setFamManaFormula(e.target.value)} placeholder="e.g. Spirit * 5" className="bg-background rounded-md h-8 text-sm font-mono" />
                       </div>
                       <div>
                         <label className="text-[10px] font-bold text-primary uppercase tracking-wider block mb-1">DT Math Formula</label>
-                        <Input value={famDtFormula} onChange={e => setFamDtFormula(e.target.value)} placeholder="e.g. Endurance * 1" className="bg-background rounded-none h-8 text-sm font-mono" />
+                        <Input value={famDtFormula} onChange={e => setFamDtFormula(e.target.value)} placeholder="e.g. Endurance * 1" className="bg-background rounded-md h-8 text-sm font-mono" />
                       </div>
                     </div>
 
@@ -2196,12 +2428,12 @@ export default function CharacterSheet() {
                           { label: "WIL", val: famWillpower, set: setFamWillpower },
                           { label: "CHA", val: famCharisma, set: setFamCharisma },
                         ].map(stat => (
-                          <div key={stat.label} className="bg-background/40 p-2 border border-border/30 text-center rounded-none">
+                          <div key={stat.label} className="bg-background/40 p-2 border border-border/30 text-center rounded-md">
                             <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">{stat.label}</label>
                             <Input 
-                              type="number" min={1} max={30} value={stat.val} 
-                              onChange={e => stat.set(Math.min(30, Math.max(1, Number(e.target.value))))} 
-                              className="text-center font-mono h-7 bg-background rounded-none text-xs" 
+                              type="number" min={0} max={30} value={stat.val} 
+                              onChange={e => stat.set(Math.min(30, Math.max(0, Number(e.target.value))))} 
+                              className="text-center font-mono h-7 bg-background rounded-md text-xs" 
                             />
                           </div>
                         ))}
@@ -2209,7 +2441,7 @@ export default function CharacterSheet() {
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-border/20">
-                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-none cursor-pointer">Summon & Bind</Button>
+                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Familiar</Button>
                     </div>
                   </form>
                 </CardContent>
@@ -2219,294 +2451,363 @@ export default function CharacterSheet() {
               // Familiar display sheets
               <div className="space-y-6">
                 
-                {/* Companion info banner */}
-                <div className="flex justify-between items-start flex-wrap gap-4 border-b border-border/20 pb-4">
-                  <div>
-                    <h3 className="font-serif text-2xl text-primary font-bold">{character.familiar.name}</h3>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                      Companion Level {character.familiar.level} · {character.familiar.race} · {character.familiar.className} · {character.familiar.speed} ft
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer" onClick={handleReleaseFamiliar}>
-                    Release Companion
+                {/* Toolbar */}
+                <div className="flex justify-between items-center border-b border-border/20 pb-3">
+                  <h3 className="font-serif text-2xl text-primary font-bold">Companion Familiars ({character.familiars.length})</h3>
+                  <Button onClick={() => setIsAddingFamiliar(true)} className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">
+                    <Plus className="w-4 h-4 mr-1.5" /> Add Familiar
                   </Button>
                 </div>
 
-                {/* Familiar HUD stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  
-                  {/* Familiar HP */}
-                  <div className="rounded-none border border-border/40 bg-card p-3 flex flex-col justify-between gap-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Heart className="w-4 h-4 text-destructive" /> Companion HP
-                    </div>
-                    <div className="text-center py-1">
-                      <span className="text-4xl font-mono font-bold text-foreground">
-                        {character.familiar.currentHp}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono"> /{famMax.maxHp}</span>
-                    </div>
-                    <ResourceBar current={character.familiar.currentHp} max={famMax.maxHp} color="hsl(var(--destructive))" />
-                    
-                    {/* inputs */}
-                    <div className="space-y-2 mt-1">
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famHpAdd} placeholder="Heal val"
-                          onChange={e => setFamHpAdd(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamHpAdd} disabled={!famHpAdd}>
-                          Heal
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famHpRemove} placeholder="Dmg val"
-                          onChange={e => setFamHpRemove(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamHpRemove} disabled={!famHpRemove}>
-                          Dmg
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famHpBuff} placeholder="Buff val"
-                          onChange={e => setFamHpBuff(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamHpBuff} disabled={!famHpBuff}>
-                          Buff
-                        </Button>
-                      </div>
-                      <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
-                        onClick={handleFamFullRestoreHp}>
-                        Full Restore HP
-                      </Button>
-                    </div>
-                  </div>
+                {/* Grid List of Familiars */}
+                <div className="grid grid-cols-1 gap-6">
+                  {character.familiars.map(fam => {
+                    const fMax = getFamiliarMaxValues(fam);
+                    const isExpanded = expandedFamiliars[fam.id] ?? false;
+                    const flash = famDtFlashes[fam.id] ?? null;
+                    const dmgRes = famDamageResults[fam.id] ?? null;
+                    const inputs = famInputs[fam.id] || {};
+                    const isAddingAb = isAddingFamAbility[fam.id] ?? false;
 
-                  {/* Familiar DT */}
-                  <div className={`rounded-none border p-3 flex flex-col justify-between gap-3 bg-card transition-colors duration-200 ${
-                    famDtFlash === "hit" ? "border-destructive/70 bg-destructive/[0.03]"
-                    : famDtFlash === "restore" ? "border-primary/70 bg-primary/[0.03]"
-                    : "border-border/40"
-                  }`}>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Shield className="w-4 h-4 text-primary" /> Companion DT
-                    </div>
-                    <div className="text-center py-1">
-                      <span className={`text-4xl font-mono font-bold ${famDtFlash === "hit" ? "text-destructive" : "text-foreground"}`}>
-                        {character.familiar.currentDt}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono"> /{famMax.maxDt}</span>
-                    </div>
-                    <ResourceBar current={character.familiar.currentDt} max={famMax.maxDt} color="hsl(var(--primary))" />
-                    
-                    <div className="space-y-2 mt-1">
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famDtAdd} placeholder="Add val"
-                          onChange={e => setFamDtAdd(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamDtAdd} disabled={!famDtAdd}>
-                          Add
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famDtRemove} placeholder="Hit val"
-                          onChange={e => { setFamDtRemove(e.target.value); setFamDamageResult(null); }}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamDtRemove} disabled={!famDtRemove}>
-                          Hit
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famDtBuff} placeholder="Buff val"
-                          onChange={e => setFamDtBuff(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamDtBuff} disabled={!famDtBuff}>
-                          Buff
-                        </Button>
-                      </div>
-                      <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
-                        onClick={handleFamRestoreDt}>
-                        Full Restore DT
-                      </Button>
-                      {famDamageResult && (
-                        <p className={`text-[10px] font-mono text-center mt-1 ${famDamageResult.absorbed ? "text-primary" : "text-destructive"}`}>
-                          {famDamageResult.absorbed ? "✦ Absorbed" : famDamageResult.hpLost > 0 ? `−${famDamageResult.hpLost} HP` : "DT hit"}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Familiar Mana */}
-                  <div className="rounded-none border border-border/40 bg-card p-3 flex flex-col justify-between gap-3">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      <Sparkles className="w-4 h-4 text-blue-400" /> Companion Mana
-                    </div>
-                    <div className="text-center py-1">
-                      <span className="text-4xl font-mono font-bold text-foreground">
-                        {character.familiar.currentMana}
-                      </span>
-                      <span className="text-xs text-muted-foreground font-mono"> /{famMax.maxMana}</span>
-                    </div>
-                    <ResourceBar current={character.familiar.currentMana} max={famMax.maxMana} color="#3b82f6" />
-                    
-                    <div className="space-y-2 mt-1">
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famManaAdd} placeholder="Add val"
-                          onChange={e => setFamManaAdd(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamManaAdd} disabled={!famManaAdd}>
-                          Add
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famManaRemove} placeholder="Use val"
-                          onChange={e => setFamManaRemove(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamManaRemove} disabled={!famManaRemove}>
-                          Use
-                        </Button>
-                      </div>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="number" min="0" value={famManaBuff} placeholder="Buff val"
-                          onChange={e => setFamManaBuff(e.target.value)}
-                          className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                        />
-                        <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-none cursor-pointer font-bold"
-                          onClick={handleFamManaBuff} disabled={!famManaBuff}>
-                          Buff
-                        </Button>
-                      </div>
-                      <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-none cursor-pointer"
-                        onClick={handleFamFullRestoreMana}>
-                        Full Restore Mana
-                      </Button>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Familiar base stats grid */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest border-b border-border/20 pb-1">Companion Attributes (Click to Roll)</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-8 gap-3">
-                    {STATS.map(stat => {
-                      const val = (character.familiar as any)[stat.key] as number;
-                      const mod = Math.floor(val / 3);
-                      return (
-                        <button
-                          key={stat.key}
-                          onClick={() => handleFamiliarStatRoll(stat.key, stat.label, val)}
-                          className="rounded-none border border-border/40 bg-card/50 p-2 text-center hover:border-primary transition-all cursor-pointer"
-                        >
-                          <div className="text-[9px] font-bold text-muted-foreground uppercase">{stat.label}</div>
-                          <div className="text-2xl font-serif text-foreground font-bold mt-0.5">{val}</div>
-                          <div className="text-[10px] font-mono text-primary">+{mod}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Familiar attacks & abilities */}
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center border-b border-border/20 pb-2">
-                    <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Companion Attacks & Spells</h4>
-                    <Button size="sm" className="bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 h-7 text-xs rounded-none cursor-pointer" onClick={() => setIsAddingFamAbility(true)}>
-                      <Plus className="w-3.5 h-3.5 mr-1" /> Add Action
-                    </Button>
-                  </div>
-
-                  {/* Add action creator form */}
-                  {isAddingFamAbility && (
-                    <Card className="bg-card border-primary/20 max-w-xl animate-in slide-in-from-top-4 duration-300 rounded-none">
-                      <CardContent className="p-4 space-y-4">
-                        <h4 className="font-serif text-lg text-primary font-bold">New Companion Ability</h4>
-                        <form onSubmit={handleCreateFamAbility} className="space-y-3 text-xs">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
-                              <Input value={famAbilityName} onChange={e => setFamAbilityName(e.target.value)} required placeholder="e.g. Claw Swipe, Fire Spit" className="bg-background text-sm rounded-none h-8" />
-                            </div>
-                            <div>
-                              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost (MP)</label>
-                              <Input type="number" min={0} value={famAbilityCost} onChange={e => setFamAbilityCost(Number(e.target.value))} required className="bg-background text-sm rounded-none h-8 font-mono" />
-                            </div>
-                          </div>
+                    return (
+                      <Card key={fam.id} className="bg-card border border-border/40 shadow-md rounded-md p-5 space-y-4">
+                        
+                        {/* Title Banner */}
+                        <div className="flex justify-between items-start flex-wrap gap-4 border-b border-border/20 pb-3">
                           <div>
-                            <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description</label>
-                            <Textarea value={famAbilityDesc} onChange={e => setFamAbilityDesc(e.target.value)} placeholder="Ability effect descriptions..." className="bg-background text-sm font-serif rounded-none min-h-[60px]" />
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-primary uppercase block mb-1">Roll Formula (optional)</label>
-                            <Input value={famAbilityFormula} onChange={e => setFamAbilityFormula(e.target.value)} placeholder="e.g. d6 + 2, d8 + power" className="bg-background text-sm rounded-none h-8 font-mono" />
-                          </div>
-                          <div className="flex justify-end gap-1.5 pt-2 border-t border-border/30">
-                            <Button type="button" variant="ghost" size="sm" onClick={() => setIsAddingFamAbility(false)} className="rounded-none">Cancel</Button>
-                            <Button type="submit" size="sm" className="bg-primary text-primary-foreground font-serif rounded-none">Save Action</Button>
-                          </div>
-                        </form>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {character.familiar.abilities && character.familiar.abilities.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {character.familiar.abilities.map(ab => (
-                        <Card key={ab.id} className="bg-card border-border/50 rounded-none relative group">
-                          <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer" onClick={() => handleDeleteFamAbility(ab.id)}>
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                          <CardContent className="p-4 space-y-3">
-                            <div className="flex justify-between items-start pr-8">
-                              <div>
-                                <h5 className="font-serif text-lg font-bold text-primary">{ab.name}</h5>
-                                <div className="flex gap-1.5 mt-1">
-                                  <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ab.cost} MP</Badge>
-                                  {ab.rollFormula && <Badge variant="outline" className="text-[9px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">Formula: {ab.rollFormula}</Badge>}
-                                </div>
+                            <h4 className="font-serif text-xl text-primary font-bold">{fam.name}</h4>
+                            <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
+                              Level {fam.level || 1} · {fam.race} · {fam.className} · {fam.speed} ft
+                            </p>
+                            {(fam.resistances || fam.immunities) && (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-sans mt-2">
+                                {fam.resistances && (
+                                  <span>
+                                    <strong className="text-foreground uppercase tracking-wider text-[10px]">Resistances:</strong> {fam.resistances}
+                                  </span>
+                                )}
+                                {fam.immunities && (
+                                  <span>
+                                    <strong className="text-foreground uppercase tracking-wider text-[10px]">Immunities:</strong> {fam.immunities}
+                                  </span>
+                                )}
                               </div>
-                              <Button
-                                size="sm"
-                                onClick={() => handleFamiliarAbilityRoll(ab)}
-                                className="bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 h-7 font-serif text-xs rounded-none cursor-pointer"
-                              >
-                                Execute
-                              </Button>
+                            )}
+                          </div>
+                          
+                          <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-md cursor-pointer h-8 text-xs font-bold" 
+                            onClick={() => handleReleaseFamiliar(fam.id)}>
+                            Release Companion
+                          </Button>
+                        </div>
+
+                        {/* Resource HUD Columns (DT, HP, Mana) */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          
+                          {/* 1. DT (Damage Threshold) */}
+                          <div className={`rounded-md border p-3 flex flex-col justify-between gap-3 transition-colors duration-200 bg-background/20 ${
+                            flash === "hit" ? "border-destructive/70 bg-destructive/10"
+                            : flash === "restore" ? "border-primary/70 bg-primary/10"
+                            : "border-border/40"
+                          }`}>
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                              <Shield className="w-4 h-4 text-primary" /> Companion DT
                             </div>
-                            <p className="text-xs text-muted-foreground/80 font-serif leading-relaxed mt-2 whitespace-pre-wrap">{ab.description}</p>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground/60 italic font-serif text-center py-6">No unique companion actions registered yet.</p>
-                  )}
+                            <div className="text-center py-1">
+                              <span className={`text-4xl font-mono font-bold ${flash === "hit" ? "text-destructive" : "text-foreground"}`}>
+                                {fam.currentDt}
+                              </span>
+                              <span className="text-xs text-muted-foreground font-mono"> /{fMax.maxDt}</span>
+                            </div>
+                            <ResourceBar current={fam.currentDt} max={fMax.maxDt} color="hsl(var(--primary))" />
+                            
+                            <div className="space-y-2 mt-1">
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.dtAdd || ""} placeholder="Add val"
+                                  onChange={e => updateFamInput(fam.id, "dtAdd", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamDtAdd(fam)} disabled={!inputs.dtAdd}>
+                                  Add
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.dtRemove || ""} placeholder="DMG Val"
+                                  onChange={e => { updateFamInput(fam.id, "dtRemove", e.target.value); setFamDamageResults(prev => ({ ...prev, [fam.id]: null })); }}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamDtRemove(fam)} disabled={!inputs.dtRemove}>
+                                  Hit
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.dtBuff || ""} placeholder="Buff val"
+                                  onChange={e => updateFamInput(fam.id, "dtBuff", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamDtBuff(fam)} disabled={!inputs.dtBuff}>
+                                  Buff
+                                </Button>
+                              </div>
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                                onClick={() => handleFamRestoreDt(fam)}>
+                                Full Restore DT
+                              </Button>
+                              {/* Fixed Height Container to prevent layout shifts */}
+                              <div className="h-4 flex items-center justify-center mt-1">
+                                {dmgRes && (
+                                  <p className={`text-[10px] font-mono text-center ${dmgRes.absorbed ? "text-primary" : "text-destructive"}`}>
+                                    {dmgRes.absorbed ? "✦ Absorbed" : dmgRes.hpLost > 0 ? `−${dmgRes.hpLost} HP` : "DT hit"}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. HP (Health) */}
+                          <div className="rounded-md border border-border/40 p-3 flex flex-col justify-between gap-3 bg-background/20">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                              <Heart className="w-4 h-4 text-destructive" /> Companion HP
+                            </div>
+                            <div className="text-center py-1">
+                              <span className="text-4xl font-mono font-bold text-foreground">
+                                {fam.currentHp}
+                              </span>
+                              <span className="text-xs text-muted-foreground font-mono"> /{fMax.maxHp}</span>
+                            </div>
+                            <ResourceBar current={fam.currentHp} max={fMax.maxHp} color="hsl(var(--destructive))" />
+                            
+                            <div className="space-y-2 mt-1">
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.hpAdd || ""} placeholder="Heal val"
+                                  onChange={e => updateFamInput(fam.id, "hpAdd", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamHpAdd(fam)} disabled={!inputs.hpAdd}>
+                                  Heal
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.hpRemove || ""} placeholder="Dmg val"
+                                  onChange={e => updateFamInput(fam.id, "hpRemove", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamHpRemove(fam)} disabled={!inputs.hpRemove}>
+                                  Dmg
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.hpBuff || ""} placeholder="Buff val"
+                                  onChange={e => updateFamInput(fam.id, "hpBuff", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamHpBuff(fam)} disabled={!inputs.hpBuff}>
+                                  Buff
+                                </Button>
+                              </div>
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                                onClick={() => handleFamFullRestoreHp(fam)}>
+                                Full Restore HP
+                              </Button>
+                              {/* Fixed Height placeholder to match DT layout height */}
+                              <div className="h-4 mt-1" />
+                            </div>
+                          </div>
+
+                          {/* 3. Mana (MP) */}
+                          <div className="rounded-md border border-border/40 p-3 flex flex-col justify-between gap-3 bg-background/20">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                              <Sparkles className="w-4 h-4 text-blue-400" /> Companion Mana
+                            </div>
+                            <div className="text-center py-1">
+                              <span className="text-4xl font-mono font-bold text-foreground">
+                                {fam.currentMana}
+                              </span>
+                              <span className="text-xs text-muted-foreground font-mono"> /{fMax.maxMana}</span>
+                            </div>
+                            <ResourceBar current={fam.currentMana} max={fMax.maxMana} color="#3b82f6" />
+                            
+                            <div className="space-y-2 mt-1">
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.manaAdd || ""} placeholder="Add val"
+                                  onChange={e => updateFamInput(fam.id, "manaAdd", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamManaAdd(fam)} disabled={!inputs.manaAdd}>
+                                  Add
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.manaRemove || ""} placeholder="Use val"
+                                  onChange={e => updateFamInput(fam.id, "manaRemove", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamManaRemove(fam)} disabled={!inputs.manaRemove}>
+                                  Use
+                                </Button>
+                              </div>
+                              <div className="flex gap-1.5">
+                                <Input
+                                  type="number" min="0" value={inputs.manaBuff || ""} placeholder="Buff val"
+                                  onChange={e => updateFamInput(fam.id, "manaBuff", e.target.value)}
+                                  className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                                />
+                                <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                                  onClick={() => handleFamManaBuff(fam)} disabled={!inputs.manaBuff}>
+                                  Buff
+                                </Button>
+                              </div>
+                              <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                                onClick={() => handleFamFullRestoreMana(fam)}>
+                                Full Restore Mana
+                              </Button>
+                              {/* Fixed Height placeholder to match DT layout height */}
+                              <div className="h-4 mt-1" />
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Companion Attributes */}
+                        <div className="space-y-2 pt-2 border-t border-border/20">
+                          <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Attributes (Click to Roll)</h5>
+                          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                            {STATS.map(stat => {
+                              const val = (fam as any)[stat.key] as number;
+                              const mod = Math.floor(val / 3);
+                              return (
+                                <button
+                                  type="button"
+                                  key={stat.key}
+                                  onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, val)}
+                                  className="rounded-md border border-border/30 bg-card/60 p-2 text-center hover:border-primary transition-all cursor-pointer"
+                                >
+                                  <div className="text-[9px] font-bold text-muted-foreground uppercase">{stat.label}</div>
+                                  <div className="text-xl font-serif text-foreground font-bold mt-0.5">{val}</div>
+                                  <div className="text-[10px] font-mono text-primary">+{mod}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Collapsible Abilities Drawer */}
+                        <div className="pt-2 border-t border-border/20 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedFamiliars(prev => ({ ...prev, [fam.id]: !isExpanded }))}
+                              className="text-[11px] font-bold text-primary hover:text-primary-foreground hover:bg-primary/10 border border-primary/20 px-3 py-1 rounded-md transition-colors cursor-pointer"
+                            >
+                              {isExpanded ? "Hide Abilities & Actions" : "Show Abilities & Actions"}
+                            </button>
+                          </div>
+
+                          {isExpanded && (
+                            <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                              
+                              <div className="flex justify-between items-center border-b border-border/20 pb-1">
+                                <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Attacks & Actions</h5>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 h-6 text-[10px] rounded-md cursor-pointer"
+                                  onClick={() => setIsAddingFamAbility(prev => ({ ...prev, [fam.id]: !isAddingAb }))}
+                                >
+                                  <Plus className="w-3 h-3 mr-1" /> Add Action
+                                </Button>
+                              </div>
+
+                              {/* Add Action Form inside expansion */}
+                              {isAddingAb && (
+                                <Card className="bg-background border border-primary/20 rounded-md">
+                                  <CardContent className="p-4 space-y-4">
+                                    <h5 className="font-serif text-sm text-primary font-bold">New Action / Spell for {fam.name}</h5>
+                                    <form onSubmit={(e) => handleCreateFamAbility(fam.id, e)} className="space-y-3 text-xs">
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
+                                          <Input value={famAbilityName} onChange={e => setFamAbilityName(e.target.value)} required placeholder="e.g. Bite, Fire Spit" className="bg-background text-sm rounded-md h-8" />
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost (MP)</label>
+                                          <Input type="number" min={0} value={famAbilityCost} onChange={e => setFamAbilityCost(Number(e.target.value))} required className="bg-background text-sm rounded-md h-8 font-mono" />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description</label>
+                                        <Textarea value={famAbilityDesc} onChange={e => setFamAbilityDesc(e.target.value)} placeholder="Describe effect details..." className="bg-background text-sm font-serif rounded-md min-h-[60px]" />
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] font-bold text-primary uppercase block mb-1">Roll Formula (optional)</label>
+                                        <Input value={famAbilityFormula} onChange={e => setFamAbilityFormula(e.target.value)} placeholder="e.g. d6 + 2, POW*2" className="bg-background text-sm rounded-md h-8 font-mono" />
+                                      </div>
+                                      <div className="flex justify-end gap-1.5 pt-2 border-t border-border/30">
+                                        <Button type="button" variant="ghost" size="sm" onClick={() => setIsAddingFamAbility(prev => ({ ...prev, [fam.id]: false }))} className="rounded-md">Cancel</Button>
+                                        <Button type="submit" size="sm" className="bg-primary text-primary-foreground font-serif rounded-md">Save Action</Button>
+                                      </div>
+                                    </form>
+                                  </CardContent>
+                                </Card>
+                              )}
+
+                              {/* Action items list */}
+                              {fam.abilities && fam.abilities.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {fam.abilities.map(ab => (
+                                    <Card key={ab.id} className="bg-background border border-border/30 rounded-md relative group">
+                                      <div className="absolute top-0 right-0 p-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-destructive/10 rounded-md cursor-pointer" onClick={() => handleDeleteFamAbility(fam.id, ab.id)}>
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
+                                      <CardContent className="p-3.5 space-y-2">
+                                        <div className="flex justify-between items-start pr-6">
+                                          <div>
+                                            <h6 className="font-serif text-sm font-bold text-primary">{ab.name}</h6>
+                                            <div className="flex gap-1.5 mt-1">
+                                              <Badge variant="outline" className="text-[8px] font-mono border-primary/20 text-primary rounded-md bg-background/50">{ab.cost} MP</Badge>
+                                              {ab.rollFormula && <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-md bg-background/50">Formula: {ab.rollFormula}</Badge>}
+                                            </div>
+                                          </div>
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleFamiliarAbilityRoll(fam, ab)}
+                                            className="bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 h-6 font-serif text-[10px] rounded-md cursor-pointer"
+                                          >
+                                            Execute
+                                          </Button>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground/80 font-serif leading-relaxed mt-1.5 whitespace-pre-wrap">{ab.description}</p>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground/50 italic font-serif text-center py-2">No unique actions configured for {fam.name}.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                      </Card>
+                    );
+                  })}
                 </div>
 
               </div>
@@ -2516,6 +2817,28 @@ export default function CharacterSheet() {
         )}
 
       </div>
+
+      {/* Styled Delete Warning Dialog */}
+      <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+        <DialogContent className="sm:max-w-[420px] bg-card border border-border shadow-2xl rounded-md p-6">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl text-destructive font-bold flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> Permanently Delete Character?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-3 text-xs text-muted-foreground leading-relaxed">
+            Are you absolutely sure you want to delete <strong className="text-foreground">{character.name}</strong>? This action is irreversible and all stats, inventory, abilities, and bound companions will be permanently deleted.
+          </div>
+          <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
+            <Button variant="ghost" size="sm" onClick={() => setIsDeleteOpen(false)} className="rounded-md font-bold">
+              Cancel
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => deleteChar.mutate({ id }, { onSuccess: () => setLocation("/") })} className="rounded-md font-bold">
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
