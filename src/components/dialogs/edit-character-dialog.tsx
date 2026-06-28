@@ -79,7 +79,7 @@ export function EditCharacterDialog({ character }: Props) {
           name,
           rank,
           race,
-          level,
+          level: character.level,
           speed,
           dtBonus,
           resistances,
@@ -147,11 +147,8 @@ export function EditCharacterDialog({ character }: Props) {
           </div>
 
           {/* Level, speed, flat DT bonus */}
-          <div className="grid grid-cols-3 gap-4 border-t border-border/30 pt-4">
-            <div>
-              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Level</label>
-              <Input type="number" min={1} value={level} onChange={e => setLevel(Number(e.target.value))} required className="bg-background font-mono" />
-            </div>
+          {/* Speed & DT Bonus */}
+          <div className="grid grid-cols-2 gap-4 border-t border-border/30 pt-4">
             <div>
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Speed (Feet)</label>
               <Input type="number" min={0} value={speed} onChange={e => setSpeed(Number(e.target.value))} required className="bg-background font-mono" />

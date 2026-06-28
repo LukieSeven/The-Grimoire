@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import {
   Shield, ArrowLeft, Loader2, Trash2, Heart, Dice5,
   RotateCcw, Swords, Sparkles, Plus, Edit2, Upload, Download,
-  Coins, Package, Hammer, Layers, Flame, BookText, UserCheck, X
+  Coins, Package, Hammer, Layers, Flame, BookText, UserCheck, X,
+  Palette, Clock
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -38,6 +39,7 @@ import { EditCharacterDialog } from "@/components/dialogs/edit-character-dialog"
 import { EditAbilitiesDialog } from "@/components/dialogs/edit-abilities-dialog";
 import { EditSkillsDialog } from "@/components/dialogs/edit-skills-dialog";
 import { EditInventoryDialog } from "@/components/dialogs/edit-inventory-dialog";
+import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
 
 const STATS = [
   { key: "power",     label: "POW", desc: "Physical strength & raw force" },
@@ -172,6 +174,37 @@ export default function CharacterSheet() {
     }
   }, [character?.currentHp, character?.currentMana, character?.currentDt]);
 
+  // ── Long Rest State & Action ───────────────────────────────
+  const [isLongRestConfirmOpen, setIsLongRestConfirmOpen] = useState(false);
+
+  const handleLongRest = () => {
+    updateChar.mutate({
+      id,
+      data: {
+        currentHp: maxHp,
+        currentDt: maxDt,
+        currentMana: maxMana
+      }
+    }, {
+      onSuccess: () => {
+        const curHp = hp ?? character.currentHp;
+        const curDt = currentDt ?? character.currentDt;
+        const curMana = mana ?? character.currentMana;
+
+        setHp(maxHp);
+        setCurrentDt(maxDt);
+        setMana(maxMana);
+
+        createRoll.mutate({ id, data: { diceType: "hp-log", modifier: maxHp - curHp, label: "Long Rest (HP)" } });
+        createRoll.mutate({ id, data: { diceType: "dt-log", modifier: maxDt - curDt, label: "Long Rest (DT)" } });
+        createRoll.mutate({ id, data: { diceType: "mana-log", modifier: maxMana - curMana, label: "Long Rest (Mana)" } });
+        
+        toast.success("Long Rest completed. Vitals restored.");
+        setIsLongRestConfirmOpen(false);
+      }
+    });
+  };
+
   // ── Dedicated HUD Inputs State ─────────────────────────────
   const [hpAdd, setHpAdd] = useState("");
   const [hpRemove, setHpRemove] = useState("");
@@ -189,7 +222,6 @@ export default function CharacterSheet() {
   const [famName, setFamName] = useState("");
   const [famClassName, setFamClassName] = useState("Iron"); // Used for Rank select dropdown!
   const [famRace, setFamRace] = useState("");
-  const [famLevel, setFamLevel] = useState(1);
   const [famSpeed, setFamSpeed] = useState(25);
   const [famPower, setFamPower] = useState(10);
   const [famVitality, setFamVitality] = useState(10);
@@ -297,7 +329,7 @@ export default function CharacterSheet() {
   if (!character) return <div className="p-8 text-center text-muted-foreground">Character not found</div>;
 
   // ── Recalculate adjusted stats from equipment ─────────────
-  const { stats: finalStats, modifiers: autoModifiers, diceLabels, maxHp, maxMana, maxDt } = getAdjustedStats(character, equipment);
+  const { stats: finalStats, modifiers: autoModifiers, diceLabels, maxHp, maxMana, maxDt } = getAdjustedStats(character, equipment, abilities);
 
   // ── Derived max values for familiar ───────────────────────
   const getFamiliarMaxValues = (fam: Familiar) => {
@@ -319,6 +351,57 @@ export default function CharacterSheet() {
     };
   };
 
+  const getSlotDetails = (slot: FavoriteSlot) => {
+    let name = slot.label;
+    let costStr = "";
+    let statStr = "";
+
+    if (slot.type === "attribute") {
+      name = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
+      statStr = `${finalStats[slot.targetId as string] || 0} (${autoModifiers[slot.targetId as string] >= 0 ? "+" : ""}${autoModifiers[slot.targetId as string]})`;
+    } else if (slot.type === "weapon") {
+      const item = equipment.find(e => e.id === Number(slot.targetId));
+      if (item) {
+        name = item.name;
+        costStr = item.modifier !== undefined ? `${item.modifier >= 0 ? "+" : ""}${item.modifier} Mod` : "";
+        statStr = item.diceType || "d8";
+      }
+    } else if (slot.type === "ability") {
+      const ability = abilities.find(a => a.id === Number(slot.targetId));
+      if (ability) {
+        name = ability.name;
+        costStr = `${ability.cost} MP`;
+        statStr = ability.linkedStat ? String(ability.linkedStat).toUpperCase().substring(0, 3) : "SPI";
+      }
+    } else if (slot.type === "skill") {
+      const skill = skills.find(s => s.id === Number(slot.targetId));
+      if (skill) {
+        name = skill.name;
+        costStr = `Val: ${skill.value}`;
+        statStr = `+${Math.floor(skill.value / 3) + skill.training}`;
+      }
+    } else if (slot.type === "familiar-attribute") {
+      const fam = character.familiars?.find(f => f.id === slot.familiarId);
+      if (fam) {
+        const val = (fam as any)[slot.targetId] as number;
+        name = `${fam.name}: ${String(slot.targetId).toUpperCase().substring(0, 3)}`;
+        statStr = `${val} (+${Math.floor(val/3)})`;
+      }
+    } else if (slot.type === "familiar-ability") {
+      const fam = character.familiars?.find(f => f.id === slot.familiarId);
+      if (fam) {
+        const ab = fam.abilities.find(a => a.id === Number(slot.targetId));
+        if (ab) {
+          name = `${fam.name}: ${ab.name}`;
+          costStr = `${ab.cost} MP`;
+          statStr = ab.rollFormula ? "Formula" : "";
+        }
+      }
+    }
+
+    return { name, costStr, statStr };
+  };
+
   // famMax is calculated dynamically per-familiar
 
   // ── HP Adjustments ────────────────────────────────────────
@@ -330,6 +413,7 @@ export default function CharacterSheet() {
     setHp(next);
     setHpAdd("");
     updateChar.mutate({ id, data: { currentHp: next } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - cur, label: "Healed HP" } });
   };
 
   const handleHpRemove = () => {
@@ -340,6 +424,7 @@ export default function CharacterSheet() {
     setHp(next);
     setHpRemove("");
     updateChar.mutate({ id, data: { currentHp: next } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - cur, label: "Direct DMG (HP)" } });
   };
 
   const handleHpBuff = () => {
@@ -350,11 +435,14 @@ export default function CharacterSheet() {
     setHp(next);
     setHpBuff("");
     updateChar.mutate({ id, data: { currentHp: next } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: "Buffed HP" } });
   };
 
   const handleFullRestoreHp = () => {
+    const cur = hp ?? character.currentHp;
     setHp(maxHp);
     updateChar.mutate({ id, data: { currentHp: maxHp } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: maxHp - cur, label: "Full Restore HP" } });
   };
 
   // ── DT Adjustments ────────────────────────────────────────
@@ -382,6 +470,7 @@ export default function CharacterSheet() {
     setCurrentDt(next);
     setDtAdd("");
     updateChar.mutate({ id, data: { currentDt: next } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: next - cur, label: "Added DT" } });
   };
 
   const handleDtBuff = () => {
@@ -392,14 +481,17 @@ export default function CharacterSheet() {
     setCurrentDt(next);
     setDtBuff("");
     updateChar.mutate({ id, data: { currentDt: next } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: "Buffed DT" } });
   };
 
   const handleRestoreDt = () => {
+    const cur = currentDt ?? character.currentDt;
     setCurrentDt(maxDt);
     setDtFlash("restore");
     setDamageResult(null);
     setTimeout(() => setDtFlash(null), 600);
     updateChar.mutate({ id, data: { currentDt: maxDt } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: maxDt - cur, label: "Restore DT" } });
   };
 
   // ── Mana Adjustments ──────────────────────────────────────
@@ -411,6 +503,7 @@ export default function CharacterSheet() {
     setMana(next);
     setManaAdd("");
     updateChar.mutate({ id, data: { currentMana: next } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - cur, label: "Restored Mana" } });
   };
 
   const handleManaRemove = () => {
@@ -421,6 +514,7 @@ export default function CharacterSheet() {
     setMana(next);
     setManaRemove("");
     updateChar.mutate({ id, data: { currentMana: next } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - cur, label: "Spent Mana" } });
   };
 
   const handleManaBuff = () => {
@@ -431,11 +525,14 @@ export default function CharacterSheet() {
     setMana(next);
     setManaBuff("");
     updateChar.mutate({ id, data: { currentMana: next } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: "Buffed Mana" } });
   };
 
   const handleFullRestoreMana = () => {
+    const cur = mana ?? character.currentMana;
     setMana(maxMana);
     updateChar.mutate({ id, data: { currentMana: maxMana } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: maxMana - cur, label: "Full Restore Mana" } });
   };
 
   // ── Multiple Familiars Adjustments Mutator Helper ───────────
@@ -981,7 +1078,7 @@ export default function CharacterSheet() {
       name: famName,
       className: famClassName || "Companion",
       race: famRace || "Beast",
-      level: famLevel,
+      level: 1,
       speed: famSpeed,
       power: famPower,
       vitality: famVitality,
@@ -1010,7 +1107,6 @@ export default function CharacterSheet() {
         setFamName("");
         setFamClassName("Iron");
         setFamRace("");
-        setFamLevel(1);
         setFamSpeed(25);
         setFamPower(10);
         setFamVitality(10);
@@ -1122,6 +1218,7 @@ export default function CharacterSheet() {
           <ArrowLeft className="w-4 h-4 mr-1" /> Back to Dashboard
         </Button>
         <div className="flex items-center gap-2">
+          <CustomizeToolDialog />
           <Button variant="outline" size="sm" onClick={() => exportCharacterJSON(id)} className="h-8 text-xs border-primary/40 text-primary rounded-none cursor-pointer">
             <Download className="w-3.5 h-3.5 mr-1" /> Export JSON
           </Button>
@@ -1146,13 +1243,13 @@ export default function CharacterSheet() {
             
             <CardContent className="p-5 space-y-5">
               {/* Profile HUD Row */}
-              <div className="flex justify-between items-start flex-wrap gap-4 border-b border-border/30 pb-3">
+              <div className="flex justify-between items-center flex-wrap gap-4 border-b border-border/30 pb-3">
                 <div>
                   <h1 className="text-3xl font-serif text-primary font-bold leading-tight">
                     {character.name}
                   </h1>
                   <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                    Level {character.level} · {character.race} · {character.rank}
+                    {character.race} · {character.rank}
                   </p>
                   {(character.resistances || character.immunities) && (
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-sans mt-2">
@@ -1169,6 +1266,36 @@ export default function CharacterSheet() {
                     </div>
                   )}
                 </div>
+
+                {/* Long Rest Confirmation Trigger */}
+                <div className="flex items-center gap-3">
+                  <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
+                        Long Rest
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[400px] bg-card border border-border shadow-2xl rounded-md p-6">
+                      <DialogHeader>
+                        <DialogTitle className="font-serif text-xl text-amber-500 font-bold flex items-center gap-2">
+                          <RotateCcw className="w-5 h-5" /> Confirm Long Rest?
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="py-3 text-xs text-muted-foreground leading-relaxed font-sans">
+                        Are you sure you want to take a Long Rest? This will fully restore your HP, DT, and Mana pools to their maximum values and record the logs.
+                      </div>
+                      <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
+                        <Button variant="ghost" size="sm" onClick={() => setIsLongRestConfirmOpen(false)} className="rounded-md font-bold text-xs">
+                          Cancel
+                        </Button>
+                        <Button variant="default" size="sm" onClick={handleLongRest} className="bg-amber-500 hover:bg-amber-600 text-black rounded-md font-bold text-xs">
+                          Confirm Rest
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+
                 <div className="text-right">
                   <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
                   <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
@@ -1241,11 +1368,45 @@ export default function CharacterSheet() {
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
                       {damageResult && (
-                        <p className={`text-[10px] font-mono text-center ${damageResult.absorbed ? "text-primary" : "text-destructive"}`}>
-                          {damageResult.absorbed ? "✦ Absorbed" : damageResult.hpLost > 0 ? `−${damageResult.hpLost} HP` : "DT hit"}
+                        <p className="text-[10px] font-mono text-center text-destructive">
+                          {damageResult.absorbed ? "✦ Absorbed" : "−1 DT"}
                         </p>
                       )}
                     </div>
+                    {/* DT History Dialog */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
+                          <Clock className="w-3 h-3 mr-1" /> Log History
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
+                        <DialogHeader>
+                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
+                            <Clock className="w-4 h-4" /> DT Changes History
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-2 space-y-2">
+                          {rolls && rolls.filter(r => r.diceType === "dt-log").length > 0 ? (
+                            rolls.filter(r => r.diceType === "dt-log").slice(0, 15).map(r => (
+                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
+                                <span className="text-muted-foreground">{r.label || "DT Update"}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
+                                    {r.result >= 0 ? `+${r.result}` : r.result}
+                                  </span>
+                                  <span className="text-[9px] text-muted-foreground/50">
+                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No DT history recorded.</p>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
 
@@ -1301,8 +1462,48 @@ export default function CharacterSheet() {
                       onClick={handleFullRestoreHp}>
                       Full Restore HP
                     </Button>
-                    {/* Fixed Height placeholder to match DT layout height */}
-                    <div className="h-4 mt-1" />
+                    {/* Fixed Height Container to prevent layout shifts */}
+                    <div className="h-4 flex items-center justify-center mt-1">
+                      {damageResult && damageResult.hpLost > 0 && (
+                        <p className="text-[10px] font-mono text-center text-destructive">
+                          −{damageResult.hpLost} HP
+                        </p>
+                      )}
+                    </div>
+                    {/* HP History Dialog */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
+                          <Clock className="w-3 h-3 mr-1" /> Log History
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
+                        <DialogHeader>
+                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
+                            <Clock className="w-4 h-4" /> Health Changes History
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-2 space-y-2">
+                          {rolls && rolls.filter(r => r.diceType === "hp-log").length > 0 ? (
+                            rolls.filter(r => r.diceType === "hp-log").slice(0, 15).map(r => (
+                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
+                                <span className="text-muted-foreground">{r.label || "HP Update"}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
+                                    {r.result >= 0 ? `+${r.result}` : r.result}
+                                  </span>
+                                  <span className="text-[9px] text-muted-foreground/50">
+                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No Health history recorded.</p>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
 
@@ -1358,8 +1559,42 @@ export default function CharacterSheet() {
                       onClick={handleFullRestoreMana}>
                       Full Restore Mana
                     </Button>
-                    {/* Fixed Height placeholder to match DT layout height */}
+                    {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 mt-1" />
+                    {/* Mana History Dialog */}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
+                          <Clock className="w-3 h-3 mr-1" /> Log History
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
+                        <DialogHeader>
+                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
+                            <Clock className="w-4 h-4" /> Mana Changes History
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-2 space-y-2">
+                          {rolls && rolls.filter(r => r.diceType === "mana-log").length > 0 ? (
+                            rolls.filter(r => r.diceType === "mana-log").slice(0, 15).map(r => (
+                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
+                                <span className="text-muted-foreground">{r.label || "Mana Update"}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
+                                    {r.result >= 0 ? `+${r.result}` : r.result}
+                                  </span>
+                                  <span className="text-[9px] text-muted-foreground/50">
+                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
+                                  </span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No Mana history recorded.</p>
+                          )}
+                        </div>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 </div>
 
@@ -1373,29 +1608,43 @@ export default function CharacterSheet() {
               <Sparkles className="w-3.5 h-3.5 text-primary" /> Favorites Hotbar
             </h3>
             
-            {/* 10 Square Uniform Grid */}
-            <div className="grid grid-cols-5 sm:grid-cols-10 gap-2.5">
+            {/* 10 Card Stacked Grid (5-on-5) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {activeFavorites.map((fav, index) => {
                 if (fav) {
+                  const details = getSlotDetails(fav);
                   return (
                     <div 
                       key={index} 
                       onClick={() => handleExecuteFavorite(fav)}
-                      className="aspect-square bg-background/60 hover:bg-accent/50 border border-primary/50 hover:border-primary transition-all relative flex flex-col items-center justify-center cursor-pointer p-1 group"
+                      className="min-h-[72px] bg-background/60 hover:bg-accent/40 border border-primary/45 hover:border-primary transition-all relative flex flex-col justify-between cursor-pointer p-2.5 rounded-md group shadow-sm"
                       title={`Favorite #${index + 1}: ${fav.label}`}
                     >
                       {/* Delete Slot Button */}
                       <button
                         onClick={(e) => handleClearFavorite(index, e)}
-                        className="absolute -top-1.5 -right-1.5 h-4 w-4 bg-destructive hover:bg-destructive/95 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-none border border-border"
+                        className="absolute top-1.5 right-1.5 h-4.5 w-4.5 bg-destructive hover:bg-destructive/95 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md border border-border cursor-pointer"
                       >
                         <X className="w-2.5 h-2.5" />
                       </button>
-                      <div className="text-[10px] font-bold text-primary text-center truncate max-w-full leading-tight font-serif px-0.5">
-                        {fav.label.split(" ")[0]}
+
+                      {/* Header slot ID + Type badge */}
+                      <div className="flex justify-between items-center w-full">
+                        <span className="text-[9px] font-mono text-muted-foreground/75 font-semibold">#{index + 1}</span>
+                        <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-primary border border-primary/20 px-1 py-0.25 rounded bg-primary/5">
+                          {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Spell" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
+                        </span>
                       </div>
-                      <div className="text-[8px] font-mono text-muted-foreground uppercase tracking-tighter mt-1 font-semibold">
-                        {fav.type === "weapon" ? "WP" : fav.type === "ability" ? "SP" : fav.type === "skill" ? "SK" : fav.type === "familiar-ability" ? "FA" : "AT"}
+
+                      {/* Name Row */}
+                      <div className="text-[11px] font-bold text-foreground truncate max-w-full leading-tight font-serif text-left mt-1">
+                        {details.name}
+                      </div>
+
+                      {/* Footer Cost + Stat */}
+                      <div className="flex justify-between items-center w-full mt-1.5 border-t border-border/20 pt-1 text-[9px] font-mono">
+                        <span className="text-muted-foreground">{details.costStr || "-"}</span>
+                        <span className="text-primary font-bold">{details.statStr || "-"}</span>
                       </div>
                     </div>
                   );
@@ -1404,10 +1653,11 @@ export default function CharacterSheet() {
                     <button
                       key={index}
                       onClick={() => setAssigningSlotIndex(index)}
-                      className="aspect-square bg-background/20 hover:bg-accent/30 border border-dashed border-border/50 hover:border-primary/50 transition-all flex items-center justify-center cursor-pointer text-muted-foreground hover:text-primary rounded-none"
+                      className="min-h-[72px] bg-background/20 hover:bg-accent/30 border border-dashed border-border/50 hover:border-primary/50 transition-all flex flex-col items-center justify-center cursor-pointer text-muted-foreground hover:text-primary rounded-md p-3 text-xs gap-1 shadow-sm"
                       title={`Click to assign Favorite #${index + 1}`}
                     >
                       <Plus className="w-4 h-4" />
+                      <span className="text-[10px] font-mono">Assign #{index + 1}</span>
                     </button>
                   );
                 }
@@ -1670,40 +1920,44 @@ export default function CharacterSheet() {
                 )}
               </div>
 
-              {/* Roll result display */}
+              {/* LCD-Style Dice HUD Roll Screen */}
               <div
-                className="p-4 border border-border/50 rounded-none text-center flex flex-col items-center justify-center transition-all duration-500 min-h-[140px] mt-4 bg-background/10"
+                className="p-4 border-2 border-slate-700/60 rounded-md text-center flex flex-col items-center justify-center transition-all duration-500 min-h-[150px] mt-4 bg-[#0c100e] shadow-[inset_0_0_15px_rgba(0,0,0,0.95)] relative overflow-hidden group"
                 style={
                   tier
-                    ? { borderColor: tier.color + "99", boxShadow: `0 0 20px 4px ${tier.color}44`, background: tier.color + "08" }
+                    ? { borderColor: tier.color + "88", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 20px ${tier.color}33`, background: `${tier.color}05` }
                     : finalTier
-                      ? { borderColor: finalTier.color + "55", background: finalTier.color + "05" }
+                      ? { borderColor: finalTier.color + "55", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 15px ${finalTier.color}22`, background: `${finalTier.color}03` }
                       : {}
                 }
               >
+                {/* LCD backlight overlay */}
+                <div className="absolute inset-0 bg-emerald-500/[0.02] pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
+                
                 {rollingDice ? (
-                  <Dice5 className="w-10 h-10 animate-spin text-primary opacity-50" />
+                  <Dice5 className="w-10 h-10 animate-spin text-emerald-400 opacity-75 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />
                 ) : critChain ? (
-                  <div className="animate-in zoom-in duration-200 w-full">
+                  <div className="animate-in zoom-in duration-200 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)]">
                     <p className="text-[10px] uppercase tracking-[0.25em] mb-2 font-bold animate-pulse" style={{ color: tier!.color }}>
                       ✦ {tier!.name} — Crit #{critChain.chainCount + 1} ✦
                     </p>
                     <div className="mb-1">
-                      <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Rolled</span>
-                      <span className="text-4xl font-mono font-bold" style={{ color: tier!.color }}>{critChain.lastRolledValue}</span>
+                      <span className="text-[10px] text-emerald-500/60 block uppercase tracking-wider">Rolled</span>
+                      <span className="text-4xl font-bold" style={{ color: tier!.color }}>{critChain.lastRolledValue}</span>
                       <span className="text-[10px] uppercase tracking-wider block mt-0.5" style={{ color: tier!.color + "aa" }}>
                         {critChain.chainDie} — Max!
                       </span>
                     </div>
-                    <div className="my-1 px-3 py-0.5 rounded-none inline-block text-xs font-mono text-muted-foreground border border-border/30 bg-background/40">
+                    <div className="my-1 px-3 py-0.5 rounded border border-emerald-950 bg-emerald-950/20 inline-block text-xs text-emerald-500/75">
                       Running: {critChain.runningDiceTotal}
-                      {critChain.modifier !== 0 && <span className="text-primary"> +{critChain.modifier}</span>}
+                      {critChain.modifier !== 0 && <span className="text-emerald-400"> +{critChain.modifier}</span>}
                     </div>
                     <div className="mt-2">
                       <button
                         onClick={handleChainRoll}
                         disabled={!!rollingDice}
-                        className="px-5 py-1.5 rounded-none font-bold text-xs uppercase tracking-widest animate-pulse disabled:opacity-50 hover:scale-105 hover:animate-none transition-transform cursor-pointer"
+                        className="px-5 py-1.5 rounded font-bold text-xs uppercase tracking-widest animate-pulse disabled:opacity-50 hover:scale-105 hover:animate-none transition-all cursor-pointer font-serif"
                         style={{
                           color: tier!.color,
                           border: `1px solid ${tier!.color}`,
@@ -1716,41 +1970,43 @@ export default function CharacterSheet() {
                     </div>
                   </div>
                 ) : lastRoll ? (
-                  <div className="animate-in zoom-in duration-300 w-full">
+                  <div className="animate-in zoom-in duration-300 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)]">
                     {lastRoll.hadCrit ? (
                       <p className="text-xs font-bold tracking-[0.25em] uppercase mb-2" style={{ color: finalTier?.color ?? "#ffd700" }}>
                         ✦ {finalTier?.name ?? "Critical"} Hit! ✦
                       </p>
                     ) : (
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mb-2 font-semibold">{lastRoll.label}</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/60 mb-2 font-semibold">{lastRoll.label}</p>
                     )}
                     <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
                       <div className="text-center">
-                        <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Roll</span>
-                        <span className="text-2xl font-mono font-semibold text-foreground">{lastRoll.rawRoll}</span>
+                        <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Roll</span>
+                        <span className="text-2xl font-semibold text-emerald-300">{lastRoll.rawRoll}</span>
                       </div>
                       {lastRoll.modifier !== 0 && (
                         <>
-                          <span className="text-lg text-muted-foreground font-light mt-2">+</span>
+                          <span className="text-lg text-emerald-500/40 font-light mt-2">+</span>
                           <div className="text-center">
-                            <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Mod</span>
-                            <span className="text-2xl font-mono font-semibold text-primary">{lastRoll.modifier}</span>
+                            <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Mod</span>
+                            <span className="text-2xl font-semibold text-emerald-400">{lastRoll.modifier}</span>
                           </div>
                         </>
                       )}
                     </div>
                     <div className="h-px w-24 mx-auto my-2"
-                      style={{ background: finalTier ? finalTier.color + "60" : "rgba(255,255,255,0.12)" }} />
+                      style={{ background: finalTier ? finalTier.color + "60" : "rgba(16,185,129,0.2)" }} />
                     <div>
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground block">Total</span>
-                      <span className="text-6xl font-serif font-bold leading-none"
-                        style={{ color: finalTier?.color ?? "hsl(var(--primary))" }}>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/50 block">Total</span>
+                      <span className="text-6xl font-bold leading-none"
+                        style={{ color: finalTier?.color ?? "rgb(52,211,153)" }}>
                         {lastRoll.total}
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <span className="text-muted-foreground text-sm font-serif italic">The dice await...</span>
+                  <span className="text-emerald-500/70 text-xs font-mono tracking-widest animate-pulse uppercase">
+                    THE DICE AWAIT...
+                  </span>
                 )}
               </div>
             </CardContent>
@@ -2477,7 +2733,7 @@ export default function CharacterSheet() {
                           <div>
                             <h4 className="font-serif text-xl text-primary font-bold">{fam.name}</h4>
                             <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                              Level {fam.level || 1} · {fam.race} · {fam.className} · {fam.speed} ft
+                              {fam.race} · {fam.className} · {fam.speed} ft
                             </p>
                             {(fam.resistances || fam.immunities) && (
                               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-sans mt-2">

@@ -168,3 +168,50 @@
     @apply font-serif font-semibold tracking-tight;
   }
 }
+
+/* Custom Gaming Themes overrides */
+html.theme-obsidian {
+  --background: 222 47% 6%;
+  --card: 222 40% 10%;
+  --primary: 142 76% 36%; /* Emerald/Terminal Green */
+  --accent: 142 35% 15%;
+  --border: 222 30% 16%;
+  --ring: 142 76% 36%;
+}
+
+html.theme-sea {
+  --background: 224 71% 4%;
+  --card: 224 50% 8%;
+  --primary: 199 89% 48%; /* Electric Cyan/Blue */
+  --accent: 199 35% 12%;
+  --border: 224 30% 16%;
+  --ring: 199 89% 48%;
+}
+
+html.theme-emerald {
+  --background: 160 50% 4%;
+  --card: 160 35% 8%;
+  --primary: 150 84% 37%; /* Bright Mint Green */
+  --accent: 150 30% 12%;
+  --border: 160 25% 15%;
+  --ring: 150 84% 37%;
+}
+
+html.theme-alchemist {
+  --background: 270 50% 4%;
+  --card: 270 35% 8%;
+  --primary: 270 70% 60%; /* Royal Violet/Amethyst */
+  --accent: 270 30% 14%;
+  --border: 270 25% 15%;
+  --ring: 270 70% 60%;
+}
+
+html.theme-bloodstone {
+  --background: 340 40% 4%;
+  --card: 340 30% 8%;
+  --primary: 345 80% 50%; /* Crimson/Bloodstone Red */
+  --accent: 345 25% 14%;
+  --border: 340 20% 15%;
+  --ring: 345 80% 50%;
+}
+

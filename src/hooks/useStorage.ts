@@ -91,7 +91,8 @@ export function useApplyDamage() {
       if (!char) throw new Error("Character not found");
       
       const eq = storage.getEquipment(id);
-      const { maxDt } = getAdjustedStats(char, eq);
+      const ab = storage.getAbilities(id);
+      const { maxDt } = getAdjustedStats(char, eq, ab);
       
       const { amount } = data;
       const dt = char.currentDt;
@@ -117,6 +118,31 @@ export function useApplyDamage() {
         currentDt: newDt,
         currentHp: newHp,
       });
+
+      // Write roll logs for historical reference
+      storage.addRoll({
+        characterId: id,
+        diceType: "dt-log",
+        result: absorbed ? 0 : -1,
+        modifier: 0,
+        total: absorbed ? 0 : -1,
+        label: absorbed ? "DT: Damage Absorbed" : "DT Lost (Hit)",
+        isCrit: false,
+        critBonus: null,
+      });
+
+      if (hpLost > 0) {
+        storage.addRoll({
+          characterId: id,
+          diceType: "hp-log",
+          result: -hpLost,
+          modifier: 0,
+          total: -hpLost,
+          label: "Health Lost (Hit)",
+          isCrit: false,
+          critBonus: null,
+        });
+      }
       
       return {
         dtDropped,
@@ -130,6 +156,8 @@ export function useApplyDamage() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["characters"] });
       queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(variables.id) });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(variables.id) });
+      queryClient.invalidateQueries({ queryKey: getListRecentRollsQueryKey() });
     },
   });
 }
@@ -521,6 +549,20 @@ export function useCreateRoll() {
       function rollOnce(sides: number): { result: number; isCrit: boolean } {
         const rolled = Math.floor(Math.random() * sides) + 1;
         return { result: rolled, isCrit: rolled === sides };
+      }
+
+      if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log") {
+        const roll = storage.addRoll({
+          characterId: charId,
+          diceType,
+          result: modifier,
+          modifier: 0,
+          total: modifier,
+          label: label || "Vitals Update",
+          isCrit: false,
+          critBonus: null,
+        });
+        return Promise.resolve(roll);
       }
 
       let result = 0;

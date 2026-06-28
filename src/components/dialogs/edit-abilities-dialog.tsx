@@ -35,6 +35,19 @@ export function EditAbilitiesDialog({ characterId }: Props) {
   const [linkedStat, setLinkedStat] = useState("power");
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
 
+  // Bonus states
+  const [bonusPower, setBonusPower] = useState<number>(0);
+  const [bonusVitality, setBonusVitality] = useState<number>(0);
+  const [bonusSpirit, setBonusSpirit] = useState<number>(0);
+  const [bonusAgility, setBonusAgility] = useState<number>(0);
+  const [bonusEndurance, setBonusEndurance] = useState<number>(0);
+  const [bonusPrecision, setBonusPrecision] = useState<number>(0);
+  const [bonusWillpower, setBonusWillpower] = useState<number>(0);
+  const [bonusCharisma, setBonusCharisma] = useState<number>(0);
+  const [bonusHp, setBonusHp] = useState<number>(0);
+  const [bonusMana, setBonusMana] = useState<number>(0);
+  const [bonusDt, setBonusDt] = useState<number>(0);
+
   const resetForm = () => {
     setName("");
     setDescription("");
@@ -45,6 +58,17 @@ export function EditAbilitiesDialog({ characterId }: Props) {
     setRollFormula("");
     setLinkedStat("power");
     setAssignedToQuickRolls(false);
+    setBonusPower(0);
+    setBonusVitality(0);
+    setBonusSpirit(0);
+    setBonusAgility(0);
+    setBonusEndurance(0);
+    setBonusPrecision(0);
+    setBonusWillpower(0);
+    setBonusCharisma(0);
+    setBonusHp(0);
+    setBonusMana(0);
+    setBonusDt(0);
     setEditingId(null);
   };
 
@@ -64,6 +88,17 @@ export function EditAbilitiesDialog({ characterId }: Props) {
     setRollFormula(ability.rollFormula);
     setLinkedStat(ability.linkedStat);
     setAssignedToQuickRolls(ability.assignedToQuickRolls);
+    setBonusPower(ability.bonusPower || 0);
+    setBonusVitality(ability.bonusVitality || 0);
+    setBonusSpirit(ability.bonusSpirit || 0);
+    setBonusAgility(ability.bonusAgility || 0);
+    setBonusEndurance(ability.bonusEndurance || 0);
+    setBonusPrecision(ability.bonusPrecision || 0);
+    setBonusWillpower(ability.bonusWillpower || 0);
+    setBonusCharisma(ability.bonusCharisma || 0);
+    setBonusHp(ability.bonusHp || 0);
+    setBonusMana(ability.bonusMana || 0);
+    setBonusDt(ability.bonusDt || 0);
     setMode("edit");
   };
 
@@ -83,6 +118,17 @@ export function EditAbilitiesDialog({ characterId }: Props) {
         rollFormula,
         linkedStat,
         assignedToQuickRolls,
+        bonusPower,
+        bonusVitality,
+        bonusSpirit,
+        bonusAgility,
+        bonusEndurance,
+        bonusPrecision,
+        bonusWillpower,
+        bonusCharisma,
+        bonusHp,
+        bonusMana,
+        bonusDt,
       }, {
         onSuccess: () => setMode("list"),
       });
@@ -99,6 +145,17 @@ export function EditAbilitiesDialog({ characterId }: Props) {
           rollFormula,
           linkedStat,
           assignedToQuickRolls,
+          bonusPower,
+          bonusVitality,
+          bonusSpirit,
+          bonusAgility,
+          bonusEndurance,
+          bonusPrecision,
+          bonusWillpower,
+          bonusCharisma,
+          bonusHp,
+          bonusMana,
+          bonusDt,
         },
       }, {
         onSuccess: () => setMode("list"),
@@ -219,6 +276,58 @@ export function EditAbilitiesDialog({ characterId }: Props) {
                 <label htmlFor="quick_roll" className="text-xs font-bold text-muted-foreground uppercase tracking-wider cursor-pointer">
                   Assign to Quick Rolls HUD
                 </label>
+              </div>
+            </div>
+
+            {/* Stat & Resource Bonuses */}
+            <div className="border-t border-border/30 pt-4 space-y-4">
+              <div>
+                <h4 className="text-xs font-bold text-primary uppercase tracking-widest mb-2 font-serif">Flat Stat Bonuses</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "POW", val: bonusPower, set: setBonusPower },
+                    { label: "VIT", val: bonusVitality, set: setBonusVitality },
+                    { label: "SPI", val: bonusSpirit, set: setBonusSpirit },
+                    { label: "AGI", val: bonusAgility, set: setBonusAgility },
+                    { label: "END", val: bonusEndurance, set: setBonusEndurance },
+                    { label: "PRE", val: bonusPrecision, set: setBonusPrecision },
+                    { label: "WIL", val: bonusWillpower, set: setBonusWillpower },
+                    { label: "CHA", val: bonusCharisma, set: setBonusCharisma },
+                  ].map(stat => (
+                    <div key={stat.label}>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">{stat.label}</label>
+                      <Input 
+                        type="number" 
+                        value={stat.val === 0 ? "" : stat.val} 
+                        onChange={e => stat.set(e.target.value === "" ? 0 : Number(e.target.value))} 
+                        placeholder="+0"
+                        className="bg-background h-8 font-mono text-xs text-center" 
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-primary uppercase tracking-widest mb-2 font-serif">Flat Resource Pool Bonuses</h4>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Max HP", val: bonusHp, set: setBonusHp },
+                    { label: "Max Mana", val: bonusMana, set: setBonusMana },
+                    { label: "Max DT", val: bonusDt, set: setBonusDt },
+                  ].map(pool => (
+                    <div key={pool.label}>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">{pool.label}</label>
+                      <Input 
+                        type="number" 
+                        value={pool.val === 0 ? "" : pool.val} 
+                        onChange={e => pool.set(e.target.value === "" ? 0 : Number(e.target.value))} 
+                        placeholder="+0"
+                        className="bg-background h-8 font-mono text-xs text-center" 
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 

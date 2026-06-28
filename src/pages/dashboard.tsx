@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertCircle, Loader2, Plus, Trash2, BookOpen } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
+import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
 
 export default function Dashboard() {
   const { data: characters, isLoading: loadingChars } = useListCharacters();
@@ -164,12 +165,14 @@ export default function Dashboard() {
         </div>
 
         {/* Ethereal New Character Dialog Trigger */}
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-base font-serif font-bold tracking-wide px-6 py-5 rounded-md border border-primary/60 animate-ethereal-pulse shadow-lg transition-transform cursor-pointer">
-              <Plus className="w-5 h-5 mr-2" /> New Character
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <CustomizeToolDialog />
+          <Dialog open={isOpen} onOpenChange={setIsOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-base font-serif font-bold tracking-wide px-6 py-5 rounded-md border border-primary/60 animate-ethereal-pulse shadow-lg transition-transform cursor-pointer">
+                <Plus className="w-5 h-5 mr-2" /> New Character
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-3xl text-primary font-bold tracking-wide border-b border-border/30 pb-2">
@@ -315,6 +318,7 @@ export default function Dashboard() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </header>
 
       {/* Two Column Layout: Roster (Left) & Recent Fate (Right) */}
@@ -342,7 +346,7 @@ export default function Dashboard() {
                         {char.name}
                       </h3>
                       <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                        Lvl {char.level} · {char.race} · {char.rank}
+                        {char.race} · {char.rank}
                       </p>
                     </div>
                     <div className="text-right">

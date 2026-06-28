@@ -137,6 +137,17 @@ export interface Ability {
   linkedStat: string;
   assignedToQuickRolls: boolean;
   level?: number;
+  bonusPower?: number;
+  bonusVitality?: number;
+  bonusSpirit?: number;
+  bonusAgility?: number;
+  bonusEndurance?: number;
+  bonusPrecision?: number;
+  bonusWillpower?: number;
+  bonusCharisma?: number;
+  bonusHp?: number;
+  bonusMana?: number;
+  bonusDt?: number;
 }
 
 export interface Skill {
@@ -268,7 +279,7 @@ const KEYS = {
 
 // ── Computed Character Helper ─────────────────────────────
 
-export function getAdjustedStats(char: Character, equipment: Equipment[]): {
+export function getAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[] = []): {
   stats: Record<string, number>;
   modifiers: Record<string, number>;
   diceLabels: Record<string, string>;
@@ -302,6 +313,18 @@ export function getAdjustedStats(char: Character, equipment: Equipment[]): {
     }
   }
 
+  // Add ability stat bonuses
+  for (const ability of abilities) {
+    if (ability.bonusPower) stats.power += ability.bonusPower;
+    if (ability.bonusVitality) stats.vitality += ability.bonusVitality;
+    if (ability.bonusSpirit) stats.spirit += ability.bonusSpirit;
+    if (ability.bonusAgility) stats.agility += ability.bonusAgility;
+    if (ability.bonusEndurance) stats.endurance += ability.bonusEndurance;
+    if (ability.bonusPrecision) stats.precision += ability.bonusPrecision;
+    if (ability.bonusWillpower) stats.willpower += ability.bonusWillpower;
+    if (ability.bonusCharisma) stats.charisma += ability.bonusCharisma;
+  }
+
   // Calculate auto-modifiers floor(Stat / 3)
   const modifiers: Record<string, number> = {};
   for (const [stat, val] of Object.entries(stats)) {
@@ -316,6 +339,11 @@ export function getAdjustedStats(char: Character, equipment: Equipment[]): {
 
   // Calculate equipped armor DT bonus
   const armorDtBonus = equippedList.reduce((sum, item) => sum + (item.dtBonus || 0), 0);
+
+  // Sum ability resource bonuses
+  const abilityHpBonus = abilities.reduce((sum, ab) => sum + (ab.bonusHp || 0), 0);
+  const abilityManaBonus = abilities.reduce((sum, ab) => sum + (ab.bonusMana || 0), 0);
+  const abilityDtBonus = abilities.reduce((sum, ab) => sum + (ab.bonusDt || 0), 0);
 
   // Compute derived maximums using variables
   const variables: Record<string, number> = {
@@ -335,11 +363,11 @@ export function getAdjustedStats(char: Character, equipment: Equipment[]): {
     wil: stats.willpower,
     charisma: stats.charisma,
     cha: stats.charisma,
-    dtbonus: char.dtBonus + armorDtBonus,
+    dtbonus: char.dtBonus + armorDtBonus + abilityDtBonus,
   };
 
-  const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
-  const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
+  const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables) + abilityHpBonus;
+  const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables) + abilityManaBonus;
   const maxDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
 
   return {
