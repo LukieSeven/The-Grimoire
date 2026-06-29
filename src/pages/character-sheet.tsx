@@ -955,7 +955,7 @@ export default function CharacterSheet() {
   };
 
   const handleSkillRoll = (skill: Skill) => {
-    const modifier = Math.floor(skill.value / 3) + skill.modifier;
+    const modifier = Math.floor(skill.value / 3) + (skill.training || 0);
     handleRoll(getDiceLabel(skill.value), `${skill.name} Skill Roll`, undefined, modifier);
   };
 
