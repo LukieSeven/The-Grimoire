@@ -200,7 +200,7 @@ export interface SessionRecap {
 
 export function evaluateFormula(formula: string, variables: Record<string, number>): number {
   try {
-    let expression = formula.replace(/\s+/g, "").toLowerCase();
+    let expression = formula.toLowerCase();
 
     // 1. If formula contains '=', strip any description on the left-hand side
     if (expression.includes("=")) {
@@ -213,19 +213,24 @@ export function evaluateFormula(formula: string, variables: Record<string, numbe
     // Substitute variables, sorting descending by length to prevent partial matches
     const sortedKeys = Object.keys(variables).sort((a, b) => b.length - a.length);
 
-    // First substitute rolled suffix versions (e.g. wilr -> 12) with base stat value
+    // First substitute rolled suffix versions (e.g. wilr -> 12) with base stat value using word boundary RegExp to avoid partial matches
     for (const key of sortedKeys) {
       const val = variables[key];
-      const escapedKey = key.toLowerCase();
-      expression = expression.split(`${escapedKey}r`).join(String(val));
+      const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp('\\b' + escapedKey + 'r\\b', 'g');
+      expression = expression.replace(regex, String(val));
     }
 
-    // Then substitute standard base stat keys (e.g. wil -> 12)
+    // Then substitute standard base stat keys (e.g. wil -> 12) using word boundary RegExp
     for (const key of sortedKeys) {
       const val = variables[key];
-      const escapedKey = key.toLowerCase();
-      expression = expression.split(escapedKey).join(String(val));
+      const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const regex = new RegExp('\\b' + escapedKey + '\\b', 'g');
+      expression = expression.replace(regex, String(val));
     }
+
+    // Strip spaces now that variables replacement is done
+    expression = expression.replace(/\s+/g, "");
 
     // 3. For static pool/recalculation formulas, replace standard dice (e.g. d6, d8) with their maximum value
     expression = expression.replace(/d(\d+)/g, "$1");
