@@ -22,6 +22,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const updateAbility = useUpdateAbility();
   const deleteAbility = useDeleteAbility();
 
+  const [isOpen, setIsOpen] = useState(false);
   // Mode: 'list' | 'add' | 'edit'
   const [mode, setMode] = useState<"list" | "add" | "edit">("list");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -182,7 +183,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const characterAbilities = (abilities || []).filter(a => !a.equipmentId);
 
   return (
-    <Dialog open={mode !== "list" || mode === "list"} onOpenChange={(open) => { if (!open) setMode("list"); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setMode("list"); }}>
       <DialogTrigger asChild>
         <Button variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-serif text-sm rounded-none">
           Edit Abilities
