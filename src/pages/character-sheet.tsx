@@ -1140,7 +1140,8 @@ export default function CharacterSheet() {
           diceType: dice, 
           modifier: mod, 
           label: `Fam: ${statLabel} Roll`, 
-          familiarId: famId 
+          familiarId: famId,
+          statValue: numericVal
         } 
       },
       {

@@ -569,6 +569,24 @@ export function useCreateRoll() {
         return { result: rolled, isCrit: rolled === sides };
       }
 
+      const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
+        const diceSides = getStatDiceSides(statVal);
+        let sum = 0;
+        const rolls: number[] = [];
+        let crit = false;
+        let remainingStat = statVal;
+        for (const sides of diceSides) {
+          const r = rollOnce(sides);
+          const cappedResult = Math.min(r.result, remainingStat);
+          sum += cappedResult;
+          rolls.push(cappedResult);
+          if (r.isCrit) crit = true;
+          remainingStat -= sides;
+        }
+        const desc = diceSides.map((sides, i) => `d${sides}(${rolls[i]})`).join("+");
+        return { total: sum, desc, isCrit: crit };
+      };
+
       if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log") {
         const roll = storage.addRoll({
           characterId: charId,
@@ -607,23 +625,7 @@ export function useCreateRoll() {
         const statsKeys = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
         const statPrefixes = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"];
 
-        const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
-          const diceSides = getStatDiceSides(statVal);
-          let sum = 0;
-          const rolls: number[] = [];
-          let crit = false;
-          let remainingStat = statVal;
-          for (const sides of diceSides) {
-            const r = rollOnce(sides);
-            const cappedResult = Math.min(r.result, remainingStat);
-            sum += cappedResult;
-            rolls.push(cappedResult);
-            if (r.isCrit) crit = true;
-            remainingStat -= sides;
-          }
-          const desc = diceSides.map((sides, i) => `d${sides}(${rolls[i]})`).join("+");
-          return { total: sum, desc, isCrit: crit };
-        };
+
 
         // A. Resolve rolled stats (e.g., wilr, willpowerr)
         for (let i = 0; i < statPrefixes.length; i++) {
