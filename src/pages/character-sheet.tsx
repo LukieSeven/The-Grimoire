@@ -3417,43 +3417,7 @@ export default function CharacterSheet() {
             )}
           </div>
         )}
-                  }`}>
-                    {slot === 4 && (
-                      <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
-                    )}
-                    
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] uppercase tracking-widest font-mono text-muted-foreground font-bold">
-                          {label}
-                        </span>
-                        {essence && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={() => deleteEssence.mutate({ id: essence.id, charId: id })}>
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-
-                      {essence ? (
-                        <div className="space-y-1">
-                          <h4 className={`font-serif text-lg font-bold ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
-                          <p className="text-xs text-muted-foreground/80 font-serif leading-relaxed line-clamp-3">{essence.description}</p>
-                        </div>
-                      ) : slot === 4 ? (
-                        <div className="py-4 text-center">
-                          <Button
-                            size="sm"
-                            className="bg-amber-500/20 border border-amber-500/30 text-amber-500 hover:bg-amber-500/30 h-7 text-xs font-serif rounded-none cursor-pointer font-bold transition-all"
-                            onClick={() => setEssenceSlotInput(slot)}
-                          >
-                            + Unleash Confluence
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="py-4 text-center">
-                          <Button
-                            size="sm"
-                            className="bg-primary/20 border border-primary/30 text-primary hover:bg        {/* TAB 5: ABILITIES */}
+        {/* TAB 5: ABILITIES */}
         {activeTab === "abilities" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
