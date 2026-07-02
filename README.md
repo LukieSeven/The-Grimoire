@@ -36,3 +36,15 @@ To run this tool on your own machine:
    npm run dev
    ```
 4. Open [http://localhost:3000](http://localhost:3000) in your web browser.
+
+Copyright (c) 2026 Aetherborne / The Grimoire Project
+
+All rights reserved.
+
+This software, including but not limited to its source code, design, mechanics, systems, text, lore, terminology, and associated documentation (collectively "The Grimoire" and "Aetherborne"), is the intellectual property of the creators.
+
+No part of this project may be copied, modified, distributed, sublicensed, or used in any form without explicit written permission from the copyright holder(s).
+
+This project is provided for private development and personal use only. Unauthorized reproduction, distribution, or commercial use is strictly prohibited.
+
+Permission requests may be directed to the project maintainers.
