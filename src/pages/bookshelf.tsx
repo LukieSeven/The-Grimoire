@@ -47,6 +47,19 @@ export default function Bookshelf() {
     const cleanPw = passphrase.trim().toLowerCase();
     if (!cleanPw) return;
 
+    // Check for diagnostic test phrase
+    if (cleanPw === "i accept the form i am given.") {
+      setPassphrase("");
+      toast.success("The Archive hums in resonance. All chronicles are illuminated...");
+      
+      // Trigger magical glow animation on all books
+      setUnlockedBook("all");
+      setTimeout(() => {
+        setUnlockedBook(null);
+      }, 5000);
+      return;
+    }
+
     // Check if passphrase is already unlocked
     if (unlockedPasswords.includes(cleanPw)) {
       toast.info("This secret has already been decrypted.");
@@ -82,8 +95,8 @@ export default function Bookshelf() {
     }
   };
 
-  const isCodexGlowing = unlockedBook === "codex";
-  const isGrimoireGlowing = unlockedBook === "grimoire";
+  const isCodexGlowing = unlockedBook === "codex" || unlockedBook === "all";
+  const isGrimoireGlowing = unlockedBook === "grimoire" || unlockedBook === "all";
 
   return (
     <div className="relative min-h-[92vh] flex flex-col justify-between overflow-hidden bg-[#0a0705] py-12 px-4 select-none">
