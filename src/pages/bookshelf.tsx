@@ -90,52 +90,37 @@ export default function Bookshelf() {
           {books.map((book) => (
             <div 
               key={book.id}
-              className="book-container col-span-3 sm:col-span-1 flex justify-center h-[280px] cursor-pointer"
+              className="col-span-3 sm:col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
               onMouseEnter={() => setHoveredBook(book.id)}
               onMouseLeave={() => setHoveredBook(null)}
               onClick={() => setLocation(book.path)}
             >
-              <div 
-                className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} flex flex-col justify-between overflow-hidden group`}
-                style={{
-                  backgroundImage: `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.3)), url(${book.coverImage})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center"
-                }}
-              >
-                {/* 3D Gold Leaf Foil Overlay border */}
-                <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
-                
-                {/* Glowing Overlay on Hover */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                {/* Subtle Book Spine shadow overlay */}
-                <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
-
-                {/* Spine Details */}
-                <div className="p-2 z-10 flex flex-col items-center justify-between h-full text-center">
-                  <span className="text-[7.5px] uppercase tracking-[0.15em] text-amber-500/50 font-semibold mt-1 group-hover:text-amber-400/80 transition-colors">
-                    {book.id === "grimoire" ? "Sanctum" : "Compendium"}
-                  </span>
+              {/* 3D Book Container */}
+              <div className="book-container h-[260px] flex items-end">
+                <div 
+                  className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} overflow-hidden`}
+                  style={{
+                    backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(${book.coverImage})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center"
+                  }}
+                >
+                  {/* 3D Gold Leaf Foil Overlay border */}
+                  <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
                   
-                  {/* Overlay text title for Grimoire only, since Codex spine has text embedded */}
-                  {book.id === "grimoire" ? (
-                    <div className="space-y-0.5">
-                      <h2 className="font-serif text-xs font-bold text-stone-100 group-hover:text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase tracking-wider">
-                        The
-                      </h2>
-                      <h3 className="font-serif text-[10px] font-medium text-stone-300 leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase tracking-widest">
-                        Grimoire
-                      </h3>
-                    </div>
-                  ) : (
-                    <div className="h-6" /> // spacer
-                  )}
+                  {/* Glowing Overlay on Hover */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                  <div className={`p-1.5 rounded-full border border-stone-850 bg-black/65 ${book.accent} transition-transform duration-500 group-hover:scale-110 mb-1`}>
-                    {book.id === "grimoire" ? <Book className="w-3.5 h-3.5" /> : <Compass className="w-3.5 h-3.5" />}
-                  </div>
+                  {/* Subtle Book Spine shadow overlay */}
+                  <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
                 </div>
+              </div>
+
+              {/* Spine Text Label BELOW the book (resting just above the shelf) */}
+              <div className="text-center pb-1">
+                <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-400 group-hover:text-amber-400 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                  {book.id === "grimoire" ? "Grimoire" : "Codex"}
+                </span>
               </div>
             </div>
           ))}
@@ -144,7 +129,7 @@ export default function Bookshelf() {
           {Array(4).fill(null).map((_, idx) => (
             <div 
               key={`empty-${idx}`}
-              className="col-span-1 hidden sm:flex justify-center h-[260px] items-end pointer-events-none"
+              className="col-span-1 hidden sm:flex justify-center h-[300px] items-end pb-7 pointer-events-none"
             >
               <div className="w-[110px] h-[230px] border border-dashed border-stone-800/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 opacity-40 bg-stone-950/10">
                 <Lock className="w-4.5 h-4.5 text-stone-700" />

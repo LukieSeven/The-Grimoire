@@ -818,6 +818,22 @@ export const storage = {
     if (list.length === 0) {
       list = initialCodex as CodexNote[];
       setList(KEYS.codex, list);
+    } else {
+      // Migrate legacy database entries that do not have the 'subcategory' property
+      let modified = false;
+      list = list.map(n => {
+        if (!n.subcategory) {
+          modified = true;
+          // Look up matching default initialCodex entry by title
+          const match = (initialCodex as CodexNote[]).find(ic => ic.title.toLowerCase() === n.title.toLowerCase());
+          const subcat = match?.subcategory || (n.category === "location" ? "world-landmarks" : n.category === "npc" ? "entities-npcs" : n.category === "bestiary" ? "bestiary-monsters" : "lore-myths");
+          return { ...n, subcategory: subcat };
+        }
+        return n;
+      });
+      if (modified) {
+        setList(KEYS.codex, list);
+      }
     }
     return list;
   },

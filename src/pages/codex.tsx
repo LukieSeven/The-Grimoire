@@ -601,7 +601,7 @@ export default function Codex() {
                           {note.title}
                         </h4>
                         <span className="text-[7px] uppercase font-mono tracking-wider px-1.5 py-0.25 border border-stone-850 rounded bg-stone-900/40 text-stone-400">
-                          {note.subcategory.split("-")[1] || note.category}
+                          {note.subcategory ? (note.subcategory.split("-")[1] || note.category) : note.category}
                         </span>
                       </div>
                       
