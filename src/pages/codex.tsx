@@ -6,7 +6,9 @@ import {
   useUpdateCodexNote, 
   useDeleteCodexNote,
   useListCharacters,
-  useCreateNote
+  useCreateNote,
+  useListUnlockedPasswords,
+  useLockPassword
 } from "@/hooks/useStorage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { 
   Search, BookOpen, MapPin, Sparkles, Feather, Trash2, 
-  Plus, Upload, Download, ArrowLeft, Send, ChevronDown, ChevronRight, BookMarked
+  Plus, Upload, Download, ArrowLeft, Send, ChevronDown, ChevronRight, BookMarked, Lock
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -142,6 +144,10 @@ export default function Codex() {
   const { data: characters = [] } = useListCharacters();
   const pushToCharacterNote = useCreateNote();
 
+  // Storage hooks for decryption passwords
+  const { data: unlockedPasswords = [] } = useListUnlockedPasswords();
+  const lockPassword = useLockPassword();
+
   // Component Search & Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState<string>("all");
@@ -163,6 +169,7 @@ export default function Codex() {
   const [editCategory, setEditCategory] = useState("world");
   const [editSubcategory, setEditSubcategory] = useState("world-cities");
   const [editTags, setEditTags] = useState("");
+  const [editSecretPassword, setEditSecretPassword] = useState("");
 
   // Push to Character States
   const [isPushModalOpen, setIsPushModalOpen] = useState(false);
@@ -176,20 +183,26 @@ export default function Codex() {
     setExpandedParents(prev => ({ ...prev, [parentVal]: !prev[parentVal] }));
   };
 
-  // Filter notes based on hierarchy selection & search query
+  // Filter notes based on hierarchy selection, search query, and secret password locks
   const filteredNotes = codexNotes.filter(n => {
     // 1. Unconditionally hide raw "Random encounters"
-    if (n.title.toLowerCase().includes("random encounter")) return false;
+    if ((n.title || "").toLowerCase().includes("random encounter")) return false;
 
-    // 2. Keyword Search filter
+    // 2. Hide password-locked records unless decrypted/unlocked
+    if (n.secretPassword) {
+      const cleanLock = n.secretPassword.trim().toLowerCase();
+      if (!unlockedPasswords.includes(cleanLock)) return false;
+    }
+
+    // 3. Keyword Search filter
     const matchesSearch = 
-      n.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      n.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (n.tags && n.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase())));
+      (n.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (n.content || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (n.tags && n.tags.some(t => (t || "").toLowerCase().includes(searchTerm.toLowerCase())));
     
     if (!matchesSearch) return false;
 
-    // 3. Hierarchical Category/Subcategory filter
+    // 4. Hierarchical Category/Subcategory filter
     if (selectedSubcategory !== "all") {
       return n.subcategory === selectedSubcategory;
     } else if (selectedCategory !== "all") {
@@ -222,6 +235,7 @@ export default function Codex() {
     setEditCategory(selectedNote.category || "world");
     setEditSubcategory(selectedNote.subcategory || "world-cities");
     setEditTags(selectedNote.tags ? selectedNote.tags.join(", ") : "");
+    setEditSecretPassword(selectedNote.secretPassword || "");
     setIsEditing(true);
   };
 
@@ -242,7 +256,8 @@ export default function Codex() {
         content: editContent,
         category: editCategory,
         subcategory: editSubcategory,
-        tags: tagsArray
+        tags: tagsArray,
+        secretPassword: editSecretPassword.trim() || null
       }
     }, {
       onSuccess: () => {
@@ -259,6 +274,7 @@ export default function Codex() {
     setEditCategory(selectedCategory === "all" ? "world" : selectedCategory);
     setEditSubcategory(selectedSubcategory === "all" ? "world-cities" : selectedSubcategory);
     setEditTags("");
+    setEditSecretPassword("");
     setIsAdding(true);
   };
 
@@ -276,7 +292,8 @@ export default function Codex() {
       category: editCategory,
       subcategory: editSubcategory,
       tags: tagsArray,
-      coordinates: null
+      coordinates: null,
+      secretPassword: editSecretPassword.trim() || null
     }, {
       onSuccess: (newNote) => {
         setIsAdding(false);
@@ -343,7 +360,8 @@ export default function Codex() {
               category: note.category || "world",
               subcategory: note.subcategory || "world-landmarks",
               tags: note.tags || ["IMPORTED"],
-              coordinates: note.coordinates || null
+              coordinates: note.coordinates || null,
+              secretPassword: note.secretPassword || null
             });
             importCount++;
           }
@@ -380,6 +398,15 @@ export default function Codex() {
         toast.success(`Pushed chronicle to ${charName}'s Campaign Notes!`);
       }
     });
+  };
+
+  // Helper to determine if a note is unlocked/visible
+  const isNoteVisible = (note: any) => {
+    if (note.title.toLowerCase().includes("random encounter")) return false;
+    if (note.secretPassword) {
+      return unlockedPasswords.includes(note.secretPassword.trim().toLowerCase());
+    }
+    return true;
   };
 
   // Get active subcategory label
@@ -477,7 +504,7 @@ export default function Codex() {
                 : "bg-transparent border-transparent text-stone-400 hover:text-stone-300"
             }`}
           >
-            📚 View All Archives ({codexNotes.filter(n => !n.title.toLowerCase().includes("random encounter")).length})
+            📚 View All Archives ({codexNotes.filter(isNoteVisible).length})
           </button>
 
           {/* Collapsible Nested tree list */}
@@ -485,7 +512,7 @@ export default function Codex() {
             {TAXONOMY.map((group) => {
               const isExpanded = !!expandedParents[group.value];
               const isParentSelected = selectedCategory === group.value && selectedSubcategory === "all";
-              const noteCount = codexNotes.filter(n => n.category === group.value && !n.title.toLowerCase().includes("random encounter")).length;
+              const noteCount = codexNotes.filter(n => n.category === group.value && isNoteVisible(n)).length;
 
               return (
                 <div key={group.value} className="space-y-1">
@@ -518,7 +545,7 @@ export default function Codex() {
                     <div className="pl-6 border-l border-stone-900/80 space-y-1 pt-0.5 animate-in slide-in-from-top-1 duration-150">
                       {group.subcategories.map((sub) => {
                         const isSubSelected = selectedSubcategory === sub.value;
-                        const subCount = codexNotes.filter(n => n.subcategory === sub.value && !n.title.toLowerCase().includes("random encounter")).length;
+                        const subCount = codexNotes.filter(n => n.subcategory === sub.value && isNoteVisible(n)).length;
 
                         return (
                           <button
@@ -541,6 +568,36 @@ export default function Codex() {
               );
             })}
           </div>
+
+          {/* Active Decrypted Keys List display */}
+          {unlockedPasswords.length > 0 && (
+            <div className="space-y-2 border-t border-stone-900 pt-4 mt-2">
+              <span className="text-[9px] font-mono uppercase tracking-widest text-stone-500 font-bold block mb-1">
+                Decrypted Seals
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {unlockedPasswords.map((pw) => (
+                  <span 
+                    key={pw}
+                    className="text-[9px] font-mono bg-amber-950/10 border border-amber-900/30 text-amber-500/80 px-2 py-0.5 flex items-center gap-1.5"
+                  >
+                    🔑 {pw}
+                    <button 
+                      onClick={() => {
+                        if (confirm(`Do you want to re-lock the "${pw}" archives?`)) {
+                          lockPassword.mutate(pw);
+                        }
+                      }}
+                      className="text-stone-600 hover:text-red-400 cursor-pointer font-sans text-xs font-bold leading-none pl-1 transition-colors"
+                      title="Re-lock this passphrase"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CENTER COLUMN: Search results card list */}
@@ -597,8 +654,11 @@ export default function Codex() {
                   >
                     <CardContent className="p-3.5 space-y-1.5">
                       <div className="flex justify-between items-start gap-2">
-                        <h4 className={`text-sm font-bold leading-tight ${isSelected ? "text-amber-400" : "text-stone-300"}`}>
+                        <h4 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isSelected ? "text-amber-400" : "text-stone-300"}`}>
                           {note.title}
+                          {note.secretPassword && (
+                            <Lock className="w-3 h-3 text-amber-500" title="Decrypted secret entry" />
+                          )}
                         </h4>
                         <span className="text-[7px] uppercase font-mono tracking-wider px-1.5 py-0.25 border border-stone-850 rounded bg-stone-900/40 text-stone-400">
                           {note.subcategory ? (note.subcategory.split("-")[1] || note.category) : note.category}
@@ -694,14 +754,27 @@ export default function Codex() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Tags (Comma separated)</label>
-                  <Input 
-                    value={editTags} 
-                    onChange={e => setEditTags(e.target.value)} 
-                    placeholder="e.g. POI, VOLCANO, DANGER" 
-                    className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Tags (Comma separated)</label>
+                    <Input 
+                      value={editTags} 
+                      onChange={e => setEditTags(e.target.value)} 
+                      placeholder="e.g. POI, VOLCANO, DANGER" 
+                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Secret Password Lock (Optional)</label>
+                    <Input 
+                      value={editSecretPassword} 
+                      onChange={e => setEditSecretPassword(e.target.value)} 
+                      placeholder="e.g. corvustemple" 
+                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40 animate-pulse"
+                      title="If set, this note is hidden until this passphrase is typed in the bookcase ledge"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1 flex-1 flex flex-col">
@@ -745,8 +818,11 @@ export default function Codex() {
               {/* Header Title & Tags */}
               <div className="space-y-3 z-10 border-b border-amber-900/20 pb-4">
                 <div className="flex justify-between items-baseline flex-wrap gap-2">
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight">
+                  <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight flex items-center gap-2">
                     {selectedNote.title}
+                    {selectedNote.secretPassword && (
+                      <Lock className="w-4 h-4 text-amber-500" title="Decrypted secret entry" />
+                    )}
                   </h2>
                   
                   <span className="text-[9px] uppercase font-mono tracking-widest px-2 py-0.5 border border-amber-900/40 rounded bg-amber-950/20 text-amber-400">
@@ -761,6 +837,11 @@ export default function Codex() {
                         #{tag}
                       </span>
                     ))}
+                    {selectedNote.secretPassword && (
+                      <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1">
+                        Lock: "{selectedNote.secretPassword}"
+                      </span>
+                    )}
                     {selectedNote.coordinates && (
                       <span className="text-[9px] font-mono text-teal-400 font-semibold border border-teal-900/40 px-2 py-0.5 rounded-none bg-teal-950/10 flex items-center gap-1.5 ml-auto">
                         <MapPin className="w-3 h-3 text-teal-400" />

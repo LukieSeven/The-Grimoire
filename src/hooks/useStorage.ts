@@ -821,3 +821,42 @@ export function useDeleteCodexNote() {
     },
   });
 }
+
+// ── Passwords / Secrets ───────────────────────────────────
+
+export const getUnlockedPasswordsQueryKey = () => ["unlocked_passwords"];
+
+export function useListUnlockedPasswords() {
+  return useQuery<string[]>({
+    queryKey: getUnlockedPasswordsQueryKey(),
+    queryFn: () => storage.getUnlockedPasswords(),
+  });
+}
+
+export function useUnlockPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => {
+      storage.unlockPassword(password);
+      return Promise.resolve(password);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getUnlockedPasswordsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListCodexQueryKey() });
+    },
+  });
+}
+
+export function useLockPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (password: string) => {
+      storage.lockPassword(password);
+      return Promise.resolve(password);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getUnlockedPasswordsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getListCodexQueryKey() });
+    },
+  });
+}

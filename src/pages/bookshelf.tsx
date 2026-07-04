@@ -1,10 +1,22 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
-import { Book, Compass, Lock } from "lucide-react";
+import { Book, Compass, Lock, KeyRound, Sparkles } from "lucide-react";
+import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
+import { toast } from "sonner";
 
 export default function Bookshelf() {
   const [, setLocation] = useLocation();
   const [hoveredBook, setHoveredBook] = useState<string | null>(null);
+
+  // Storage hooks for decryption
+  const { data: codexNotes = [] } = useListCodexNotes();
+  const { data: unlockedPasswords = [] } = useListUnlockedPasswords();
+  const unlockPassword = useUnlockPassword();
+
+  // Decryption input states
+  const [passphrase, setPassphrase] = useState("");
+  const [isShaking, setIsShaking] = useState(false);
+  const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
 
   const books = [
     {
@@ -28,6 +40,50 @@ export default function Bookshelf() {
       accent: "text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
     }
   ];
+
+  // Passphrase Submission Validation
+  const handlePassphraseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPw = passphrase.trim().toLowerCase();
+    if (!cleanPw) return;
+
+    // Check if passphrase is already unlocked
+    if (unlockedPasswords.includes(cleanPw)) {
+      toast.info("This secret has already been decrypted.");
+      setPassphrase("");
+      return;
+    }
+
+    // 1. Scan Codex entries for matching locks
+    const matchingNotes = codexNotes.filter(n => n.secretPassword && n.secretPassword.trim().toLowerCase() === cleanPw);
+
+    // (In the future, we can add locks on characters or campaigns here)
+
+    if (matchingNotes.length > 0) {
+      unlockPassword.mutate(cleanPw, {
+        onSuccess: () => {
+          setPassphrase("");
+          toast.success(`A seal breaks! Decrypted ${matchingNotes.length} secret chronicles.`);
+          
+          // Trigger magical book spine glow animation for 5 seconds
+          setUnlockedBook("codex");
+          setTimeout(() => {
+            setUnlockedBook(null);
+          }, 5000);
+        }
+      });
+    } else {
+      // Play shaking feedback on incorrect input
+      setIsShaking(true);
+      toast.error("The words echo in silence...");
+      setTimeout(() => {
+        setIsShaking(false);
+      }, 700);
+    }
+  };
+
+  const isCodexGlowing = unlockedBook === "codex";
+  const isGrimoireGlowing = unlockedBook === "grimoire";
 
   return (
     <div className="relative min-h-[92vh] flex flex-col justify-between overflow-hidden bg-[#0a0705] py-12 px-4 select-none">
@@ -65,6 +121,42 @@ export default function Bookshelf() {
           box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8),
                       0 0 40px 5px rgba(217, 119, 6, 0.15);
         }
+
+        /* ── Magical Glow Pulse Animations ── */
+        @keyframes codex-magical-glow {
+          0%, 100% { 
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.75), 0 0 12px 1px rgba(245, 158, 11, 0.2); 
+          }
+          50% { 
+            box-shadow: 0 0 45px 12px rgba(245, 158, 11, 0.85); 
+            transform: translateY(-15px) rotateY(-22deg) scale(1.05);
+          }
+        }
+        .animate-codex-magical-glow {
+          animation: codex-magical-glow 1.5s infinite ease-in-out;
+        }
+
+        @keyframes grimoire-magical-glow {
+          0%, 100% { 
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.75), 0 0 12px 1px rgba(168, 85, 247, 0.2); 
+          }
+          50% { 
+            box-shadow: 0 0 45px 12px rgba(168, 85, 247, 0.85); 
+            transform: translateY(-15px) rotateY(-22deg) scale(1.05);
+          }
+        }
+        .animate-grimoire-magical-glow {
+          animation: grimoire-magical-glow 1.5s infinite ease-in-out;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+          20%, 40%, 60%, 80% { transform: translateX(4px); }
+        }
+        .animate-shake {
+          animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both;
+        }
       `}</style>
 
       {/* Background Elements */}
@@ -82,48 +174,75 @@ export default function Bookshelf() {
         </p>
       </div>
 
+      {/* Passphrase Input Bar centered right above the ledge */}
+      <form 
+        onSubmit={handlePassphraseSubmit}
+        className="max-w-xs mx-auto w-full text-center space-y-2 mt-6 z-10"
+      >
+        <label className="text-[10px] font-mono tracking-[0.35em] text-stone-500 uppercase font-bold block">
+          Speak your mind
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            value={passphrase}
+            onChange={(e) => setPassphrase(e.target.value)}
+            placeholder="Speak the hidden words..."
+            className={`w-full bg-[#120e0a]/90 border border-amber-900/30 rounded-none h-8 text-center text-xs font-serif text-amber-200 placeholder:text-stone-700 focus:outline-none focus:border-amber-600/60 focus:ring-1 focus:ring-amber-600/20 transition-all ${
+              isShaking ? "animate-shake border-red-900" : ""
+            }`}
+          />
+          <KeyRound className="w-3.5 h-3.5 text-amber-900/40 absolute right-2.5 top-1/2 -translate-y-1/2" />
+        </div>
+      </form>
+
       {/* Main Bookshelf Area */}
-      <div className="w-full max-w-4xl mx-auto z-10 my-10 space-y-1">
+      <div className="w-full max-w-4xl mx-auto z-10 my-4 space-y-1">
         
         {/* Books Stand Area */}
-        <div className="grid grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[340px] pb-1">
-          {books.map((book) => (
-            <div 
-              key={book.id}
-              className="col-span-3 sm:col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
-              onMouseEnter={() => setHoveredBook(book.id)}
-              onMouseLeave={() => setHoveredBook(null)}
-              onClick={() => setLocation(book.path)}
-            >
-              {/* 3D Book Container */}
-              <div className="book-container h-[260px] flex items-end">
-                <div 
-                  className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} overflow-hidden`}
-                  style={{
-                    backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(${book.coverImage})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center"
-                  }}
-                >
-                  {/* 3D Gold Leaf Foil Overlay border */}
-                  <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
-                  
-                  {/* Glowing Overlay on Hover */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+        <div className="grid grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1">
+          {books.map((book) => {
+            const isGlow = book.id === "codex" ? isCodexGlowing : isGrimoireGlowing;
+            return (
+              <div 
+                key={book.id}
+                className="col-span-3 sm:col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
+                onMouseEnter={() => setHoveredBook(book.id)}
+                onMouseLeave={() => setHoveredBook(null)}
+                onClick={() => setLocation(book.path)}
+              >
+                {/* 3D Book Container */}
+                <div className="book-container h-[260px] flex items-end">
+                  <div 
+                    className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} overflow-hidden ${
+                      isGlow ? (book.id === "codex" ? "animate-codex-magical-glow" : "animate-grimoire-magical-glow") : ""
+                    }`}
+                    style={{
+                      backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(${book.coverImage})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center"
+                    }}
+                  >
+                    {/* 3D Gold Leaf Foil Overlay border */}
+                    <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
+                    
+                    {/* Glowing Overlay on Hover */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
-                  {/* Subtle Book Spine shadow overlay */}
-                  <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
+                    {/* Subtle Book Spine shadow overlay */}
+                    <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
+                  </div>
+                </div>
+
+                {/* Spine Text Label BELOW the book (resting just above the shelf) */}
+                <div className="text-center pb-1">
+                  <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-400 group-hover:text-amber-400 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                    {book.id === "grimoire" ? "Grimoire" : "Codex"}
+                  </span>
                 </div>
               </div>
-
-              {/* Spine Text Label BELOW the book (resting just above the shelf) */}
-              <div className="text-center pb-1">
-                <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-400 group-hover:text-amber-400 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                  {book.id === "grimoire" ? "Grimoire" : "Codex"}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* 4 Empty Outlined placeholders representing future expansions */}
           {Array(4).fill(null).map((_, idx) => (
@@ -148,7 +267,7 @@ export default function Bookshelf() {
             <div className="absolute inset-x-0 bottom-0 h-[2px] bg-black/60" />
           </div>
           {/* Ledge depth shadow underneath */}
-          <div className="w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
+          <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
         </div>
       </div>
 

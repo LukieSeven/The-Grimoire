@@ -345,6 +345,7 @@ const KEYS = {
   notes: "aetherborne_notes",
   recaps: "aetherborne_recaps",
   codex: "aetherborne_codex",
+  unlocked_passwords: "aetherborne_unlocked_passwords",
 };
 
 // ── Computed Character Helper ─────────────────────────────
@@ -861,6 +862,30 @@ export const storage = {
   deleteCodexNote(id: number): void {
     const list = getList<CodexNote>(KEYS.codex).filter(n => n.id !== id);
     setList(KEYS.codex, list);
+  },
+
+  getUnlockedPasswords(): string[] {
+    const data = safeStorage.getItem(KEYS.unlocked_passwords);
+    if (!data) return [];
+    try {
+      return JSON.parse(data);
+    } catch {
+      return [];
+    }
+  },
+
+  unlockPassword(password: string): void {
+    const list = this.getUnlockedPasswords();
+    const cleanPw = password.trim().toLowerCase();
+    if (!list.includes(cleanPw)) {
+      list.push(cleanPw);
+      safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(list));
+    }
+  },
+
+  lockPassword(password: string): void {
+    const list = this.getUnlockedPasswords().filter(p => p !== password.trim().toLowerCase());
+    safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(list));
   },
 
   // Rolls log
