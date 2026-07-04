@@ -65,6 +65,9 @@ export default function Codex() {
 
   // Filter notes
   const filteredNotes = codexNotes.filter(n => {
+    // Hide Random Encounters from the Codex index interface, but keep their coordinate database records intact
+    if (n.title.toLowerCase().includes("random encounter")) return false;
+
     const matchesSearch = 
       n.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
       n.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
