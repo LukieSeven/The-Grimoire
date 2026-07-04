@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
-import { Book, Compass, Lock, KeyRound, Sparkles } from "lucide-react";
+import { Book, Compass, Lock, MessageSquare, Sparkles } from "lucide-react";
 import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
 import { toast } from "sonner";
 
@@ -213,7 +213,7 @@ export default function Bookshelf() {
               isShaking ? "animate-shake border-red-900" : ""
             }`}
           />
-          <KeyRound className="w-3.5 h-3.5 text-amber-900/45 absolute right-2.5 top-1/2 -translate-y-1/2" />
+          <MessageSquare className="w-3.5 h-3.5 text-stone-300/80 absolute right-2.5 top-1/2 -translate-y-1/2" />
         </div>
       </form>
 
