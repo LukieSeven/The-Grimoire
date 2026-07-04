@@ -222,6 +222,7 @@ export interface CodexNote {
   tags: string[];
   images?: string[];
   coordinates?: { x: number; y: number; label?: string } | null;
+  secretPassword?: string | null;
   createdAt: string;
   updatedAt: string;
 }
