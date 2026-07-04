@@ -12,7 +12,7 @@ import {
   Shield, ArrowLeft, Loader2, Trash2, Heart, Dice5,
   RotateCcw, Swords, Sparkles, Plus, Edit2, Upload, Download,
   Coins, Package, Hammer, Layers, Flame, BookText, UserCheck, X,
-  Palette, Clock
+  Palette, Clock, ExternalLink
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -277,6 +277,59 @@ export default function CharacterSheet() {
       localStorage.setItem(`aetherborne_combatants_recents_${id}`, JSON.stringify(recentCombatants));
     }
   }, [id, combatants, currentTurnIdx, recentCombatants]);
+
+  // Retroactive Auto-Conversion of Existing Items to Notes
+  const hasSyncedItemsRef = useRef(false);
+  useEffect(() => {
+    if (character && notes && equipment && inventory && currencies && !hasSyncedItemsRef.current) {
+      hasSyncedItemsRef.current = true;
+
+      const existingNoteTitles = new Set(
+        notes
+          .filter(n => n.category === "item")
+          .map(n => n.title.toLowerCase().trim())
+      );
+
+      const syncMissingItem = (name: string, desc: string, itemType: string, extraFields?: any) => {
+        const titleKey = name.toLowerCase().trim();
+        if (titleKey && !existingNoteTitles.has(titleKey)) {
+          let noteContent = `Description: ${desc || "None"}`;
+          if (itemType === "equipment" && extraFields) {
+            noteContent += `\nDice: ${extraFields.diceType || "None"}`;
+            noteContent += `\nModifier: ${extraFields.modifier || "None"}`;
+            noteContent += `\nDT Bonus: ${extraFields.dtBonus || 0}`;
+            noteContent += `\nStat Modifiers: ${JSON.stringify(extraFields.statModifiers || {})}`;
+          }
+
+          createNote.mutate({
+            characterId: id,
+            title: name,
+            category: "item",
+            content: noteContent,
+            tags: ["auto-imported"],
+            images: []
+          });
+        }
+      };
+
+      equipment.forEach(eq => {
+        syncMissingItem(eq.name, eq.description || "", "equipment", {
+          diceType: eq.diceType,
+          modifier: eq.modifier,
+          dtBonus: eq.dtBonus,
+          statModifiers: eq.statModifiers
+        });
+      });
+
+      inventory.forEach(item => {
+        syncMissingItem(item.name, item.description || "", "item");
+      });
+
+      currencies.forEach(cur => {
+        syncMissingItem(cur.name, `Currency amount: ${cur.amount}`, "currency");
+      });
+    }
+  }, [character, notes, equipment, inventory, currencies, id]);
 
   // ── Familiar Release States ──────────────────────────────
   const [releasingFamId, setReleasingFamId] = useState<number | string | null>(null);
@@ -548,7 +601,13 @@ export default function CharacterSheet() {
         const eq = ability.equipmentId ? equipment.find(e => e.id === ability.equipmentId) : null;
         name = eq ? `${eq.name}: ${ability.name}` : ability.name;
         costStr = `${ability.cost} MP`;
-        statStr = ability.linkedStat ? String(ability.linkedStat).toUpperCase().substring(0, 3) : "SPI";
+        if (ability.linkedStats && ability.linkedStats.length > 0) {
+          statStr = ability.linkedStats.map(s => s.toUpperCase().substring(0, 3)).join(", ");
+        } else if (ability.rollFormula) {
+          statStr = ability.rollFormula;
+        } else {
+          statStr = "SPI";
+        }
       }
     } else if (slot.type === "skill") {
       const skill = skills.find(s => s.id === Number(slot.targetId));
@@ -571,7 +630,13 @@ export default function CharacterSheet() {
         if (ab) {
           name = `${fam.name}: ${ab.name}`;
           costStr = `${ab.cost} MP`;
-          statStr = ab.rollFormula ? "Formula" : "";
+          if (ab.linkedStats && ab.linkedStats.length > 0) {
+            statStr = ab.linkedStats.map(s => s.toUpperCase().substring(0, 3)).join(", ");
+          } else if (ab.rollFormula) {
+            statStr = ab.rollFormula;
+          } else {
+            statStr = "";
+          }
         }
       }
     }
@@ -1309,6 +1374,39 @@ export default function CharacterSheet() {
     toast.success(`Slot #${slotIdx + 1} cleared.`);
   };
 
+  const handleLocateFavorite = (fav: FavoriteSlot, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!fav) return;
+
+    if (fav.type === "ability") {
+      setActiveTab("abilities");
+      const abId = Number(fav.targetId);
+      setExpandedAbilities(prev => ({ ...prev, [abId]: true }));
+      toast.success(`Navigated to Shaped Ability: ${fav.label}`);
+    } else if (fav.type === "familiar-ability") {
+      setActiveTab("familiar");
+      if (fav.familiarId) {
+        setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
+      }
+      toast.success(`Navigated to Familiar Action: ${fav.label}`);
+    } else if (fav.type === "weapon") {
+      setActiveTab("inventory");
+      toast.success(`Navigated to Inventory: ${fav.label}`);
+    } else if (fav.type === "skill") {
+      setActiveTab("skills");
+      toast.success(`Navigated to Skills Log: ${fav.label}`);
+    } else if (fav.type === "attribute") {
+      setActiveTab("stats");
+      toast.success(`Navigated to Attributes: ${fav.label}`);
+    } else if (fav.type === "familiar-attribute") {
+      setActiveTab("familiar");
+      if (fav.familiarId) {
+        setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
+      }
+      toast.success(`Navigated to Familiar: ${fav.label}`);
+    }
+  };
+
   // ── Inventory Dialog Trigger Helpers ──────────────────────
   const triggerAddInventory = (category: "currency" | "equipment" | "item") => {
     setInvType(category);
@@ -1907,12 +2005,17 @@ export default function CharacterSheet() {
 
   const activeFavorites = getFavorites(character, equipment, abilities);
 
-  const preparedAbilities = abilities?.filter(a => a.level && a.level > 0) || [];
+  const preparedAbilities = abilities?.filter(a => a.level && a.level > 0 && a.active) || [];
   const abilityResistances = preparedAbilities.map(a => a.resistances).filter(Boolean).join(", ");
   const abilityImmunities = preparedAbilities.map(a => a.immunities).filter(Boolean).join(", ");
 
-  const totalResistances = [character.resistances, abilityResistances].filter(Boolean).join(", ");
-  const totalImmunities = [character.immunities, abilityImmunities].filter(Boolean).join(", ");
+  const baseResistances = character.resistances ? character.resistances.split(",").map(r => r.trim()).filter(Boolean) : [];
+  const tempResistances = abilityResistances ? abilityResistances.split(",").map(r => r.trim()).filter(Boolean) : [];
+  const baseImmunities = character.immunities ? character.immunities.split(",").map(r => r.trim()).filter(Boolean) : [];
+  const tempImmunities = abilityImmunities ? abilityImmunities.split(",").map(r => r.trim()).filter(Boolean) : [];
+
+  const hasAnyRes = baseResistances.length > 0 || tempResistances.length > 0;
+  const hasAnyImm = baseImmunities.length > 0 || tempImmunities.length > 0;
 
   // Notes Search filter computation
   const filteredNotes = notes.filter(n => {
@@ -2010,17 +2113,37 @@ export default function CharacterSheet() {
                     <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
                       {character.race} · {character.rank}
                     </p>
-                  {(totalResistances || totalImmunities) && (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-sans mt-2">
-                      {totalResistances && (
-                        <span>
-                          <strong className="text-foreground uppercase tracking-wider text-[10px]">Resistances:</strong> {totalResistances}
-                        </span>
+                  {(hasAnyRes || hasAnyImm) && (
+                    <div className="flex flex-col gap-2 mt-3 font-sans">
+                      {hasAnyRes && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Resistances:</strong>
+                          {baseResistances.map((res, idx) => (
+                            <Badge key={`base-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
+                              {res}
+                            </Badge>
+                          ))}
+                          {tempResistances.map((res, idx) => (
+                            <Badge key={`temp-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-cyan-500/40 text-cyan-400 bg-cyan-950/20 shadow-[0_0_8px_rgba(34,211,238,0.35)] animate-pulse h-5 px-2">
+                              {res}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
-                      {totalImmunities && (
-                        <span>
-                          <strong className="text-foreground uppercase tracking-wider text-[10px]">Immunities:</strong> {totalImmunities}
-                        </span>
+                      {hasAnyImm && (
+                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                          <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Immunities:</strong>
+                          {baseImmunities.map((imm, idx) => (
+                            <Badge key={`base-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
+                              {imm}
+                            </Badge>
+                          ))}
+                          {tempImmunities.map((imm, idx) => (
+                            <Badge key={`temp-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-emerald-500/40 text-emerald-400 bg-emerald-950/20 shadow-[0_0_8px_rgba(52,211,153,0.35)] animate-pulse h-5 px-2">
+                              {imm}
+                            </Badge>
+                          ))}
+                        </div>
                       )}
                     </div>
                   )}
@@ -2689,19 +2812,29 @@ export default function CharacterSheet() {
                     className="min-h-[72px] bg-background/60 hover:bg-accent/40 border border-primary/45 hover:border-primary transition-all relative flex flex-col justify-between cursor-pointer p-2 rounded-md group shadow-sm"
                     title={`Favorite #${index + 1}: ${fav.label}`}
                   >
-                    {/* Delete Slot Button */}
-                    <button
-                      onClick={(e) => handleClearFavorite(index, e)}
-                      className="absolute top-1 right-1 h-4 w-4 bg-destructive hover:bg-destructive/95 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded border border-border cursor-pointer"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
+                    {/* Actions Panel */}
+                    <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <button
+                        onClick={(e) => handleLocateFavorite(fav, e)}
+                        className="h-4 w-4 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center rounded border border-border cursor-pointer"
+                        title="Locate in tab"
+                      >
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleClearFavorite(index, e)}
+                        className="h-4 w-4 bg-destructive hover:bg-destructive/95 text-white flex items-center justify-center rounded border border-border cursor-pointer"
+                        title="Remove from favorites"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
 
                     {/* Header slot ID + Type badge */}
-                    <div className="flex justify-between items-center w-full">
+                    <div className="flex justify-between items-center w-full pr-8">
                       <span className="text-[8px] font-mono text-muted-foreground/75 font-semibold">#{index + 1}</span>
                       <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-primary border border-primary/20 px-1 py-0.25 rounded bg-primary/5">
-                        {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Spell" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
+                        {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
                       </span>
                     </div>
 

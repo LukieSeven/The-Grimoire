@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
@@ -13,6 +13,12 @@ import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
 import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 export default function Dashboard() {
   const { data: characters, isLoading: loadingChars } = useListCharacters();
@@ -254,12 +260,23 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-serif font-bold tracking-wider px-5 py-4 h-9 rounded-md border border-primary/50 shadow-md transition-transform hover:scale-[1.02] cursor-pointer">
-              <Plus className="w-4 h-4 mr-1.5" /> Forge Hero
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-serif font-bold tracking-wider px-5 py-4 h-9 rounded-md border border-primary/50 shadow-md transition-transform hover:scale-[1.02] cursor-pointer flex items-center gap-1">
+              <Plus className="w-4 h-4 mr-1" /> Forge Hero <ChevronDown className="w-3.5 h-3.5 ml-0.5 opacity-80" />
             </Button>
-          </DialogTrigger>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-card border border-border shadow-lg rounded-md min-w-[160px] p-1">
+            <DropdownMenuItem onClick={() => setIsOpen(true)} className="cursor-pointer font-serif font-bold text-xs flex items-center gap-2 px-3 py-2 text-foreground hover:bg-accent/40 focus:bg-accent/40">
+              <Plus className="w-3.5 h-3.5 text-primary" /> Forge New Hero
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleImportClick} className="cursor-pointer font-serif font-bold text-xs flex items-center gap-2 px-3 py-2 text-foreground hover:bg-accent/40 focus:bg-accent/40">
+              <Upload className="w-3.5 h-3.5 text-primary" /> Import Character
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md">
             <DialogHeader>
               <DialogTitle className="font-serif text-3xl text-primary font-bold tracking-wide border-b border-border/30 pb-2">
