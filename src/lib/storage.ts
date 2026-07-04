@@ -877,15 +877,28 @@ export const storage = {
 
   unlockPassword(password: string): void {
     const list = this.getUnlockedPasswords();
-    const cleanPw = password.trim().toLowerCase();
-    if (!list.includes(cleanPw)) {
+    const sanitize = (str: string) => 
+      (str || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+        .replace(/\s+/g, " ");
+    const cleanPw = sanitize(password);
+    if (cleanPw && !list.includes(cleanPw)) {
       list.push(cleanPw);
       safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(list));
     }
   },
 
   lockPassword(password: string): void {
-    const list = this.getUnlockedPasswords().filter(p => p !== password.trim().toLowerCase());
+    const sanitize = (str: string) => 
+      (str || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+        .replace(/\s+/g, " ");
+    const cleanPw = sanitize(password);
+    const list = this.getUnlockedPasswords().filter(p => p !== cleanPw);
     safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(list));
   },
 

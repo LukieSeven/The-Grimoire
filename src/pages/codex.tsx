@@ -190,8 +190,14 @@ export default function Codex() {
 
     // 2. Hide password-locked records unless decrypted/unlocked
     if (n.secretPassword) {
-      const cleanLock = n.secretPassword.trim().toLowerCase();
-      if (!unlockedPasswords.includes(cleanLock)) return false;
+      const sanitize = (str: string) => 
+        (str || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+          .replace(/\s+/g, " ");
+      const hasMatch = unlockedPasswords.some(pw => sanitize(pw) === sanitize(n.secretPassword));
+      if (!hasMatch) return false;
     }
 
     // 3. Keyword Search filter
@@ -404,7 +410,13 @@ export default function Codex() {
   const isNoteVisible = (note: any) => {
     if (note.title.toLowerCase().includes("random encounter")) return false;
     if (note.secretPassword) {
-      return unlockedPasswords.includes(note.secretPassword.trim().toLowerCase());
+      const sanitize = (str: string) => 
+        (str || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+          .replace(/\s+/g, " ");
+      return unlockedPasswords.some(pw => sanitize(pw) === sanitize(note.secretPassword));
     }
     return true;
   };

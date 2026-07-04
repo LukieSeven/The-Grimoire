@@ -44,11 +44,20 @@ export default function Bookshelf() {
   // Passphrase Submission Validation
   const handlePassphraseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPw = passphrase.trim().toLowerCase();
-    if (!cleanPw) return;
+    
+    // Helper to strip punctuation and normalize whitespace
+    const sanitize = (str: string) => 
+      (str || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+        .replace(/\s+/g, " ");
+
+    const cleanInput = sanitize(passphrase);
+    if (!cleanInput) return;
 
     // Check for diagnostic test phrase
-    if (cleanPw === "i accept the form i am given.") {
+    if (cleanInput === sanitize("I accept the form I am given")) {
       setPassphrase("");
       toast.success("The Archive hums in resonance. All chronicles are illuminated...");
       
@@ -61,19 +70,21 @@ export default function Bookshelf() {
     }
 
     // Check if passphrase is already unlocked
-    if (unlockedPasswords.includes(cleanPw)) {
+    const isAlreadyUnlocked = unlockedPasswords.some(pw => sanitize(pw) === cleanInput);
+    if (isAlreadyUnlocked) {
       toast.info("This secret has already been decrypted.");
       setPassphrase("");
       return;
     }
 
     // 1. Scan Codex entries for matching locks
-    const matchingNotes = codexNotes.filter(n => n.secretPassword && n.secretPassword.trim().toLowerCase() === cleanPw);
+    const matchingNotes = codexNotes.filter(n => n.secretPassword && sanitize(n.secretPassword) === cleanInput);
 
     // (In the future, we can add locks on characters or campaigns here)
 
     if (matchingNotes.length > 0) {
-      unlockPassword.mutate(cleanPw, {
+      const targetPw = matchingNotes[0].secretPassword!;
+      unlockPassword.mutate(targetPw, {
         onSuccess: () => {
           setPassphrase("");
           toast.success(`A seal breaks! Decrypted ${matchingNotes.length} secret chronicles.`);
