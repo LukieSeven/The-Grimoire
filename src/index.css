@@ -260,3 +260,32 @@ html.theme-emberborn {
   --ring: 24 95% 50%;
 }
 
+/* ── The Archive Default Theme ── */
+html.theme-grimoire {
+  --background: 30 25% 7%;   /* Dark leather brown */
+  --card: 32 20% 10%;        /* Textured leather card */
+  --primary: 43 80% 52%;     /* Radiant Gold */
+  --accent: 30 35% 15%;      /* Antique leather accent */
+  --border: 43 45% 32%;      /* Gold Outline HSL */
+  --ring: 43 80% 52%;
+  --card-border: 43 45% 32%;
+}
+
+html.theme-grimoire body {
+  background-color: #0c0806;
+  background-image: 
+    radial-gradient(circle at 50% 30%, rgba(30, 20, 15, 0.15), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.003) 0px, rgba(255, 255, 255, 0.003) 1px, transparent 1px, transparent 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.08) 0px, rgba(0, 0, 0, 0.08) 1.5px, transparent 1.5px, transparent 3px);
+}
+
+/* Card book page texture and gold border for the default theme */
+html.theme-grimoire .bg-card,
+html.theme-grimoire [class*="bg-card"],
+html.theme-grimoire .card,
+html.theme-grimoire [class*="card-"] {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.01) 0%, rgba(0, 0, 0, 0.05) 100%) !important;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 15px rgba(212, 175, 55, 0.05) !important;
+  border: 1.5px solid hsl(43, 45%, 32%) !important;
+}
+

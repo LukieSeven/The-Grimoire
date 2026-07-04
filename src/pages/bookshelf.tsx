@@ -166,11 +166,11 @@ export default function Bookshelf() {
       {/* Header Slot Title */}
       <div className="text-center space-y-3 z-10 max-w-2xl mx-auto mt-2">
         <h1 className="text-4xl sm:text-5xl font-serif font-extrabold tracking-[0.3em] uppercase bg-gradient-to-r from-amber-600 via-stone-200 to-amber-600 bg-clip-text text-transparent drop-shadow-md">
-          The Library Ledge
+          The Archive
         </h1>
         <div className="h-[1px] w-48 bg-gradient-to-r from-transparent via-amber-600/50 to-transparent mx-auto" />
         <p className="text-stone-400 font-serif text-sm tracking-wider italic">
-          \"A repository of ancient records, forgotten chronicles, and the names of those who dare carve their path.\"
+          “What is stored here is more than power. The books are listening—and they remember every word.”
         </p>
       </div>
 

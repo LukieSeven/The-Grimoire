@@ -437,7 +437,7 @@ export default function Codex() {
             onClick={() => setLocation("/")} 
             className="text-stone-400 hover:text-stone-200 rounded-none cursor-pointer pl-0 font-serif"
           >
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Bookcase
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to The Archive
           </Button>
           <div className="h-4 w-px bg-border/20" />
           <div>

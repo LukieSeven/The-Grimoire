@@ -234,7 +234,7 @@ export default function Dashboard() {
             className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
             title="Return to the library bookcase"
           >
-            <Library className="w-3.5 h-3.5 text-primary" /> Bookcase
+            <Library className="w-3.5 h-3.5 text-primary" /> Return to The Archive
           </Button>
           <div className="h-4 w-px bg-border/30" />
           <CustomizeToolDialog />

@@ -2035,8 +2035,8 @@ export default function CharacterSheet() {
       {/* ── Top Header Controls ── */}
       <div className="flex items-center justify-between border-b border-border/40 pb-3 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/grimoire")} className="text-muted-foreground hover:text-foreground rounded-none cursor-pointer pl-0">
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
+          <Button variant="ghost" size="sm" onClick={() => setLocation("/grimoire")} className="text-muted-foreground hover:text-foreground rounded-none cursor-pointer pl-0 font-serif">
+            <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to Grimoire
           </Button>
           <div className="h-4 w-px bg-border/40" />
           <div className="flex items-center gap-2">

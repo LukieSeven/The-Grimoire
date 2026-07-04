@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Palette, Check } from "lucide-react";
 
 const THEMES = [
+  { id: "theme-grimoire", name: "The Archive", bg: "bg-[#0c0806]", primary: "bg-[#d4af37]", label: "Book Texture & Gold Outline" },
   { id: "theme-obsidian", name: "Obsidian", bg: "bg-[#0c0f12]", primary: "bg-[#10b981]", label: "Default Dark & Green" },
   { id: "theme-sea", name: "Deep Sea", bg: "bg-[#070b13]", primary: "bg-[#00b0ff]", label: "Midnight Blue & Cyan" },
   { id: "theme-emerald", name: "Emerald Vault", bg: "bg-[#05110d]", primary: "bg-[#10b981]", label: "Deep Forest & Mint" },
@@ -17,11 +18,11 @@ const THEMES = [
 ];
 
 export function CustomizeToolDialog() {
-  const [activeTheme, setActiveTheme] = useState("theme-obsidian");
+  const [activeTheme, setActiveTheme] = useState("theme-grimoire");
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("aetherborne_theme") || "theme-obsidian";
+    const saved = localStorage.getItem("aetherborne_theme") || "theme-grimoire";
     setActiveTheme(saved);
     document.documentElement.className = saved;
   }, []);
