@@ -201,22 +201,19 @@ export default function Bookshelf() {
       {/* Passphrase Input Bar centered right above the ledge */}
       <form 
         onSubmit={handlePassphraseSubmit}
-        className="max-w-xs mx-auto w-full text-center space-y-2 mt-6 z-10"
+        className="max-w-xs mx-auto w-full text-center mt-6 z-10"
       >
-        <label className="text-[10px] font-mono tracking-[0.35em] text-stone-500 uppercase font-bold block">
-          Speak your mind
-        </label>
         <div className="relative">
           <input
             type="text"
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
-            placeholder="Speak the hidden words..."
-            className={`w-full bg-[#120e0a]/90 border border-amber-900/30 rounded-none h-8 text-center text-xs font-serif text-amber-200 placeholder:text-stone-700 focus:outline-none focus:border-amber-600/60 focus:ring-1 focus:ring-amber-600/20 transition-all ${
+            placeholder="Speak your mind"
+            className={`w-full bg-[#120e0a]/90 border border-amber-900/30 rounded-none h-8 text-center text-xs font-serif text-amber-200 placeholder:text-stone-700 placeholder:italic focus:outline-none focus:border-amber-600/60 focus:ring-1 focus:ring-amber-600/20 transition-all ${
               isShaking ? "animate-shake border-red-900" : ""
             }`}
           />
-          <KeyRound className="w-3.5 h-3.5 text-amber-900/40 absolute right-2.5 top-1/2 -translate-y-1/2" />
+          <KeyRound className="w-3.5 h-3.5 text-amber-900/45 absolute right-2.5 top-1/2 -translate-y-1/2" />
         </div>
       </form>
 
