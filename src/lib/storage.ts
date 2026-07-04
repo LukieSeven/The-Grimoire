@@ -217,7 +217,8 @@ export interface CodexNote {
   id: number;
   title: string;
   content: string;
-  category: string; // 'general', 'location', 'npc', 'item', 'lore', 'bestiary'
+  category: string; // 'world', 'entities', 'bestiary', 'systems', 'items', 'maps', 'lore', 'glossary'
+  subcategory: string; // e.g. 'world-cities', 'maps-dungeons'
   tags: string[];
   images?: string[];
   coordinates?: { x: number; y: number; label?: string } | null;

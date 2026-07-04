@@ -12,7 +12,7 @@ export default function Bookshelf() {
       title: "The Grimoire",
       subtitle: "Character Sheet & Spellbook Manager",
       description: "Step into your sanctum to forge heroes, manage character sheets, attune essences, cast spells, and track your active campaign stats.",
-      coverImage: `${import.meta.env.BASE_URL}the_grimoire.jpg`,
+      coverImage: `${import.meta.env.BASE_URL}the_grimoire_spine.png`,
       path: "/grimoire",
       style: "from-purple-950 via-indigo-950 to-violet-950 border-purple-500/35",
       accent: "text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
@@ -22,7 +22,7 @@ export default function Bookshelf() {
       title: "Veridia Codex",
       subtitle: "Campaign World Compendium",
       description: "Consult the global registry of legends, locations, bestiary entries, and campaign facts. Push lore directly to your active heroes.",
-      coverImage: `${import.meta.env.BASE_URL}veridia_codex.jpg`,
+      coverImage: `${import.meta.env.BASE_URL}veridia_codex_spine.png`,
       path: "/codex",
       style: "from-amber-950 via-yellow-950 to-orange-950 border-amber-600/35",
       accent: "text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
@@ -96,39 +96,44 @@ export default function Bookshelf() {
               onClick={() => setLocation(book.path)}
             >
               <div 
-                className={`book-3d w-[150px] sm:w-[120px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.65)] ${book.style} flex flex-col justify-between overflow-hidden group`}
+                className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} flex flex-col justify-between overflow-hidden group`}
                 style={{
-                  backgroundImage: `linear-gradient(rgba(0,0,0,0.25), rgba(0,0,0,0.6)), url(${book.coverImage})`,
+                  backgroundImage: `linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.3)), url(${book.coverImage})`,
                   backgroundSize: "cover",
                   backgroundPosition: "center"
                 }}
               >
                 {/* 3D Gold Leaf Foil Overlay border */}
-                <div className="absolute inset-2.5 border border-amber-500/20 pointer-events-none group-hover:border-amber-500/40 transition-colors duration-500" />
+                <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
                 
                 {/* Glowing Overlay on Hover */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
 
                 {/* Subtle Book Spine shadow overlay */}
-                <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/75 via-black/20 to-transparent" />
+                <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
 
-                {/* Cover Details */}
-                <div className="p-4 z-10 flex flex-col items-center justify-between h-full text-center">
-                  <span className="text-[9px] uppercase tracking-[0.2em] text-amber-500/60 font-semibold mt-2 group-hover:text-amber-400/80 transition-colors">
+                {/* Spine Details */}
+                <div className="p-2 z-10 flex flex-col items-center justify-between h-full text-center">
+                  <span className="text-[7.5px] uppercase tracking-[0.15em] text-amber-500/50 font-semibold mt-1 group-hover:text-amber-400/80 transition-colors">
                     {book.id === "grimoire" ? "Sanctum" : "Compendium"}
                   </span>
                   
-                  <div className="space-y-1">
-                    <h2 className="font-serif text-lg font-bold text-stone-100 group-hover:text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                      {book.title.split(" ")[0]}
-                    </h2>
-                    <h3 className="font-serif text-xs font-medium text-stone-300 leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                      {book.title.split(" ")[1]}
-                    </h3>
-                  </div>
+                  {/* Overlay text title for Grimoire only, since Codex spine has text embedded */}
+                  {book.id === "grimoire" ? (
+                    <div className="space-y-0.5">
+                      <h2 className="font-serif text-xs font-bold text-stone-100 group-hover:text-white leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase tracking-wider">
+                        The
+                      </h2>
+                      <h3 className="font-serif text-[10px] font-medium text-stone-300 leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase tracking-widest">
+                        Grimoire
+                      </h3>
+                    </div>
+                  ) : (
+                    <div className="h-6" /> // spacer
+                  )}
 
-                  <div className={`p-1.5 rounded-full border border-stone-700/60 bg-black/40 ${book.accent} transition-transform duration-500 group-hover:scale-110 mb-2`}>
-                    {book.id === "grimoire" ? <Book className="w-4 h-4" /> : <Compass className="w-4 h-4" />}
+                  <div className={`p-1.5 rounded-full border border-stone-850 bg-black/65 ${book.accent} transition-transform duration-500 group-hover:scale-110 mb-1`}>
+                    {book.id === "grimoire" ? <Book className="w-3.5 h-3.5" /> : <Compass className="w-3.5 h-3.5" />}
                   </div>
                 </div>
               </div>
