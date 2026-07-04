@@ -1,4 +1,5 @@
 // AEtherborne Standalone Browser Storage Engine
+import initialCodex from "../data/initial_codex.json";
 
 export interface FavoriteSlot {
   type: "weapon" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
@@ -212,6 +213,18 @@ export interface Note {
   updatedAt: string;
 }
 
+export interface CodexNote {
+  id: number;
+  title: string;
+  content: string;
+  category: string; // 'general', 'location', 'npc', 'item', 'lore', 'bestiary'
+  tags: string[];
+  images?: string[];
+  coordinates?: { x: number; y: number; label?: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SessionRecap {
   id: number;
   title: string;
@@ -330,6 +343,7 @@ const KEYS = {
   rolls: "aetherborne_rolls",
   notes: "aetherborne_notes",
   recaps: "aetherborne_recaps",
+  codex: "aetherborne_codex",
 };
 
 // ── Computed Character Helper ─────────────────────────────
@@ -795,6 +809,41 @@ export const storage = {
   deleteNote(id: number): void {
     const list = getList<Note>(KEYS.notes).filter(n => n.id !== id);
     setList(KEYS.notes, list);
+  },
+
+  // Codex Notes
+  getCodexNotes(): CodexNote[] {
+    let list = getList<CodexNote>(KEYS.codex);
+    if (list.length === 0) {
+      list = initialCodex as CodexNote[];
+      setList(KEYS.codex, list);
+    }
+    return list;
+  },
+
+  addCodexNote(data: Omit<CodexNote, "id" | "createdAt" | "updatedAt">): CodexNote {
+    const list = getList<CodexNote>(KEYS.codex);
+    const newId = list.length > 0 ? Math.max(...list.map(n => n.id)) + 1 : 1;
+    const now = new Date().toISOString();
+    const note: CodexNote = { ...data, id: newId, createdAt: now, updatedAt: now };
+    list.push(note);
+    setList(KEYS.codex, list);
+    return note;
+  },
+
+  updateCodexNote(id: number, data: Partial<Omit<CodexNote, "id" | "createdAt" | "updatedAt">>): CodexNote {
+    const list = getList<CodexNote>(KEYS.codex);
+    const idx = list.findIndex(n => n.id === id);
+    if (idx === -1) throw new Error("Codex note not found");
+    const updated = { ...list[idx], ...data, updatedAt: new Date().toISOString() };
+    list[idx] = updated;
+    setList(KEYS.codex, list);
+    return updated;
+  },
+
+  deleteCodexNote(id: number): void {
+    const list = getList<CodexNote>(KEYS.codex).filter(n => n.id !== id);
+    setList(KEYS.codex, list);
   },
 
   // Rolls log

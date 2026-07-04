@@ -2035,7 +2035,7 @@ export default function CharacterSheet() {
       {/* ── Top Header Controls ── */}
       <div className="flex items-center justify-between border-b border-border/40 pb-3 flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/")} className="text-muted-foreground hover:text-foreground rounded-none cursor-pointer pl-0">
+          <Button variant="ghost" size="sm" onClick={() => setLocation("/grimoire")} className="text-muted-foreground hover:text-foreground rounded-none cursor-pointer pl-0">
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Back
           </Button>
           <div className="h-4 w-px bg-border/40" />
@@ -5047,7 +5047,7 @@ export default function CharacterSheet() {
             <Button variant="ghost" size="sm" onClick={() => setIsDeleteOpen(false)} className="rounded-md font-bold">
               Cancel
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => deleteChar.mutate({ id }, { onSuccess: () => setLocation("/") })} className="rounded-md font-bold">
+            <Button variant="destructive" size="sm" onClick={() => deleteChar.mutate({ id }, { onSuccess: () => setLocation("/grimoire") })} className="rounded-md font-bold">
               Delete
             </Button>
           </div>

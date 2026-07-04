@@ -12,6 +12,7 @@ import {
   Note,
   getAdjustedStats,
   SessionRecap,
+  CodexNote,
 } from "../lib/storage";
 
 // ── Query Keys ────────────────────────────────────────────
@@ -26,6 +27,7 @@ export const getListEssencesQueryKey = (charId: number) => ["essences", charId];
 export const getListAbilitiesQueryKey = (charId: number) => ["abilities", charId];
 export const getListSkillsQueryKey = (charId: number) => ["skills", charId];
 export const getListRecapsQueryKey = () => ["recaps"];
+export const getListCodexQueryKey = () => ["codex"];
 
 // ── Characters ────────────────────────────────────────────
 
@@ -770,6 +772,52 @@ export function useDeleteRecap() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: getListRecapsQueryKey() });
+    },
+  });
+}
+
+// ── Codex Notes ───────────────────────────────────────────
+
+export function useListCodexNotes() {
+  return useQuery<CodexNote[]>({
+    queryKey: getListCodexQueryKey(),
+    queryFn: () => storage.getCodexNotes(),
+  });
+}
+
+export function useCreateCodexNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Omit<CodexNote, "id" | "createdAt" | "updatedAt">) => {
+      return Promise.resolve(storage.addCodexNote(data));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListCodexQueryKey() });
+    },
+  });
+}
+
+export function useUpdateCodexNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Omit<CodexNote, "id" | "createdAt" | "updatedAt">> }) => {
+      return Promise.resolve(storage.updateCodexNote(id, data));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListCodexQueryKey() });
+    },
+  });
+}
+
+export function useDeleteCodexNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) => {
+      storage.deleteCodexNote(id);
+      return Promise.resolve();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: getListCodexQueryKey() });
     },
   });
 }

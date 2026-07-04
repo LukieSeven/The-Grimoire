@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, ChevronDown } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, ChevronDown, Library } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
@@ -228,6 +228,15 @@ export default function Dashboard() {
       {/* Utility Control Panel Bar */}
       <div className="bg-card/45 backdrop-blur-md border border-border/40 p-4 flex flex-wrap items-center justify-between gap-4 rounded-lg shadow-sm">
         <div className="flex items-center gap-2.5 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={() => setLocation("/")}
+            className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
+            title="Return to the library bookcase"
+          >
+            <Library className="w-3.5 h-3.5 text-primary" /> Bookcase
+          </Button>
+          <div className="h-4 w-px bg-border/30" />
           <CustomizeToolDialog />
           <div className="h-4 w-px bg-border/30 hidden sm:block" />
           <RollGuideDialog />
