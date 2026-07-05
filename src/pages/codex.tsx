@@ -15,8 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
-import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
+import { exportCodexBackup, importCodexBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { 
   Search, BookOpen, MapPin, Sparkles, Trash2, 
@@ -226,17 +225,10 @@ export default function Codex() {
     document.addEventListener("mouseup", stopResizing);
   };
 
-  // Collapsible Left Index states
-  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({
-    world: true, // LOCATIONS parent open by default
-    entities: false,
-    bestiary: false
-  });
+  // Collapsible Left Index states (ALL Collapsed on Page Mount)
+  const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({});
   const [expandedCountries, setExpandedCountries] = useState<Record<number, boolean>>({});
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    "locations-veridia": true, // Veridia open by default
-    "locations-planes": true // Planes open by default
-  });
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [expandedTowns, setExpandedTowns] = useState<Record<number, boolean>>({});
 
   // Editor states
@@ -289,7 +281,7 @@ export default function Codex() {
     return true;
   };
 
-  // Filter notes based on search query
+  // Filter notes based on strictly Title Search Matching
   const filteredNotes = codexNotes.filter(n => {
     if ((n.title || "").toLowerCase().includes("random encounter")) return false;
     if (n.secretPassword) {
@@ -303,11 +295,7 @@ export default function Codex() {
       if (!hasMatch) return false;
     }
 
-    const matchesSearch = 
-      (n.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
-      (n.content || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (n.tags && n.tags.some(t => (t || "").toLowerCase().includes(searchTerm.toLowerCase())));
-    
+    const matchesSearch = (n.title || "").toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
 
@@ -486,17 +474,17 @@ export default function Codex() {
     }
   };
 
-  // Export global backup
+  // Export Codex backup (.codex)
   const handleExportBackup = () => {
     try {
-      exportBackupJSON();
-      toast.success("Campaign backup exported successfully!");
+      exportCodexBackup();
+      toast.success("Codex lore backup exported successfully!");
     } catch {
-      toast.error("Failed to export backup.");
+      toast.error("Failed to export Codex backup.");
     }
   };
 
-  // Import global backup
+  // Import Codex backup (.codex or legacy .json)
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
@@ -509,11 +497,11 @@ export default function Codex() {
     reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        importBackupJSON(parsed);
+        importCodexBackup(JSON.stringify(parsed));
         await queryClient.invalidateQueries();
-        toast.success("Campaign backup restored successfully!");
+        toast.success("Codex lore backup restored successfully!");
       } catch (err) {
-        toast.error("Invalid file format. Import requires a valid backup JSON.");
+        toast.error("Invalid file format. Import requires a valid backup .codex or .json file.");
       }
     };
     reader.readAsText(file);
@@ -539,13 +527,13 @@ export default function Codex() {
       onSuccess: () => {
         setIsPushModalOpen(false);
         setNoteToPush(null);
-        toast.success(`Pushed chronicle to ${charName}'s Campaign Notes!`);
+        toast.success(`Pushed chronicle to ${charName}'s private notes!`);
       }
     });
   };
 
   return (
-    <div className="relative min-h-[92vh] bg-[#0c0806] text-stone-100 flex flex-col font-serif select-none p-4 max-w-7xl mx-auto space-y-4">
+    <div className="relative min-h-[92vh] bg-background text-foreground flex flex-col font-serif select-none p-4 max-w-7xl mx-auto space-y-4">
       
       {styleBlock}
 
@@ -558,7 +546,7 @@ export default function Codex() {
             className="w-10 h-10 rounded-lg object-cover border border-primary/20 shadow-sm flex-shrink-0"
           />
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-widest bg-gradient-to-r from-amber-500 to-yellow-200 bg-clip-text text-transparent drop-shadow-md">
+            <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-widest bg-gradient-to-r from-primary to-primary-foreground bg-clip-text text-transparent drop-shadow-md">
               Veridia Codex
             </h1>
             <p className="text-[10px] font-mono tracking-widest text-stone-500 uppercase mt-0.5">
@@ -587,7 +575,7 @@ export default function Codex() {
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileChange} 
-            accept=".json" 
+            accept=".codex,.json" 
             className="hidden" 
           />
           <Button 
@@ -595,9 +583,9 @@ export default function Codex() {
             size="sm"
             onClick={handleImportClick}
             className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
-            title="Restore backup (.json)"
+            title="Restore Codex backup (.codex, .json)"
           >
-            <Upload className="w-3.5 h-3.5" /> Import Backup
+            <Upload className="w-3.5 h-3.5" /> Import Codex
           </Button>
           
           <Button 
@@ -605,9 +593,9 @@ export default function Codex() {
             size="sm"
             onClick={handleExportBackup}
             className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
-            title="Export backup (.json)"
+            title="Export Codex backup (.codex)"
           >
-            <Download className="w-3.5 h-3.5" /> Export Backup
+            <Download className="w-3.5 h-3.5" /> Export Codex
           </Button>
         </div>
       </div>
@@ -618,46 +606,61 @@ export default function Codex() {
         {/* LEFT COLUMN: Hierarchical collapsable Index Tree & Search (Resizable Width) */}
         <div 
           style={{ width: sidebarWidth }}
-          className="bg-stone-950/30 border border-stone-900/65 p-4 rounded-md flex flex-col gap-4 max-h-[82vh] overflow-y-auto pr-2 flex-shrink-0"
+          className="bg-card/45 border border-border/40 p-4 rounded-md flex flex-col gap-4 max-h-[82vh] overflow-y-auto pr-2 flex-shrink-0"
         >
           
           {/* Header title & Add Entry shortcut */}
           <div className="flex items-center justify-between border-b border-border/15 pb-2">
-            <h3 className="text-xs font-mono font-bold tracking-widest text-amber-500/80 uppercase flex items-center gap-1.5">
+            <h3 className="text-xs font-mono font-bold tracking-widest text-primary uppercase flex items-center gap-1.5">
               <BookMarked className="w-3.5 h-3.5" /> Registry Index
             </h3>
             <Button 
               onClick={handleStartAdd}
               size="sm" 
-              className="h-5 text-[9px] uppercase font-mono tracking-widest bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded-none px-2 cursor-pointer"
+              className="h-5 text-[9px] uppercase font-mono tracking-widest bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-none px-2 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 mr-0.5" /> Add
             </Button>
           </div>
 
-          {/* Search Bar prominently at top of sidebar */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input 
-              type="text" 
-              placeholder="Search index..." 
-              value={searchTerm} 
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-8.5 bg-stone-950/40 border-stone-900 text-stone-200 text-xs font-serif rounded-md h-8.5 focus-visible:ring-amber-600/40"
-            />
+          {/* Search Bar prominently at top of sidebar (with Contextual Reset button) */}
+          <div className="relative flex gap-2">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input 
+                type="text" 
+                placeholder="Search index..." 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-8.5 bg-background border-border text-foreground text-xs font-serif rounded-md h-8.5 focus-visible:ring-primary/40"
+              />
+              {searchTerm && (
+                <button 
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 font-sans text-xs"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            
+            {(selectedCategory !== "all" || selectedSubcategory !== "all" || searchTerm) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSelectedCategory("all");
+                  setSelectedSubcategory("all");
+                  setSearchTerm("");
+                }}
+                className="h-8.5 px-2 text-[10px] font-mono border-primary/30 text-primary hover:bg-primary/10 rounded-md shrink-0 uppercase tracking-wider cursor-pointer"
+                title="Clear all filters & search"
+              >
+                Clear
+              </Button>
+            )}
           </div>
-
-          {/* Reset All filter option */}
-          <button
-            onClick={() => { setSelectedCategory("all"); setSelectedSubcategory("all"); setSearchTerm(""); }}
-            className={`w-full text-left px-2 py-1.5 text-xs font-bold font-mono tracking-wider uppercase border cursor-pointer transition-all ${
-              selectedCategory === "all" && selectedSubcategory === "all" && searchTerm === ""
-                ? "bg-amber-950/20 border-amber-600/40 text-amber-400"
-                : "bg-transparent border-transparent text-stone-400 hover:text-stone-300"
-            }`}
-          >
-            📚 View All Archives ({codexNotes.filter(isNoteVisible).length})
-          </button>
 
           {/* Collapsible Nested tree list */}
           <div className="space-y-3.5">
@@ -669,14 +672,18 @@ export default function Codex() {
               return (
                 <div key={group.value} className="space-y-1">
                   
-                  {/* Parent Title Row */}
+                  {/* Parent Title Row (Name click triggers expansion/collapse) */}
                   <div className="flex items-center justify-between group">
                     <button
-                      onClick={() => { setSelectedCategory(group.value); setSelectedSubcategory("all"); }}
+                      onClick={() => { 
+                        setSelectedCategory(group.value); 
+                        setSelectedSubcategory("all"); 
+                        toggleParent(group.value); // Toggle folder state directly on name click!
+                      }}
                       className={`flex-1 text-left font-bold font-mono text-xs tracking-wider uppercase flex items-center gap-1.5 py-1 px-1.5 border border-transparent transition-all cursor-pointer ${
                         isParentSelected 
-                          ? "bg-stone-900/40 text-amber-400 border-stone-850" 
-                          : "text-stone-300 hover:text-white"
+                          ? "bg-card/90 text-primary border-border/20" 
+                          : "text-foreground/90 hover:text-primary"
                       }`}
                     >
                       <span className="text-sm leading-none">{group.icon}</span>
@@ -686,7 +693,7 @@ export default function Codex() {
 
                     <button 
                       onClick={(e) => { e.stopPropagation(); toggleParent(group.value); }}
-                      className="p-1 text-stone-500 hover:text-stone-300 rounded hover:bg-stone-900/60 transition-colors"
+                      className="p-1 text-stone-500 hover:text-primary rounded hover:bg-card transition-colors"
                     >
                       {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     </button>
@@ -694,17 +701,21 @@ export default function Codex() {
 
                   {/* Custom LOCATIONS tree layout (Veridia + Planes side-by-side nesting folders) */}
                   {group.value === "world" && isExpanded && (
-                    <div className="pl-3 border-l border-stone-900/80 space-y-2.5 pt-1 animate-in slide-in-from-top-1 duration-150">
+                    <div className="pl-3 border-l border-border/30 space-y-2.5 pt-1 animate-in slide-in-from-top-1 duration-150">
                       
                       {/* SUB-NODE 1: Veridia World Map */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between group/veridia-header">
                           <button
-                            onClick={() => { setSelectedCategory("world"); setSelectedSubcategory("all"); }}
-                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 ${
+                            onClick={() => { 
+                              setSelectedCategory("world"); 
+                              setSelectedSubcategory("all");
+                              toggleFolderExpand("locations-veridia"); // Toggle folder state directly on name click!
+                            }}
+                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 cursor-pointer ${
                               selectedCategory === "world" && selectedSubcategory !== "world-planes"
-                                ? "text-amber-400"
-                                : "text-stone-400 hover:text-stone-200"
+                                ? "text-primary font-bold"
+                                : "text-stone-400 hover:text-primary"
                             }`}
                           >
                             <span>🪐</span>
@@ -712,7 +723,7 @@ export default function Codex() {
                           </button>
                           <button
                             onClick={() => toggleFolderExpand("locations-veridia")}
-                            className="p-0.5 text-stone-500 hover:text-stone-300 transition-colors"
+                            className="p-0.5 text-stone-500 hover:text-primary transition-colors"
                           >
                             {expandedFolders["locations-veridia"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
@@ -720,7 +731,7 @@ export default function Codex() {
 
                         {/* Veridia Geographic Tree */}
                         {expandedFolders["locations-veridia"] && (
-                          <div className="pl-3 border-l border-stone-900/50 space-y-2 pt-0.5 transition-all">
+                          <div className="pl-3 border-l border-border/30 space-y-2 pt-0.5 transition-all">
                             {(() => {
                               const activeCountries = codexNotes.filter(n => n.category === "world" && n.isState && n.subcategory !== "world-planes" && isNoteVisible(n));
                               const wildlandsNode = {
@@ -748,31 +759,36 @@ export default function Codex() {
                                   <div key={country.id} className="space-y-1">
                                     <div className="flex items-center justify-between group/country">
                                       <button
-                                        onClick={() => { setSelectedNoteId(country.id); setIsEditing(false); setIsAdding(false); }}
+                                        onClick={() => { 
+                                          setSelectedNoteId(country.id); 
+                                          setIsEditing(false); 
+                                          setIsAdding(false); 
+                                          toggleCountryExpand(country.id); // Toggle folder state directly on name click!
+                                        }}
                                         className={`flex-1 text-left py-0.5 px-1.5 text-xs font-serif transition-all cursor-pointer flex items-center gap-1 border border-transparent ${
-                                          isSelected ? "text-amber-400 font-bold bg-amber-950/[0.04]" : "text-stone-300 hover:text-white"
+                                          isSelected ? "text-primary font-bold bg-primary/5 border-primary/20" : "text-foreground/90 hover:text-primary"
                                         }`}
                                       >
                                         <span>📍</span>
                                         <span className="truncate">{country.title}</span>
                                         <span className="text-[8px] font-mono text-stone-600">({totalChildren})</span>
                                       </button>
-                                      <button onClick={() => toggleCountryExpand(country.id)} className="p-0.5 text-stone-500 hover:text-stone-300">
+                                      <button onClick={() => toggleCountryExpand(country.id)} className="p-0.5 text-stone-500 hover:text-primary">
                                         {isCountryExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                       </button>
                                     </div>
 
                                     {isCountryExpanded && (
-                                      <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5">
+                                      <div className="pl-4 border-l border-border/30 space-y-2 pt-0.5">
                                         
                                         {/* Folder 1.1: Cities & Settlements */}
                                         <div className="space-y-0.5">
-                                          <button onClick={() => toggleFolderExpand(`${country.id}-cities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-cities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-primary flex items-center gap-1 cursor-pointer">
                                             <span>{expandedFolders[`${country.id}-cities`] ? "📂" : "📁"}</span>
                                             <span className="truncate">Cities & Settlements ({childSettlements.length})</span>
                                           </button>
                                           {expandedFolders[`${country.id}-cities`] && (
-                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                            <div className="pl-3.5 space-y-0.5 border-l border-border/20">
                                               {childSettlements.map(note => {
                                                 const isSelectedNote = selectedNote?.id === note.id;
                                                 const localLandmarks = codexNotes.filter(n => n.parentBurgId === note.id && isNoteVisible(n));
@@ -782,20 +798,30 @@ export default function Codex() {
                                                 return (
                                                   <div key={note.id} className="space-y-0.5">
                                                     <div className="flex items-center justify-between group/town">
-                                                      <button onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`flex-1 text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${isSelectedNote ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                      <button 
+                                                        onClick={() => { 
+                                                          setSelectedNoteId(note.id); 
+                                                          setIsEditing(false); 
+                                                          setIsAdding(false); 
+                                                          if (hasLocalLandmarks) toggleTownExpand(note.id); // Toggle folder state directly on name click!
+                                                        }} 
+                                                        className={`flex-1 text-left py-0.5 px-1 text-[11px] font-serif truncate border-l cursor-pointer ${
+                                                          isSelectedNote ? "text-primary font-bold border-primary pl-1.5 bg-primary/5" : "text-foreground/80 border-transparent hover:text-primary"
+                                                        }`}
+                                                      >
                                                         {note.isCapital ? "👑 " : ""}{note.title}
                                                       </button>
                                                       {hasLocalLandmarks && (
-                                                        <button onClick={() => toggleTownExpand(note.id)} className="p-0.5 text-stone-600 hover:text-stone-300">
+                                                        <button onClick={() => toggleTownExpand(note.id)} className="p-0.5 text-stone-600 hover:text-primary">
                                                           {isTownExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
                                                         </button>
                                                       )}
                                                     </div>
 
                                                     {hasLocalLandmarks && isTownExpanded && (
-                                                      <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5">
+                                                      <div className="pl-3.5 ml-1 border-l border-primary/10 space-y-0.5 pt-0.5">
                                                         {localLandmarks.map(landmark => (
-                                                          <button key={landmark.id} onClick={() => { setSelectedNoteId(landmark.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1.5 text-[10px] font-serif truncate border-l ${selectedNote?.id === landmark.id ? "text-amber-400 font-bold border-amber-600" : "text-stone-500 border-transparent hover:text-stone-300"}`}>
+                                                          <button key={landmark.id} onClick={() => { setSelectedNoteId(landmark.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1.5 text-[10px] font-serif truncate border-l cursor-pointer ${selectedNote?.id === landmark.id ? "text-primary font-bold border-primary pl-1.5 bg-primary/5" : "text-stone-500 border-transparent hover:text-primary"}`}>
                                                             {landmark.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{landmark.title}
                                                           </button>
                                                         ))}
@@ -810,14 +836,14 @@ export default function Codex() {
 
                                         {/* Folder 1.2: Landmarks & Dungeons */}
                                         <div className="space-y-0.5">
-                                          <button onClick={() => toggleFolderExpand(`${country.id}-landmarks`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-landmarks`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-primary flex items-center gap-1 cursor-pointer">
                                             <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
                                             <span className="truncate">Landmarks & Dungeons ({childLandmarks.filter(n => !n.parentBurgId).length})</span>
                                           </button>
                                           {expandedFolders[`${country.id}-landmarks`] && (
-                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                            <div className="pl-3.5 space-y-0.5 border-l border-border/20">
                                               {childLandmarks.filter(n => !n.parentBurgId).map(note => (
-                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${selectedNote?.id === note.id ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l cursor-pointer ${selectedNote?.id === note.id ? "text-primary font-bold border-primary pl-1.5 bg-primary/5" : "text-foreground/80 border-transparent hover:text-primary"}`}>
                                                   {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
                                                 </button>
                                               ))}
@@ -827,14 +853,14 @@ export default function Codex() {
 
                                         {/* Folder 1.3: Entities & Factions */}
                                         <div className="space-y-0.5">
-                                          <button onClick={() => toggleFolderExpand(`${country.id}-entities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-entities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-primary flex items-center gap-1 cursor-pointer">
                                             <span>{expandedFolders[`${country.id}-entities`] ? "📂" : "📁"}</span>
                                             <span className="truncate">Entities & Factions ({childEntities.length})</span>
                                           </button>
                                           {expandedFolders[`${country.id}-entities`] && (
-                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                            <div className="pl-3.5 space-y-0.5 border-l border-border/20">
                                               {childEntities.map(note => (
-                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${selectedNote?.id === note.id ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l cursor-pointer ${selectedNote?.id === note.id ? "text-primary font-bold border-primary pl-1.5 bg-primary/5" : "text-foreground/80 border-transparent hover:text-primary"}`}>
                                                   👤 {note.title}
                                                 </button>
                                               ))}
@@ -852,14 +878,18 @@ export default function Codex() {
                       </div>
 
                       {/* SUB-NODE 2: Planes & Other Worlds */}
-                      <div className="space-y-1.5 border-t border-stone-900/50 pt-2.5">
+                      <div className="space-y-1.5 border-t border-border/30 pt-2.5">
                         <div className="flex items-center justify-between group/planes-header">
                           <button
-                            onClick={() => { setSelectedCategory("world"); setSelectedSubcategory("world-planes"); }}
-                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 ${
+                            onClick={() => { 
+                              setSelectedCategory("world"); 
+                              setSelectedSubcategory("world-planes");
+                              toggleFolderExpand("locations-planes"); // Toggle folder state directly on name click!
+                            }}
+                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 cursor-pointer ${
                               selectedCategory === "world" && selectedSubcategory === "world-planes"
-                                ? "text-amber-400"
-                                : "text-stone-400 hover:text-stone-200"
+                                ? "text-primary font-bold"
+                                : "text-stone-400 hover:text-primary"
                             }`}
                           >
                             <span>✨</span>
@@ -867,7 +897,7 @@ export default function Codex() {
                           </button>
                           <button
                             onClick={() => toggleFolderExpand("locations-planes")}
-                            className="p-0.5 text-stone-500 hover:text-stone-300 transition-colors"
+                            className="p-0.5 text-stone-500 hover:text-primary transition-colors"
                           >
                             {expandedFolders["locations-planes"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
@@ -875,7 +905,7 @@ export default function Codex() {
 
                         {/* Collapsible Planar Clusters Folder tree */}
                         {expandedFolders["locations-planes"] && (
-                          <div className="pl-3 border-l border-stone-900/50 space-y-2 pt-0.5">
+                          <div className="pl-3 border-l border-border/30 space-y-2 pt-0.5">
                             {(() => {
                               const planeClusters = codexNotes.filter(n => n.category === "world" && n.subcategory === "world-planes" && n.isState && isNoteVisible(n));
                               
@@ -894,9 +924,14 @@ export default function Codex() {
                                     {/* Planar Cluster Row */}
                                     <div className="flex items-center justify-between group/cluster">
                                       <button
-                                        onClick={() => { setSelectedNoteId(cluster.id); setIsEditing(false); setIsAdding(false); }}
-                                        className={`flex-grow text-left py-0.5 px-1.5 text-xs font-serif transition-all flex items-center gap-1 border border-transparent ${
-                                          isSelected ? "text-amber-400 font-bold bg-amber-950/[0.04]" : "text-stone-300 hover:text-stone-200"
+                                        onClick={() => { 
+                                          setSelectedNoteId(cluster.id); 
+                                          setIsEditing(false); 
+                                          setIsAdding(false); 
+                                          toggleFolderExpand(`plane-${cluster.stateId}`); // Toggle folder state directly on name click!
+                                        }}
+                                        className={`flex-grow text-left py-0.5 px-1.5 text-xs font-serif transition-all flex items-center gap-1 border border-transparent cursor-pointer ${
+                                          isSelected ? "text-primary font-bold bg-primary/5 border-primary/20" : "text-foreground/90 hover:text-primary"
                                         }`}
                                       >
                                         <span>🌀</span>
@@ -905,7 +940,7 @@ export default function Codex() {
                                       </button>
                                       <button 
                                         onClick={() => toggleFolderExpand(`plane-${cluster.stateId}`)}
-                                        className="p-0.5 text-stone-500 hover:text-stone-300"
+                                        className="p-0.5 text-stone-500 hover:text-primary"
                                       >
                                         {isClusterExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                                       </button>
@@ -913,17 +948,17 @@ export default function Codex() {
 
                                     {/* Nested Child Worlds */}
                                     {isClusterExpanded && (
-                                      <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5">
+                                      <div className="pl-3.5 ml-1 border-l border-primary/10 space-y-0.5 pt-0.5">
                                         {nestedWorlds.map(world => {
                                           const isSelectedWorld = selectedNote?.id === world.id;
                                           return (
                                             <button
                                               key={world.id}
                                               onClick={() => { setSelectedNoteId(world.id); setIsEditing(false); setIsAdding(false); }}
-                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${
+                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l cursor-pointer ${
                                                 isSelectedWorld 
-                                                  ? "text-amber-400 font-bold border-amber-600 pl-1.5" 
-                                                  : "text-stone-400 border-transparent hover:text-stone-300"
+                                                  ? "text-primary font-bold border-primary pl-1.5 bg-primary/5" 
+                                                  : "text-stone-400 border-transparent hover:text-primary"
                                               }`}
                                             >
                                               🌌 {world.title}
@@ -948,7 +983,7 @@ export default function Codex() {
 
                   {/* Standard Flat Subcategories child list for other categories */}
                   {group.value !== "world" && isExpanded && (
-                    <div className="pl-6 border-l border-stone-900/80 space-y-1 pt-0.5 animate-in slide-in-from-top-1 duration-150">
+                    <div className="pl-6 border-l border-border/30 space-y-1 pt-0.5 animate-in slide-in-from-top-1 duration-150">
                       {group.subcategories.map((sub) => {
                         const isSubSelected = selectedSubcategory === sub.value;
                         
@@ -961,8 +996,8 @@ export default function Codex() {
                               onClick={() => { setSelectedCategory(group.value); setSelectedSubcategory(sub.value); }}
                               className={`w-full text-left py-1 px-2 text-xs font-serif transition-all cursor-pointer flex justify-between items-center ${
                                 isSubSelected 
-                                  ? "text-amber-400 font-bold border-l-2 border-amber-600 pl-1.5 bg-amber-950/[0.03]" 
-                                  : "text-stone-400 hover:text-stone-200"
+                                  ? "text-primary font-bold border-l-2 border-primary pl-1.5 bg-primary/5" 
+                                  : "text-stone-400 hover:text-primary"
                               }`}
                             >
                               <span className="truncate">{sub.label}</span>
@@ -971,7 +1006,7 @@ export default function Codex() {
 
                             {/* List matching notes directly under subcategory folder for non-world categories */}
                             {isSubSelected && (
-                              <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                              <div className="pl-3.5 space-y-0.5 border-l border-border/20">
                                 {matchingSubnotes.map(note => {
                                   const isSelectedNote = selectedNote?.id === note.id;
                                   return (
@@ -980,8 +1015,8 @@ export default function Codex() {
                                       onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
                                       className={`w-full text-left py-0.5 px-1.5 text-[11px] font-serif truncate cursor-pointer block border-l ${
                                         isSelectedNote 
-                                          ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                          : "text-stone-500 border-transparent hover:text-stone-300"
+                                          ? "text-primary font-bold border-primary bg-primary/5 pl-1.5" 
+                                          : "text-stone-500 border-transparent hover:text-primary"
                                       }`}
                                     >
                                       • {note.title}
@@ -1005,7 +1040,7 @@ export default function Codex() {
 
           {/* Active Decrypted Keys List display */}
           {unlockedPasswords.length > 0 && (
-            <div className="space-y-2 border-t border-stone-900 pt-4 mt-2">
+            <div className="space-y-2 border-t border-border/25 pt-4 mt-2">
               <span className="text-[9px] font-mono uppercase tracking-widest text-stone-500 font-bold block mb-1">
                 Decrypted Seals
               </span>
@@ -1013,7 +1048,7 @@ export default function Codex() {
                 {unlockedPasswords.map((pw) => (
                   <span 
                     key={pw}
-                    className="text-[9px] font-mono bg-amber-950/10 border border-amber-900/30 text-amber-500/80 px-2 py-0.5 flex items-center gap-1.5"
+                    className="text-[9px] font-mono bg-primary/5 border border-primary/20 text-primary px-2 py-0.5 flex items-center gap-1.5"
                   >
                     🔑 {pw}
                     <button 
@@ -1052,44 +1087,44 @@ export default function Codex() {
             document.addEventListener("touchmove", handleTouchMove);
             document.addEventListener("touchend", handleTouchEnd);
           }}
-          className="w-1 hover:w-1.5 bg-stone-900 hover:bg-amber-900/40 border-l border-r border-stone-850 hover:border-amber-900/20 cursor-col-resize self-stretch transition-all z-20 flex-shrink-0"
+          className="w-1 hover:w-1.5 bg-card hover:bg-primary/20 border-l border-r border-border/40 hover:border-primary/20 cursor-col-resize self-stretch transition-all z-20 flex-shrink-0"
           title="Drag to resize directory index"
         />
 
-        {/* RIGHT COLUMN: Parchment Scroll View / Add Form / Edit Form (Flexible remainder width) */}
+        {/* RIGHT COLUMN: Themed Card View / Add Form / Edit Form (Flexible remainder width) */}
         <div className="flex-grow flex flex-col min-h-[480px]">
           {isAdding || isEditing ? (
             /* Chronicle Editor/Creator Form */
-            <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="flex-1 bg-[#120e0a] border border-amber-900/30 p-6 shadow-2xl flex flex-col justify-between text-xs max-w-3xl mx-auto w-full relative">
-              <div className="absolute inset-1 border border-amber-950/15 pointer-events-none" />
-              <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/10 pointer-events-none" />
+            <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="flex-1 bg-card border border-border/50 p-6 shadow-2xl flex flex-col justify-between text-xs max-w-3xl mx-auto w-full relative">
+              <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+              <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
 
               <div className="space-y-3.5 flex-1 overflow-y-auto max-h-[72vh] pr-1">
-                <h3 className="text-base font-bold text-amber-500 border-b border-amber-900/30 pb-2">
+                <h3 className="text-base font-bold text-primary border-b border-border/30 pb-2">
                   {isAdding ? "Forge New Chronicle" : `Re-write: ${selectedNote?.title}`}
                 </h3>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Chronicle Title</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Chronicle Title</label>
                     <Input 
                       value={editTitle} 
                       onChange={e => setEditTitle(e.target.value)} 
                       required 
                       placeholder="e.g. Mount Troyzan" 
-                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
+                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
                     />
                   </div>
 
                   <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Governing Realm / territory</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-455 block font-bold">Governing Realm / territory</label>
                     <select
                       value={editStateId !== null ? editStateId : ""}
                       onChange={e => {
                         const val = e.target.value;
                         setEditStateId(val === "" ? null : Number(val));
                       }}
-                      className="w-full bg-stone-950 border border-stone-900 h-8 rounded-none px-2 text-xs font-serif text-stone-200 focus:outline-none focus:border-amber-600/40"
+                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
                     >
                       <option value="">Wildlands / None</option>
                       {REALMS_LIST.filter(r => r.id !== 0).map(r => (
@@ -1101,7 +1136,7 @@ export default function Codex() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Parent Category</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Parent Category</label>
                     <select
                       value={editCategory}
                       onChange={e => {
@@ -1110,7 +1145,7 @@ export default function Codex() {
                         const firstSub = TAXONOMY.find(t => t.value === catVal)?.subcategories[0]?.value || "";
                         setEditSubcategory(firstSub);
                       }}
-                      className="w-full bg-stone-950 border border-stone-900 h-8 rounded-none px-2 text-xs font-serif text-stone-200 focus:outline-none focus:border-amber-600/40"
+                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
                     >
                       {TAXONOMY.map(t => (
                         <option key={t.value} value={t.value}>{t.label}</option>
@@ -1119,11 +1154,11 @@ export default function Codex() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Subcategory</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Subcategory</label>
                     <select
                       value={editSubcategory}
                       onChange={e => setEditSubcategory(e.target.value)}
-                      className="w-full bg-stone-950 border border-stone-900 h-8 rounded-none px-2 text-xs font-serif text-stone-200 focus:outline-none focus:border-amber-600/40"
+                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
                     >
                       {TAXONOMY.find(t => t.value === editCategory)?.subcategories.map(sub => (
                         <option key={sub.value} value={sub.value}>{sub.label}</option>
@@ -1134,77 +1169,77 @@ export default function Codex() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Tags (Comma separated)</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Tags (Comma separated)</label>
                     <Input 
                       value={editTags} 
                       onChange={e => setEditTags(e.target.value)} 
                       placeholder="e.g. POI, VOLCANO, DANGER" 
-                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
+                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Secret Password Lock (Optional)</label>
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Secret Password Lock (Optional)</label>
                     <Input 
                       value={editSecretPassword} 
                       onChange={e => setEditSecretPassword(e.target.value)} 
                       placeholder="e.g. corvustemple" 
-                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
+                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
                       title="If set, this note is hidden until this passphrase is typed in the bookcase ledge"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1 flex flex-col">
-                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold mb-1">Description / Chronicle text</label>
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold mb-1">Description / Chronicle text</label>
                   <Textarea 
                     value={editContent} 
                     onChange={e => setEditContent(e.target.value)} 
                     required 
                     placeholder="Record what is written in the legends, or describe the landmarks..." 
-                    className="bg-stone-950 border-stone-900 rounded-none min-h-[180px] text-xs font-serif leading-relaxed text-stone-200 focus-visible:ring-amber-600/40"
+                    className="bg-background border-border rounded-none min-h-[180px] text-xs font-serif leading-relaxed text-foreground focus-visible:ring-primary/40"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-amber-900/30 mt-3">
+              <div className="flex justify-end gap-2 pt-3 border-t border-border/30 mt-3">
                 <Button 
                   type="button" 
                   variant="ghost" 
                   size="sm"
                   onClick={() => { setIsEditing(false); setIsAdding(false); }}
-                  className="rounded-none hover:bg-stone-900 text-stone-400 font-serif"
+                  className="rounded-none hover:bg-background text-stone-400 font-serif"
                 >
                   Cancel
                 </Button>
                 <Button 
                   type="submit" 
                   size="sm" 
-                  className="bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded-none font-serif px-4 cursor-pointer"
+                  className="bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-none font-serif px-4 cursor-pointer"
                 >
                   Forge Entry
                 </Button>
               </div>
             </form>
           ) : selectedNote ? (
-            /* Parchment Read Screen */
-            <div className="flex-1 bg-[#16110c] border border-amber-900/45 p-4 sm:p-7 shadow-2xl relative flex flex-col justify-between parchment-glow w-full max-w-3xl mx-auto animate-in fade-in duration-300">
+            /* Themed Read Card (Transforms color scheme dynamically with theme classes) */
+            <div className="flex-1 bg-card/75 border border-border shadow-2xl p-4 sm:p-7 relative flex flex-col justify-between backdrop-blur-md w-full max-w-3xl mx-auto animate-in fade-in duration-300">
               {/* Decorative border overlays */}
-              <div className="absolute inset-1.5 border border-amber-950/20 pointer-events-none" />
-              <div className="absolute top-3.5 left-3.5 right-3.5 bottom-3.5 border border-dashed border-amber-900/15 pointer-events-none" />
+              <div className="absolute inset-1.5 border border-border/30 pointer-events-none" />
+              <div className="absolute top-3.5 left-3.5 right-3.5 bottom-3.5 border border-dashed border-primary/10 pointer-events-none" />
 
               <div className="flex flex-col flex-1 justify-between z-10">
                 {/* Header Title & Tags */}
-                <div className="space-y-3 border-b border-amber-900/20 pb-4">
+                <div className="space-y-3 border-b border-border/20 pb-4">
                   <div className="flex justify-between items-baseline flex-wrap gap-2">
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight flex items-center gap-2">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-primary tracking-wide leading-tight flex items-center gap-2">
                       {selectedNote.title}
                       {selectedNote.secretPassword && (
-                        <Lock className="w-4 h-4 text-amber-500" title="Decrypted secret entry" />
+                        <Lock className="w-4 h-4 text-primary" title="Decrypted secret entry" />
                       )}
                     </h2>
                     
-                    <span className="text-[9px] uppercase font-mono tracking-widest px-2 py-0.5 border border-amber-900/40 rounded bg-amber-950/20 text-amber-400">
+                    <span className="text-[9px] uppercase font-mono tracking-widest px-2 py-0.5 border border-border/30 rounded bg-primary/10 text-primary">
                       {selectedNote.subcategory ? selectedNote.subcategory.split("-")[1] : selectedNote.category}
                     </span>
                   </div>
@@ -1212,17 +1247,17 @@ export default function Codex() {
                   {selectedNote.tags && selectedNote.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 items-center">
                       {selectedNote.tags.map((tag, idx) => (
-                        <span key={idx} className="text-[9px] font-mono bg-amber-950/15 border border-amber-900/30 text-amber-500/80 px-2 py-0.5 rounded-none font-semibold uppercase tracking-wider">
+                        <span key={idx} className="text-[9px] font-mono bg-primary/5 border border-primary/20 text-primary px-2 py-0.5 rounded-none font-semibold uppercase tracking-wider">
                           #{tag}
                         </span>
                       ))}
                       {selectedNote.secretPassword && (
-                        <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1">
+                        <span className="text-[9px] font-mono text-primary font-semibold border border-primary/20 px-2 py-0.5 rounded-none bg-primary/5 flex items-center gap-1">
                           Lock: "{selectedNote.secretPassword}"
                         </span>
                       )}
                       {selectedNote.stateId !== undefined && selectedNote.stateId !== null && (
-                        <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1.5">
+                        <span className="text-[9px] font-mono text-primary font-semibold border border-primary/20 px-2 py-0.5 rounded-none bg-primary/5 flex items-center gap-1.5">
                           Realm: {REALMS_LIST.find(r => r.id === selectedNote.stateId)?.name || "Wildlands"}
                         </span>
                       )}
@@ -1236,17 +1271,17 @@ export default function Codex() {
                   )}
                 </div>
 
-                {/* Scroll Description contents */}
-                <div className="flex-1 overflow-y-auto font-serif text-sm sm:text-base leading-relaxed text-stone-200/90 py-5 pr-2 whitespace-pre-wrap select-text max-h-[38vh] min-h-[180px]">
+                {/* Description contents */}
+                <div className="flex-1 overflow-y-auto font-serif text-sm sm:text-base leading-relaxed text-foreground/90 py-5 pr-2 whitespace-pre-wrap select-text max-h-[38vh] min-h-[180px]">
                   {selectedNote.content || <em className="text-stone-500">No chronicle description. Click edit to compile.</em>}
                 </div>
 
-                {/* Faint Resident Figures & Factions listing at the very bottom (as reference) */}
+                {/* Resident Figures & Factions listing at the very bottom */}
                 {selectedNote.isState && (() => {
                   const residents = codexNotes.filter(n => n.stateId === selectedNote.stateId && !n.isState && (n.category === "entities" || n.category === "systems") && isNoteVisible(n));
                   if (residents.length === 0) return null;
                   return (
-                    <div className="border-t border-amber-900/10 pt-4 mt-4 space-y-1.5 text-left">
+                    <div className="border-t border-border/10 pt-4 mt-4 space-y-1.5 text-left">
                       <span className="text-[9px] font-mono uppercase tracking-widest text-stone-500/80 font-bold block">
                         Resident Figures & Factions Reference:
                       </span>
@@ -1255,7 +1290,7 @@ export default function Codex() {
                           <button
                             key={r.id}
                             onClick={() => setSelectedNoteId(r.id)}
-                            className="text-stone-400 hover:text-amber-500 hover:underline text-[10px] font-serif flex items-center gap-1 cursor-pointer bg-[#100b08] border border-amber-900/15 px-2 py-0.5 transition-colors"
+                            className="text-stone-400 hover:text-primary hover:underline text-[10px] font-serif flex items-center gap-1 cursor-pointer bg-background border border-border/30 px-2 py-0.5 transition-colors"
                           >
                             <span>{r.category === "entities" ? "👤" : "🏛️"}</span>
                             <span>{r.title}</span>
@@ -1268,7 +1303,7 @@ export default function Codex() {
               </div>
 
               {/* Actions Bottom Bar */}
-              <div className="border-t border-amber-900/20 pt-4 flex justify-between items-center mt-4 z-10">
+              <div className="border-t border-border/20 pt-4 flex justify-between items-center mt-4 z-10">
                 <Button
                   onClick={() => handleDeleteNote(selectedNote.id)}
                   variant="ghost" 
@@ -1285,7 +1320,7 @@ export default function Codex() {
                     variant="outline"
                     size="sm"
                     disabled={selectedNote.id === -99}
-                    className="h-8 text-xs font-serif border border-stone-850 hover:bg-stone-900 text-stone-400 hover:text-stone-200 rounded-none px-3.5 font-bold cursor-pointer disabled:opacity-40"
+                    className="h-8 text-xs font-serif border border-border/50 hover:bg-background text-stone-400 hover:text-foreground rounded-none px-3.5 font-bold cursor-pointer disabled:opacity-40"
                   >
                     Edit Note
                   </Button>
@@ -1294,16 +1329,16 @@ export default function Codex() {
                     onClick={() => handleOpenPushModal(selectedNote)}
                     size="sm" 
                     disabled={selectedNote.id === -99}
-                    className="h-8 text-xs font-serif bg-amber-600 hover:bg-amber-500 text-stone-950 px-4 font-bold rounded-none flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-40"
+                    className="h-8 text-xs font-serif bg-primary hover:bg-primary/90 text-primary-foreground px-4 font-bold rounded-none flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-40"
                     title="Push this coordinate/lore note directly to a character notes sheet"
                   >
-                    <Send className="w-3.5 h-3.5 text-stone-900" /> Push to Character
+                    <Send className="w-3.5 h-3.5 text-primary-foreground" /> Push to Character
                   </Button>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex-1 border border-dashed border-stone-900 flex flex-col justify-center items-center p-12 text-center max-w-3xl mx-auto w-full rounded-lg bg-stone-950/10">
+            <div className="flex-1 border border-dashed border-border flex flex-col justify-center items-center p-12 text-center max-w-3xl mx-auto w-full rounded-lg bg-card/10">
               <BookMarked className="w-8 h-8 text-stone-700 mb-2 animate-pulse" />
               <p className="text-xs text-stone-500 italic max-w-xs leading-relaxed font-serif">
                 Select a chronicle from the index tree on the left to consult its details, or forge a new entry.
@@ -1315,18 +1350,18 @@ export default function Codex() {
 
       {/* ── Push to Character Modal dialog ── */}
       <Dialog open={isPushModalOpen} onOpenChange={setIsPushModalOpen}>
-        <DialogContent className="sm:max-w-[420px] bg-[#120d09] border border-amber-900/35 text-stone-100 p-6 rounded-none relative">
-          <div className="absolute inset-1 border border-amber-950/15 pointer-events-none" />
-          <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/10 pointer-events-none" />
+        <DialogContent className="sm:max-w-[420px] bg-card border border-border text-foreground p-6 rounded-none relative">
+          <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+          <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
 
-          <DialogHeader className="border-b border-amber-900/20 pb-3">
-            <DialogTitle className="font-serif text-lg font-bold text-amber-500 flex items-center gap-2">
+          <DialogHeader className="border-b border-border/20 pb-3">
+            <DialogTitle className="font-serif text-lg font-bold text-primary flex items-center gap-2">
               <Send className="w-4 h-4" /> Port Lore to Hero
             </DialogTitle>
           </DialogHeader>
           
-          <div className="py-3 text-xs text-stone-400 font-serif leading-relaxed">
-            Copying <strong className="text-stone-200">\"{noteToPush?.title}\"</strong> into the selected character's private **Campaign Notes** log. Choose which active hero receives this registry:
+          <div className="py-3 text-xs text-muted-foreground font-serif leading-relaxed">
+            Copying <strong className="text-foreground">\"{noteToPush?.title}\"</strong> into the selected character's private **Campaign Notes** log. Choose which active hero receives this registry:
           </div>
 
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
@@ -1337,13 +1372,13 @@ export default function Codex() {
                 <button
                   key={char.id}
                   onClick={() => handlePushToCharacter(char.id, char.name)}
-                  className="w-full flex items-center justify-between p-2.5 border border-stone-900 hover:border-amber-600/30 bg-stone-950/30 hover:bg-amber-950/[0.04] transition-all text-stone-300 hover:text-amber-400 text-xs font-serif font-bold text-left rounded-none cursor-pointer"
+                  className="w-full flex items-center justify-between p-2.5 border border-border hover:border-primary/40 bg-background/50 hover:bg-primary/5 transition-all text-stone-300 hover:text-primary text-xs font-serif font-bold text-left rounded-none cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
                     {char.avatar ? (
-                      <img src={char.avatar} alt={char.name} className="w-5 h-5 rounded-full object-cover border border-stone-800" />
+                      <img src={char.avatar} alt={char.name} className="w-5 h-5 rounded-full object-cover border border-border" />
                     ) : (
-                      <span className="w-5 h-5 rounded-full bg-stone-900 flex items-center justify-center text-[9px] text-stone-400 uppercase font-mono">
+                      <span className="w-5 h-5 rounded-full bg-card flex items-center justify-center text-[9px] text-stone-400 uppercase font-mono">
                         {char.name.charAt(0)}
                       </span>
                     )}
@@ -1357,12 +1392,12 @@ export default function Codex() {
             )}
           </div>
 
-          <div className="flex justify-end pt-3 border-t border-amber-900/20 mt-4">
+          <div className="flex justify-end pt-3 border-t border-border/20 mt-4">
             <Button 
               variant="ghost" 
               size="sm" 
               onClick={() => { setIsPushModalOpen(false); setNoteToPush(null); }} 
-              className="rounded-none text-stone-500 font-serif hover:bg-stone-900"
+              className="rounded-none text-stone-500 font-serif hover:bg-background"
             >
               Cancel
             </Button>
@@ -1373,7 +1408,7 @@ export default function Codex() {
   );
 }
 
-// Custom CSS block
+// Style overrides
 const styleBlock = (
   <style>{`
     .parchment-glow {

@@ -2044,7 +2044,7 @@ export default function CharacterSheet() {
           <RollGuideDialog />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".json" className="hidden" />
+          <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".soul,.json" className="hidden" />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all">
             <Upload className="w-3.5 h-3.5" /> Import Character
           </Button>

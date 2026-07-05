@@ -4,7 +4,7 @@ import { Book, Compass, Lock, MessageSquare, Sparkles, Upload, Download } from "
 import { Button } from "@/components/ui/button";
 import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
+import { exportFullBackup, importFullBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -109,10 +109,10 @@ export default function Bookshelf() {
 
   const handleExportBackup = () => {
     try {
-      exportBackupJSON();
-      toast.success("Campaign backup exported successfully!");
+      exportFullBackup();
+      toast.success("Campaign archive exported successfully!");
     } catch {
-      toast.error("Failed to export backup.");
+      toast.error("Failed to export archive.");
     }
   };
 
@@ -128,11 +128,11 @@ export default function Bookshelf() {
     reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        importBackupJSON(parsed);
+        importFullBackup(JSON.stringify(parsed));
         await queryClient.invalidateQueries();
-        toast.success("Campaign backup restored successfully!");
+        toast.success("Campaign archive restored successfully!");
       } catch (err) {
-        toast.error("Invalid file format. Import requires a valid backup JSON.");
+        toast.error("Invalid file format. Import requires a valid campaign archive.");
       }
     };
     reader.readAsText(file);
@@ -250,7 +250,7 @@ export default function Bookshelf() {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".json"
+            accept=".archive,.json"
             className="hidden"
           />
           <Button 
@@ -258,7 +258,7 @@ export default function Bookshelf() {
             size="sm"
             onClick={handleImportClick}
             className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
-            title="Restore backup (.json)"
+            title="Restore campaign archive (.archive, .json)"
           >
             <Upload className="w-3.5 h-3.5" /> Import Backup
           </Button>
@@ -268,7 +268,7 @@ export default function Bookshelf() {
             size="sm"
             onClick={handleExportBackup}
             className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
-            title="Export backup (.json)"
+            title="Export campaign archive (.archive)"
           >
             <Download className="w-3.5 h-3.5" /> Export Backup
           </Button>
@@ -372,7 +372,7 @@ export default function Bookshelf() {
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 54
+              Crafted by Lukie Seven · Mark 55
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -415,7 +415,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 54
+          Lovingly crafted by LukieSeven — Mark 55
         </p>
       </footer>
     </div>

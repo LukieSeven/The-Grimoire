@@ -10,7 +10,7 @@ import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
-import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
+import { exportGrimoireBackup, importGrimoireBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -33,11 +33,11 @@ export default function Dashboard() {
 
   const handleExportBackup = () => {
     try {
-      exportBackupJSON();
-      toast.success("Campaign data and characters exported successfully!");
+      exportGrimoireBackup();
+      toast.success("Grimoire character sheets exported successfully!");
     } catch (e) {
       console.error(e);
-      toast.error("Failed to export data.");
+      toast.error("Failed to export Grimoire data.");
     }
   };
 
@@ -53,19 +53,12 @@ export default function Dashboard() {
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        const res = importBackupJSON(text);
+        const res = importGrimoireBackup(text);
         queryClient.invalidateQueries();
-        if (res.type === "backup") {
-          toast.success(`Successfully restored campaign backup! Loaded ${res.count} characters.`);
-        } else if (res.type === "character") {
-          toast.success(`Successfully imported character: ${res.character?.name}`);
-          if (res.character) {
-            setLocation(`/characters/${res.character.id}`);
-          }
-        }
+        toast.success(`Successfully restored Grimoire roster! Loaded ${res.count} characters.`);
       } catch (err) {
         console.error(err);
-        toast.error("Failed to parse file. Make sure it is a valid backup or character sheet JSON.");
+        toast.error("Failed to parse file. Make sure it is a valid backup (.grimoire or .json).");
       }
     };
     reader.readAsText(file);
@@ -246,7 +239,7 @@ export default function Dashboard() {
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".json"
+            accept=".grimoire,.json"
             className="hidden"
           />
 
@@ -254,7 +247,7 @@ export default function Dashboard() {
             variant="outline" 
             onClick={handleImportClick}
             className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
-            title="Import a character sheet or campaign backup (.json)"
+            title="Import grimoire roster (.grimoire, .json)"
           >
             <Upload className="w-3.5 h-3.5 text-primary" /> Import Data
           </Button>
@@ -263,7 +256,7 @@ export default function Dashboard() {
             variant="outline" 
             onClick={handleExportBackup}
             className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
-            title="Export all characters and campaign data (.json)"
+            title="Export grimoire roster sheets (.grimoire)"
           >
             <Download className="w-3.5 h-3.5 text-primary" /> Export Backup
           </Button>
