@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// Taxonomy Configuration
+// Taxonomy Configuration (NPCs removed)
 const TAXONOMY = [
   {
     value: "world",
@@ -39,7 +39,6 @@ const TAXONOMY = [
     subcategories: [
       { value: "entities-characters", label: "Characters" },
       { value: "entities-pcs", label: "Player Characters" },
-      { value: "entities-npcs", label: "NPCs" },
       { value: "entities-notable", label: "Notable Figures" },
       { value: "entities-organizations", label: "Organizations" },
       { value: "entities-governments", label: "Governments" },
@@ -183,6 +182,29 @@ export default function Codex() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
   
+  // Draggable resizable sidebar states
+  const [sidebarWidth, setSidebarWidth] = useState(260);
+  const isResizingRef = useRef(false);
+
+  const resizeSidebar = (e: MouseEvent) => {
+    if (!isResizingRef.current) return;
+    const newWidth = Math.max(180, Math.min(450, e.clientX - 20));
+    setSidebarWidth(newWidth);
+  };
+
+  const stopResizing = () => {
+    isResizingRef.current = false;
+    document.removeEventListener("mousemove", resizeSidebar);
+    document.removeEventListener("mouseup", stopResizing);
+  };
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    document.addEventListener("mousemove", resizeSidebar);
+    document.addEventListener("mouseup", stopResizing);
+  };
+
   // Collapsible Left Index states
   const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({
     world: true,
@@ -560,11 +582,14 @@ export default function Codex() {
         </div>
       </div>
 
-      {/* Main Grid Layout (2-Column Restructure) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-[72vh]">
+      {/* Main Grid Layout (Side-by-Side Flex Layout with Draggable Separator) */}
+      <div className="flex w-full items-stretch gap-2 flex-1 min-h-[72vh] relative">
         
-        {/* LEFT COLUMN: Hierarchical collapsable Index Tree & Search */}
-        <div className="lg:col-span-3 bg-stone-950/30 border border-stone-900/65 p-4 rounded-md flex flex-col gap-4 max-h-[45vh] lg:max-h-[82vh] overflow-y-auto pr-2">
+        {/* LEFT COLUMN: Hierarchical collapsable Index Tree & Search (Resizable Width) */}
+        <div 
+          style={{ width: sidebarWidth }}
+          className="bg-stone-950/30 border border-stone-900/65 p-4 rounded-md flex flex-col gap-4 max-h-[82vh] overflow-y-auto pr-2 flex-shrink-0"
+        >
           
           {/* Header title & Add Entry shortcut */}
           <div className="flex items-center justify-between border-b border-border/15 pb-2">
@@ -585,7 +610,7 @@ export default function Codex() {
             <Search className="w-3.5 h-3.5 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input 
               type="text" 
-              placeholder="Search index, tags..." 
+              placeholder="Search index..." 
               value={searchTerm} 
               onChange={e => setSearchTerm(e.target.value)}
               className="pl-8.5 bg-stone-950/40 border-stone-900 text-stone-200 text-xs font-serif rounded-md h-8.5 focus-visible:ring-amber-600/40"
@@ -703,7 +728,7 @@ export default function Codex() {
                                       className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
                                     >
                                       <span>{expandedFolders[`${country.id}-cities`] ? "📂" : "📁"}</span>
-                                      <span>Cities & Settlements ({childSettlements.length})</span>
+                                      <span className="truncate">Cities & Settlements ({childSettlements.length})</span>
                                     </button>
                                     {expandedFolders[`${country.id}-cities`] && (
                                       <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40 transition-all">
@@ -794,7 +819,7 @@ export default function Codex() {
                                             className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
                                           >
                                             <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
-                                            <span>Landmarks & Dungeons ({generalLandmarks.length})</span>
+                                            <span className="truncate">Landmarks & Dungeons ({generalLandmarks.length})</span>
                                           </button>
                                           {expandedFolders[`${country.id}-landmarks`] && (
                                             <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
@@ -831,7 +856,7 @@ export default function Codex() {
                                       className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
                                     >
                                       <span>{expandedFolders[`${country.id}-entities`] ? "📂" : "📁"}</span>
-                                      <span>Entities & Factions ({childEntities.length})</span>
+                                      <span className="truncate">Entities & Factions ({childEntities.length})</span>
                                     </button>
                                     {expandedFolders[`${country.id}-entities`] && (
                                       <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
@@ -885,7 +910,7 @@ export default function Codex() {
                                   : "text-stone-400 hover:text-stone-200"
                               }`}
                             >
-                              <span>{sub.label}</span>
+                              <span className="truncate">{sub.label}</span>
                               <span className="text-[8px] font-mono text-stone-600 font-normal">({matchingSubnotes.length})</span>
                             </button>
 
@@ -954,8 +979,30 @@ export default function Codex() {
           )}
         </div>
 
-        {/* RIGHT COLUMN: Parchment Scroll View / Add Form / Edit Form (takes 9 cols for wide reading layout) */}
-        <div className="lg:col-span-9 flex flex-col min-h-[480px]">
+        {/* DRAGGABLE DIVIDER (Drag left/right to resize sidebar index) */}
+        <div 
+          onMouseDown={startResizing}
+          onTouchStart={(e) => {
+            isResizingRef.current = true;
+            const handleTouchMove = (evt: TouchEvent) => {
+              const touch = evt.touches[0];
+              const newW = Math.max(180, Math.min(450, touch.clientX - 20));
+              setSidebarWidth(newW);
+            };
+            const handleTouchEnd = () => {
+              isResizingRef.current = false;
+              document.removeEventListener("touchmove", handleTouchMove);
+              document.removeEventListener("touchend", handleTouchEnd);
+            };
+            document.addEventListener("touchmove", handleTouchMove);
+            document.addEventListener("touchend", handleTouchEnd);
+          }}
+          className="w-1 hover:w-1.5 bg-stone-900 hover:bg-amber-900/40 border-l border-r border-stone-850 hover:border-amber-900/20 cursor-col-resize self-stretch transition-all z-20 flex-shrink-0"
+          title="Drag to resize directory index"
+        />
+
+        {/* RIGHT COLUMN: Parchment Scroll View / Add Form / Edit Form (Flexible remainder width) */}
+        <div className="flex-grow flex flex-col min-h-[480px]">
           {isAdding || isEditing ? (
             /* Chronicle Editor/Creator Form */
             <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="flex-1 bg-[#120e0a] border border-amber-900/30 p-6 shadow-2xl flex flex-col justify-between text-xs max-w-3xl mx-auto w-full relative">

@@ -23,9 +23,8 @@ export default function Bookshelf() {
   const [isShaking, setIsShaking] = useState(false);
   const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
 
-  // Active glowing animations
-  const [isCodexGlowing, setIsCodexGlowing] = useState(false);
-  const [isGrimoireGlowing, setIsGrimoireGlowing] = useState(false);
+  // Smoldering Rune target state
+  const [smolderTarget, setSmolderTarget] = useState<"grimoire" | "codex" | "all" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +36,7 @@ export default function Bookshelf() {
       subtitle: "Character & campaign manager",
       coverImage: "the_grimoire_spine.png",
       path: "/grimoire",
-      style: "bg-[#18110a] border-amber-900/35 hover:-translate-y-3 group-hover:shadow-[0_20px_50px_rgba(168,85,247,0.35)]"
+      style: "bg-[#18110a] border-amber-900/35"
     },
     {
       id: "codex",
@@ -45,7 +44,7 @@ export default function Bookshelf() {
       subtitle: "World lore and land archives",
       coverImage: "veridia_codex_spine.png",
       path: "/codex",
-      style: "bg-[#1f1610] border-amber-950/40 hover:-translate-y-3 group-hover:shadow-[0_20px_50px_rgba(245,158,11,0.35)]"
+      style: "bg-[#1f1610] border-amber-950/40"
     }
   ];
 
@@ -66,15 +65,13 @@ export default function Bookshelf() {
     // Easter Egg test passphrase
     if (cleanInput === "i accept the form i am given") {
       setUnlockedBook("all");
-      setIsCodexGlowing(true);
-      setIsGrimoireGlowing(true);
+      setSmolderTarget("all");
       toast.success("The form has been accepted. The Archive listens.");
       setPassphrase("");
       
-      // Stop glow animations after 5 seconds
+      // Stop smoldering after 5 seconds
       setTimeout(() => {
-        setIsCodexGlowing(false);
-        setIsGrimoireGlowing(false);
+        setSmolderTarget(null);
         setUnlockedBook(null);
       }, 5000);
       return;
@@ -85,15 +82,19 @@ export default function Bookshelf() {
 
     if (matchedNote) {
       // Unlock the note via React Query mutation
+      const targetGroup = (matchedNote.category === "bestiary" || matchedNote.subcategory === "bestiary-monsters") 
+        ? "grimoire" 
+        : "codex";
+
       unlockPassword.mutate(matchedNote.secretPassword!, {
         onSuccess: () => {
-          setUnlockedBook("codex");
-          setIsCodexGlowing(true);
-          toast.success(`Seal broken! Unlocked Codex lore note: "${matchedNote.title}"`);
+          setUnlockedBook(targetGroup);
+          setSmolderTarget(targetGroup);
+          toast.success(`Seal broken! Unlocked compendium note: "${matchedNote.title}"`);
           setPassphrase("");
           
           setTimeout(() => {
-            setIsCodexGlowing(false);
+            setSmolderTarget(null);
             setUnlockedBook(null);
           }, 5000);
         }
@@ -140,21 +141,13 @@ export default function Bookshelf() {
   return (
     <div className="min-h-[92vh] bg-[#050302] text-stone-100 flex flex-col justify-between p-6 relative font-serif select-none max-w-7xl mx-auto overflow-hidden">
       
-      {/* 3D and shadow keyframe animation styles */}
+      {/* 3D, shadows, sheens, and wood smoldering animations */}
       <style>{`
         .spotlight {
-          background: radial-gradient(circle at 50% 30%, rgba(217, 119, 6, 0.08) 0%, rgba(0, 0, 0, 0) 65%);
+          background: radial-gradient(circle at 50% 30%, rgba(217, 119, 6, 0.04) 0%, rgba(0, 0, 0, 0.85) 75%);
         }
         .book-container {
           perspective: 1000px;
-        }
-        .book-3d {
-          transform-style: preserve-3d;
-          transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s;
-          transform: rotateY(-12deg);
-        }
-        .group:hover .book-3d {
-          transform: translateY(-15px) rotateY(-22deg) scale(1.05);
         }
         .wood-grain {
           background: linear-gradient(180deg, #1c130d 0%, #100a06 100%);
@@ -168,57 +161,58 @@ export default function Bookshelf() {
           opacity: 0.4;
           pointer-events: none;
         }
-        .book-3d::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(to right, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
-          pointer-events: none;
-        }
-        /* Page thickness simulation */
-        .book-3d::after {
-          content: '';
-          position: absolute;
-          width: 220px;
-          height: 256px;
-          top: 2px;
-          transform: rotateY(90deg) translateZ(110px);
-          transform-origin: right;
-          background: linear-gradient(to right, #fcf8f2 0%, #e0d5c3 100%);
-        }
         .parchment-glow {
           box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.8),
                       0 0 40px 5px rgba(217, 119, 6, 0.15);
         }
 
-        /* ── Magical Glow Pulse Animations ── */
-        @keyframes codex-magical-glow {
-          0%, 100% { 
-            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.75), 0 0 12px 1px rgba(245, 158, 11, 0.2); 
-          }
-          50% { 
-            box-shadow: 0 0 45px 12px rgba(245, 158, 11, 0.85); 
-            transform: translateY(-15px) rotateY(-22deg) scale(1.05);
-          }
+        /* ── Metallic Gold Foil Sheen sweep keyframe ── */
+        @keyframes foil-shine {
+          0% { transform: translateX(-100%) rotate(25deg); }
+          100% { transform: translateX(200%) rotate(25deg); }
         }
-        .animate-codex-magical-glow {
-          animation: codex-magical-glow 1.5s infinite ease-in-out;
+        .foil-shine-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 215, 0, 0.12) 30%,
+            rgba(255, 255, 255, 0.35) 50%,
+            rgba(255, 215, 0, 0.12) 70%,
+            rgba(255, 255, 255, 0) 100%
+          );
+          transform: translateX(-100%) rotate(25deg);
+          pointer-events: none;
+          z-index: 5;
+        }
+        .group:hover .foil-shine-overlay {
+          animation: foil-shine 1.5s cubic-bezier(0.25, 1, 0.25, 1) forwards;
         }
 
-        @keyframes grimoire-magical-glow {
-          0%, 100% { 
-            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.75), 0 0 12px 1px rgba(168, 85, 247, 0.2); 
+        /* ── Realistic 3D Depth Shadows ── */
+        .book-shadow {
+          box-shadow: 5px 25px 35px rgba(0,0,0,0.7);
+          transition: box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .group:hover .book-shadow {
+          transform: scale(1.025);
+          box-shadow: 12px 35px 50px rgba(0, 0, 0, 0.85);
+        }
+
+        /* ── Smoldering Rune Glowing Fire Keyframes ── */
+        @keyframes rune-smolder {
+          0%, 100% {
+            text-shadow: 0 0 5px rgba(239, 68, 68, 0.35), 0 0 12px rgba(245, 158, 11, 0.2);
+            color: rgba(120, 53, 4, 0.35);
           }
-          50% { 
-            box-shadow: 0 0 45px 12px rgba(168, 85, 247, 0.85); 
-            transform: translateY(-15px) rotateY(-22deg) scale(1.05);
+          50% {
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.95), 0 0 25px rgba(245, 158, 11, 0.98), 0 0 35px rgba(251, 146, 60, 0.85);
+            color: rgba(254, 215, 170, 0.98);
           }
         }
-        .animate-grimoire-magical-glow {
-          animation: grimoire-magical-glow 1.5s infinite ease-in-out;
+        .animate-rune-smolder {
+          animation: rune-smolder 2.2s infinite ease-in-out;
         }
 
         @keyframes shake {
@@ -306,7 +300,6 @@ export default function Bookshelf() {
         {/* Books Stand Area (Optimized grid for mobile and split screen) */}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1 max-w-md sm:max-w-none mx-auto">
           {books.map((book) => {
-            const isGlow = book.id === "codex" ? isCodexGlowing : isGrimoireGlowing;
             return (
               <div 
                 key={book.id}
@@ -318,21 +311,19 @@ export default function Bookshelf() {
                 {/* 3D Book Container */}
                 <div className="book-container h-[260px] flex items-end">
                   <div 
-                    className={`book-3d w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 shadow-[5px_25px_35px_rgba(0,0,0,0.7)] ${book.style} overflow-hidden ${
-                      isGlow ? (book.id === "codex" ? "animate-codex-magical-glow" : "animate-grimoire-magical-glow") : ""
-                    }`}
+                    className={`book-shadow w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 ${book.style} overflow-hidden`}
                     style={{
                       backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(${book.coverImage})`,
                       backgroundSize: "cover",
                       backgroundPosition: "center"
                     }}
                   >
-                    {/* 3D Gold Leaf Foil Overlay border */}
-                    <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/35 transition-colors duration-500" />
-                    
-                    {/* Glowing Overlay on Hover */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    {/* Metallic Gold Foil Sheen Overlay */}
+                    <div className="foil-shine-overlay" />
 
+                    {/* 3D Gold Leaf Foil Overlay border */}
+                    <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none group-hover:border-amber-500/25 transition-colors duration-500" />
+                    
                     {/* Subtle Book Spine shadow overlay */}
                     <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
                   </div>
@@ -340,7 +331,7 @@ export default function Bookshelf() {
 
                 {/* Spine Text Label BELOW the book */}
                 <div className="text-center pb-1">
-                  <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-400 group-hover:text-amber-400 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                  <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-500 group-hover:text-amber-500 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                     {book.id === "grimoire" ? "Grimoire" : "Codex"}
                   </span>
                 </div>
@@ -364,9 +355,25 @@ export default function Bookshelf() {
 
         {/* The Wooden Shelf Ledge */}
         <div className="relative z-20">
-          <div className="wood-grain w-full h-7 border-t border-amber-700/30 rounded-t-sm shadow-[0_15px_30px_rgba(0,0,0,0.85)] relative">
+          <div className="wood-grain w-full h-8 border-t border-amber-700/30 rounded-t-sm shadow-[0_15px_30px_rgba(0,0,0,0.85)] relative flex items-center justify-between px-4">
             <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-amber-600/45 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 h-[2px] bg-black/60" />
+            
+            {/* Smoldering Wood-Carved Runes (Centered on the Ledge Ledge) */}
+            <div className="flex-1 flex justify-center items-center gap-6 font-mono text-sm tracking-widest text-[#2c1d12] select-none pointer-events-none">
+              <span className={smolderTarget === "grimoire" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>᚛</span>
+              <span className={smolderTarget === "grimoire" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚠ</span>
+              <span className={smolderTarget === "grimoire" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚢ</span>
+              <span className={smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚦ</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚨ</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚱ</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>᚜</span>
+            </div>
+
+            {/* Faint engraving watermark signature on the right of the wooden ledge */}
+            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
+              Crafted by Lukie Seven · Mark 53
+            </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
         </div>
