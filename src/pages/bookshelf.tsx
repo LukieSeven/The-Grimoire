@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useLocation } from "wouter";
-import { Book, Compass, Lock, MessageSquare, Sparkles } from "lucide-react";
+import { Book, Compass, Lock, MessageSquare, Sparkles, Upload, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
+import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
+import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export default function Bookshelf() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [hoveredBook, setHoveredBook] = useState<string | null>(null);
 
   // Storage hooks for decryption
@@ -18,125 +23,168 @@ export default function Bookshelf() {
   const [isShaking, setIsShaking] = useState(false);
   const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
 
+  // Active glowing animations
+  const [isCodexGlowing, setIsCodexGlowing] = useState(false);
+  const [isGrimoireGlowing, setIsGrimoireGlowing] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Bookshelf definitions
   const books = [
     {
       id: "grimoire",
       title: "The Grimoire",
-      subtitle: "Character Sheet & Spellbook Manager",
-      description: "Step into your sanctum to forge heroes, manage character sheets, attune essences, cast spells, and track your active campaign stats.",
-      coverImage: `${import.meta.env.BASE_URL}the_grimoire_spine.png`,
+      subtitle: "Character & campaign manager",
+      coverImage: "the_grimoire_spine.png",
       path: "/grimoire",
-      style: "from-purple-950 via-indigo-950 to-violet-950 border-purple-500/35",
-      accent: "text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+      style: "bg-[#18110a] border-amber-900/35 hover:-translate-y-3 group-hover:shadow-[0_20px_50px_rgba(168,85,247,0.35)]"
     },
     {
       id: "codex",
       title: "Veridia Codex",
-      subtitle: "Campaign World Compendium",
-      description: "Consult the global registry of legends, locations, bestiary entries, and campaign facts. Push lore directly to your active heroes.",
-      coverImage: `${import.meta.env.BASE_URL}veridia_codex_spine.png`,
+      subtitle: "World lore and land archives",
+      coverImage: "veridia_codex_spine.png",
       path: "/codex",
-      style: "from-amber-950 via-yellow-950 to-orange-950 border-amber-600/35",
-      accent: "text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+      style: "bg-[#1f1610] border-amber-950/40 hover:-translate-y-3 group-hover:shadow-[0_20px_50px_rgba(245,158,11,0.35)]"
     }
   ];
 
-  // Passphrase Submission Validation
+  // Sanitizer matches letters only, case and punctuation insensitive
+  const sanitize = (str: string) => 
+    (str || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+      .replace(/\s+/g, " ");
+
   const handlePassphraseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Helper to strip punctuation and normalize whitespace
-    const sanitize = (str: string) => 
-      (str || "")
-        .trim()
-        .toLowerCase()
-        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
-        .replace(/\s+/g, " ");
+    if (!passphrase.trim()) return;
 
     const cleanInput = sanitize(passphrase);
-    if (!cleanInput) return;
 
-    // Check for diagnostic test phrase
-    if (cleanInput === sanitize("I accept the form I am given")) {
-      setPassphrase("");
-      toast.success("The Archive hums in resonance. All chronicles are illuminated...");
-      
-      // Trigger magical glow animation on all books
+    // Easter Egg test passphrase
+    if (cleanInput === "i accept the form i am given") {
       setUnlockedBook("all");
+      setIsCodexGlowing(true);
+      setIsGrimoireGlowing(true);
+      toast.success("The form has been accepted. The Archive listens.");
+      setPassphrase("");
+      
+      // Stop glow animations after 5 seconds
       setTimeout(() => {
+        setIsCodexGlowing(false);
+        setIsGrimoireGlowing(false);
         setUnlockedBook(null);
       }, 5000);
       return;
     }
 
-    // Check if passphrase is already unlocked
-    const isAlreadyUnlocked = unlockedPasswords.some(pw => sanitize(pw) === cleanInput);
-    if (isAlreadyUnlocked) {
-      toast.info("This secret has already been decrypted.");
-      setPassphrase("");
-      return;
-    }
+    // Try finding matching secret lock inside codexNotes
+    const matchedNote = codexNotes.find(n => n.secretPassword && sanitize(n.secretPassword) === cleanInput);
 
-    // 1. Scan Codex entries for matching locks
-    const matchingNotes = codexNotes.filter(n => n.secretPassword && sanitize(n.secretPassword) === cleanInput);
-
-    // (In the future, we can add locks on characters or campaigns here)
-
-    if (matchingNotes.length > 0) {
-      const targetPw = matchingNotes[0].secretPassword!;
-      unlockPassword.mutate(targetPw, {
+    if (matchedNote) {
+      // Unlock the note via React Query mutation
+      unlockPassword.mutate(matchedNote.secretPassword!, {
         onSuccess: () => {
-          setPassphrase("");
-          toast.success(`A seal breaks! Decrypted ${matchingNotes.length} secret chronicles.`);
-          
-          // Trigger magical book spine glow animation for 5 seconds
           setUnlockedBook("codex");
+          setIsCodexGlowing(true);
+          toast.success(`Seal broken! Unlocked Codex lore note: "${matchedNote.title}"`);
+          setPassphrase("");
+          
           setTimeout(() => {
+            setIsCodexGlowing(false);
             setUnlockedBook(null);
           }, 5000);
         }
       });
     } else {
-      // Play shaking feedback on incorrect input
+      // Trigger shake feedback on incorrect password input
       setIsShaking(true);
-      toast.error("The words echo in silence...");
-      setTimeout(() => {
-        setIsShaking(false);
-      }, 700);
+      toast.error("The hidden words ring hollow. The Archive remains silent.");
+      setTimeout(() => setIsShaking(false), 600);
     }
   };
 
-  const isCodexGlowing = unlockedBook === "codex" || unlockedBook === "all";
-  const isGrimoireGlowing = unlockedBook === "grimoire" || unlockedBook === "all";
+  const handleExportBackup = () => {
+    try {
+      exportBackupJSON();
+      toast.success("Campaign backup exported successfully!");
+    } catch {
+      toast.error("Failed to export backup.");
+    }
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        importBackupJSON(parsed);
+        await queryClient.invalidateQueries();
+        toast.success("Campaign backup restored successfully!");
+      } catch (err) {
+        toast.error("Invalid file format. Import requires a valid backup JSON.");
+      }
+    };
+    reader.readAsText(file);
+  };
 
   return (
-    <div className="relative min-h-[92vh] flex flex-col justify-between overflow-hidden bg-[#0a0705] py-12 px-4 select-none">
+    <div className="min-h-[92vh] bg-[#050302] text-stone-100 flex flex-col justify-between p-6 relative font-serif select-none max-w-7xl mx-auto overflow-hidden">
       
-      {/* ── Custom Ethereal Styling ── */}
+      {/* 3D and shadow keyframe animation styles */}
       <style>{`
         .spotlight {
-          background: radial-gradient(circle 500px at 50% 30%, rgba(217, 119, 6, 0.08), transparent 70%);
-        }
-        .wood-grain {
-          background-color: #1c130d;
-          background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.01) 0px, rgba(255,255,255,.01) 4px, transparent 4px, transparent 12px),
-                            linear-gradient(to bottom, #251a12 0%, #150f0b 100%);
+          background: radial-gradient(circle at 50% 30%, rgba(217, 119, 6, 0.08) 0%, rgba(0, 0, 0, 0) 65%);
         }
         .book-container {
-          perspective: 1200px;
+          perspective: 1000px;
         }
         .book-3d {
           transform-style: preserve-3d;
-          transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.6s ease;
+          transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.5s;
+          transform: rotateY(-12deg);
         }
-        .book-3d:hover {
-          transform: rotateY(-22deg) translateZ(35px) translateY(-15px);
+        .group:hover .book-3d {
+          transform: translateY(-15px) rotateY(-22deg) scale(1.05);
         }
-        .book-spine {
-          transform: rotateY(-90deg) translateZ(10px);
-          transform-origin: left;
+        .wood-grain {
+          background: linear-gradient(180deg, #1c130d 0%, #100a06 100%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
         }
-        .book-page-edges {
+        .wood-grain::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-image: repeating-linear-gradient(90deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 40px, rgba(0,0,0,0.15) 45px, rgba(0,0,0,0) 50px);
+          opacity: 0.4;
+          pointer-events: none;
+        }
+        .book-3d::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(to right, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 100%);
+          pointer-events: none;
+        }
+        /* Page thickness simulation */
+        .book-3d::after {
+          content: '';
+          position: absolute;
+          width: 220px;
+          height: 256px;
+          top: 2px;
           transform: rotateY(90deg) translateZ(110px);
           transform-origin: right;
           background: linear-gradient(to right, #fcf8f2 0%, #e0d5c3 100%);
@@ -198,6 +246,41 @@ export default function Bookshelf() {
         </p>
       </div>
 
+      {/* ── Unified Base Scheme Utility Control Bar ── */}
+      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-3 max-w-2xl mx-auto flex items-center justify-between gap-4 rounded-lg shadow-sm mt-4 z-10 w-full">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <CustomizeToolDialog />
+        </div>
+        <div className="flex items-center gap-2.5">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".json"
+            className="hidden"
+          />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleImportClick}
+            className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
+            title="Restore backup (.json)"
+          >
+            <Upload className="w-3.5 h-3.5" /> Import Backup
+          </Button>
+          
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleExportBackup}
+            className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
+            title="Export backup (.json)"
+          >
+            <Download className="w-3.5 h-3.5" /> Export Backup
+          </Button>
+        </div>
+      </div>
+
       {/* Passphrase Input Bar centered right above the ledge */}
       <form 
         onSubmit={handlePassphraseSubmit}
@@ -220,14 +303,14 @@ export default function Bookshelf() {
       {/* Main Bookshelf Area */}
       <div className="w-full max-w-4xl mx-auto z-10 my-4 space-y-1">
         
-        {/* Books Stand Area */}
-        <div className="grid grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1">
+        {/* Books Stand Area (Optimized grid for mobile and split screen) */}
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1 max-w-md sm:max-w-none mx-auto">
           {books.map((book) => {
             const isGlow = book.id === "codex" ? isCodexGlowing : isGrimoireGlowing;
             return (
               <div 
                 key={book.id}
-                className="col-span-3 sm:col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
+                className="col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
                 onMouseEnter={() => setHoveredBook(book.id)}
                 onMouseLeave={() => setHoveredBook(null)}
                 onClick={() => setLocation(book.path)}
@@ -255,7 +338,7 @@ export default function Bookshelf() {
                   </div>
                 </div>
 
-                {/* Spine Text Label BELOW the book (resting just above the shelf) */}
+                {/* Spine Text Label BELOW the book */}
                 <div className="text-center pb-1">
                   <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-400 group-hover:text-amber-400 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                     {book.id === "grimoire" ? "Grimoire" : "Codex"}
@@ -281,13 +364,10 @@ export default function Bookshelf() {
 
         {/* The Wooden Shelf Ledge */}
         <div className="relative z-20">
-          {/* Ledge front face */}
           <div className="wood-grain w-full h-7 border-t border-amber-700/30 rounded-t-sm shadow-[0_15px_30px_rgba(0,0,0,0.85)] relative">
-            {/* Specular highlighting line on shelf edge */}
             <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-amber-600/45 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 h-[2px] bg-black/60" />
           </div>
-          {/* Ledge depth shadow underneath */}
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
         </div>
       </div>
@@ -299,33 +379,30 @@ export default function Bookshelf() {
             const currentBook = books.find(b => b.id === hoveredBook);
             if (!currentBook) return null;
             return (
-              <div className="w-full bg-[#18130f] border border-amber-900/45 p-6 rounded-none relative text-center shadow-2xl parchment-glow animate-in fade-in zoom-in-95 duration-300">
+              <div className="w-full bg-[#16110c] border border-amber-900/45 p-6 shadow-2xl relative parchment-glow animate-in fade-in duration-200">
                 {/* Decorative border overlays */}
-                <div className="absolute inset-1 border border-amber-950/20" />
-                <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/20" />
+                <div className="absolute inset-1 border border-amber-950/20 pointer-events-none" />
+                <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/15 pointer-events-none" />
                 
-                <h3 className="font-serif text-xl font-bold text-amber-500 tracking-wider">
-                  {currentBook.title}
-                </h3>
-                <h4 className="text-[10px] font-mono tracking-widest text-stone-400 uppercase mt-0.5 mb-3">
-                  {currentBook.subtitle}
-                </h4>
-                <p className="text-stone-300 font-serif text-sm leading-relaxed max-w-md mx-auto">
-                  {currentBook.description}
-                </p>
+                <div className="text-center space-y-2 z-10 relative">
+                  <h3 className="text-amber-500 text-lg font-bold uppercase tracking-wider">{currentBook.title}</h3>
+                  <span className="text-[10px] font-mono uppercase text-stone-500 tracking-widest block">{currentBook.subtitle}</span>
+                  <div className="h-[1px] w-24 bg-amber-900/20 mx-auto my-2" />
+                  <p className="text-stone-300 text-xs leading-relaxed max-w-sm mx-auto">
+                    {currentBook.id === "grimoire" 
+                      ? "Consult the codices of active heroes. Track character stats, customize attributes, manage spell inventories, calculate Crit Chains, and roll active campaign D20 checks." 
+                      : "Chronicle the world map of Cormant. Filter taxonomy directories for cities, settlements, dungeons, monster bestiaries, and push lore items directly to character logs."
+                    }
+                  </p>
+                </div>
               </div>
             );
           })()
         ) : (
-          <div className="text-center font-serif text-stone-500/70 text-xs italic tracking-wider py-8">
-            Hover over a chronicle on the ledge to inspect its contents...
+          <div className="text-center max-w-xs mx-auto py-8">
+            <span className="text-stone-600 text-[10px] font-mono uppercase tracking-[0.25em] block animate-pulse">Select a chronicle from the bookcase</span>
           </div>
         )}
-      </div>
-
-      {/* Footer Branding */}
-      <div className="text-center z-10 text-[9px] font-mono tracking-[0.25em] text-stone-600 uppercase pt-6">
-        AEtherborne &copy; {new Date().getFullYear()} · Core Campaign System
       </div>
     </div>
   );

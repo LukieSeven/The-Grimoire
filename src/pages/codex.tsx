@@ -13,11 +13,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
+import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
+import { exportBackupJSON, importBackupJSON } from "@/lib/storage";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
-  Search, BookOpen, MapPin, Sparkles, Feather, Trash2, 
-  Plus, Upload, Download, ArrowLeft, Send, ChevronDown, ChevronRight, BookMarked, Lock
+  Search, BookOpen, MapPin, Sparkles, Trash2, 
+  Plus, Upload, Download, ArrowLeft, Send, ChevronDown, ChevronRight, BookMarked, Lock, Library
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -160,6 +163,7 @@ const REALMS_LIST = [
 
 export default function Codex() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   
   // Storage hooks
   const { data: codexNotes = [], isLoading } = useListCodexNotes();
@@ -187,6 +191,7 @@ export default function Codex() {
   });
   const [expandedCountries, setExpandedCountries] = useState<Record<number, boolean>>({});
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [expandedTowns, setExpandedTowns] = useState<Record<number, boolean>>({});
 
   // Editor states
   const [isEditing, setIsEditing] = useState(false);
@@ -219,6 +224,10 @@ export default function Codex() {
     setExpandedFolders(prev => ({ ...prev, [folderKey]: !prev[folderKey] }));
   };
 
+  const toggleTownExpand = (townId: number) => {
+    setExpandedTowns(prev => ({ ...prev, [townId]: !prev[townId] }));
+  };
+
   // Helper to determine if a note is unlocked/visible
   const isNoteVisible = (note: any) => {
     if ((note.title || "").toLowerCase().includes("random encounter")) return false;
@@ -234,12 +243,9 @@ export default function Codex() {
     return true;
   };
 
-  // Filter notes based on hierarchy selection, search query, and secret password locks
+  // Filter notes based on search query
   const filteredNotes = codexNotes.filter(n => {
-    // 1. Unconditionally hide raw "Random encounters"
     if ((n.title || "").toLowerCase().includes("random encounter")) return false;
-
-    // 2. Hide password-locked records unless decrypted/unlocked
     if (n.secretPassword) {
       const sanitize = (str: string) => 
         (str || "")
@@ -251,22 +257,12 @@ export default function Codex() {
       if (!hasMatch) return false;
     }
 
-    // 3. Keyword Search filter
     const matchesSearch = 
       (n.title || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
       (n.content || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
       (n.tags && n.tags.some(t => (t || "").toLowerCase().includes(searchTerm.toLowerCase())));
     
-    if (!matchesSearch) return false;
-
-    // 4. Hierarchical Category/Subcategory filter
-    if (selectedSubcategory !== "all") {
-      return n.subcategory === selectedSubcategory;
-    } else if (selectedCategory !== "all") {
-      return n.category === selectedCategory;
-    }
-    
-    return true;
+    return matchesSearch;
   });
 
   // Wildlands Virtual Region overview note
@@ -288,24 +284,13 @@ export default function Codex() {
     ? wildlandsVirtualNote 
     : (codexNotes.find(n => n.id === selectedNoteId) || filteredNotes[0] || null);
 
-  // Auto-align selected note on search/navigation change
-  useEffect(() => {
-    if (filteredNotes.length > 0) {
-      const exists = filteredNotes.some(n => n.id === selectedNoteId) || selectedNoteId === -99;
-      if (!exists) {
-        setSelectedNoteId(filteredNotes[0].id);
-      }
-    } else if (selectedNoteId !== -99) {
-      setSelectedNoteId(null);
-    }
-  }, [selectedCategory, selectedSubcategory, searchTerm]);
-
   // Auto-expand parents/countries on search query changes
   useEffect(() => {
     if (searchTerm.trim().length > 1) {
       const activeMatches = filteredNotes;
       const countriesToExpand: Record<number, boolean> = {};
       const foldersToExpand: Record<string, boolean> = {};
+      const townsToExpand: Record<number, boolean> = {};
 
       activeMatches.forEach(note => {
         if (note.stateId !== undefined && note.stateId !== null) {
@@ -318,7 +303,12 @@ export default function Codex() {
             if (note.subcategory === "world-cities" || note.subcategory === "world-settlements") {
               foldersToExpand[`${countryId}-cities`] = true;
             } else if (note.subcategory === "world-landmarks" || note.category === "maps" || note.category === "lore") {
-              foldersToExpand[`${countryId}-landmarks`] = true;
+              if (note.parentBurgId) {
+                foldersToExpand[`${countryId}-cities`] = true;
+                townsToExpand[note.parentBurgId] = true;
+              } else {
+                foldersToExpand[`${countryId}-landmarks`] = true;
+              }
             } else if (note.category === "entities" || note.category === "systems") {
               foldersToExpand[`${countryId}-entities`] = true;
             }
@@ -328,6 +318,7 @@ export default function Codex() {
 
       setExpandedCountries(prev => ({ ...prev, ...countriesToExpand }));
       setExpandedFolders(prev => ({ ...prev, ...foldersToExpand }));
+      setExpandedTowns(prev => ({ ...prev, ...townsToExpand }));
       setExpandedParents(prev => ({ ...prev, world: true }));
     }
   }, [searchTerm, filteredNotes, codexNotes]);
@@ -355,7 +346,6 @@ export default function Codex() {
       .map(t => t.trim().toUpperCase())
       .filter(Boolean);
 
-    // Auto-tag with governing realm name
     const realmObj = REALMS_LIST.find(r => r.id === editStateId);
     if (realmObj && editStateId !== null) {
       const realmTagName = realmObj.name.split(" ")[0].replace(/[^a-zA-Z]/g, "").toUpperCase();
@@ -403,7 +393,6 @@ export default function Codex() {
       .map(t => t.trim().toUpperCase())
       .filter(Boolean);
 
-    // Auto-tag with governing realm name
     const realmObj = REALMS_LIST.find(r => r.id === editStateId);
     if (realmObj && editStateId !== null) {
       const realmTagName = realmObj.name.split(" ")[0].replace(/[^a-zA-Z]/g, "").toUpperCase();
@@ -445,23 +434,17 @@ export default function Codex() {
     }
   };
 
-  // Export JSON
+  // Export global backup
   const handleExportBackup = () => {
     try {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(codexNotes, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `Veridia_Codex_Backup_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-      toast.success("Codex backup exported.");
+      exportBackupJSON();
+      toast.success("Campaign backup exported successfully!");
     } catch {
-      toast.error("Failed to export Codex backup.");
+      toast.error("Failed to export backup.");
     }
   };
 
-  // Import JSON
+  // Import global backup
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
@@ -471,39 +454,14 @@ export default function Codex() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
-        if (!Array.isArray(parsed)) throw new Error("Format is not a JSON Array");
-        
-        let importCount = 0;
-        let skipCount = 0;
-
-        parsed.forEach((note: any) => {
-          const exists = codexNotes.some(existing => existing.title.toLowerCase() === note.title.toLowerCase());
-          if (exists) {
-            skipCount++;
-          } else {
-            createCodex.mutate({
-              title: note.title,
-              content: note.content,
-              category: note.category || "world",
-              subcategory: note.subcategory || "world-landmarks",
-              tags: note.tags || ["IMPORTED"],
-              coordinates: note.coordinates || null,
-              secretPassword: note.secretPassword || null,
-              stateId: note.stateId || null,
-              isState: !!note.isState,
-              isCapital: !!note.isCapital,
-              population: note.population || 0
-            });
-            importCount++;
-          }
-        });
-
-        toast.success(`Imported ${importCount} new chronicles. (Skipped ${skipCount} duplicates).`);
+        importBackupJSON(parsed);
+        await queryClient.invalidateQueries();
+        toast.success("Campaign backup restored successfully!");
       } catch (err) {
-        toast.error("Invalid file format. Import requires a JSON array of notes.");
+        toast.error("Invalid file format. Import requires a valid backup JSON.");
       }
     };
     reader.readAsText(file);
@@ -534,20 +492,6 @@ export default function Codex() {
     });
   };
 
-  // Get active subcategory label
-  const getFilterLabel = () => {
-    if (selectedSubcategory !== "all") {
-      for (const cat of TAXONOMY) {
-        const sub = cat.subcategories.find(s => s.value === selectedSubcategory);
-        if (sub) return `${cat.icon} ${cat.label} › ${sub.label}`;
-      }
-    } else if (selectedCategory !== "all") {
-      const cat = TAXONOMY.find(c => c.value === selectedCategory);
-      if (cat) return `${cat.icon} ${cat.label} (All)`;
-    }
-    return "📚 All Codex Archives";
-  };
-
   return (
     <div className="relative min-h-[92vh] bg-[#0c0806] text-stone-100 flex flex-col font-serif select-none p-4 max-w-7xl mx-auto space-y-4">
       
@@ -556,15 +500,11 @@ export default function Codex() {
       {/* ── Top Header Controls ── */}
       <div className="flex items-center justify-between border-b border-border/20 pb-4 flex-wrap gap-4 mt-2">
         <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setLocation("/")} 
-            className="text-stone-400 hover:text-stone-200 rounded-none cursor-pointer pl-0 font-serif"
-          >
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to The Archive
-          </Button>
-          <div className="h-4 w-px bg-border/20" />
+          <img 
+            src={`${import.meta.env.BASE_URL}logo.jpg`} 
+            alt="Veridia Codex Logo" 
+            className="w-10 h-10 rounded-lg object-cover border border-primary/20 shadow-sm flex-shrink-0"
+          />
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold uppercase tracking-widest bg-gradient-to-r from-amber-500 to-yellow-200 bg-clip-text text-transparent drop-shadow-md">
               Veridia Codex
@@ -574,57 +514,89 @@ export default function Codex() {
             </p>
           </div>
         </div>
+      </div>
 
-        {/* Action and Import/Export panel */}
+      {/* ── Unified Base Scheme Utility Control Bar ── */}
+      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-4 flex flex-wrap items-center justify-between gap-4 rounded-lg shadow-sm w-full">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button 
+            variant="outline" 
+            onClick={() => setLocation("/")}
+            className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
+            title="Return to the library bookcase"
+          >
+            <Library className="w-3.5 h-3.5 text-primary" /> Return to The Archive
+          </Button>
+          <div className="h-4 w-px bg-border/30" />
+          <CustomizeToolDialog />
+        </div>
         <div className="flex items-center gap-2.5">
           <input 
             type="file" 
             ref={fileInputRef} 
             onChange={handleFileChange} 
-            accept=".json,.map" 
+            accept=".json" 
             className="hidden" 
           />
-          
           <Button 
             variant="outline" 
             size="sm"
             onClick={handleImportClick}
-            className="h-8 text-[10px] uppercase font-mono tracking-wider border-stone-850 hover:bg-stone-900/60 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all text-stone-400"
-            title="Import Map file (.map) or Codex Backup (.json)"
+            className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
+            title="Restore backup (.json)"
           >
-            <Upload className="w-3.5 h-3.5 text-amber-500" /> Import Map/Backup
+            <Upload className="w-3.5 h-3.5" /> Import Backup
           </Button>
           
           <Button 
             variant="outline" 
             size="sm"
             onClick={handleExportBackup}
-            className="h-8 text-[10px] uppercase font-mono tracking-wider border-stone-850 hover:bg-stone-900/60 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all text-stone-400"
-            title="Export all Codex chronicles (.json)"
+            className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all"
+            title="Export backup (.json)"
           >
-            <Download className="w-3.5 h-3.5 text-amber-500" /> Export Backup
+            <Download className="w-3.5 h-3.5" /> Export Backup
           </Button>
         </div>
       </div>
 
-      {/* Main Grid Layout */}
+      {/* Main Grid Layout (2-Column Restructure) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-[72vh]">
         
-        {/* LEFT BAR: Hierarchical collapsable Index Tree */}
-        <div className="lg:col-span-3 bg-stone-950/30 border border-stone-900/65 p-4 rounded-md flex flex-col gap-4 max-h-[82vh] overflow-y-auto pr-2">
+        {/* LEFT COLUMN: Hierarchical collapsable Index Tree & Search */}
+        <div className="lg:col-span-3 bg-stone-950/30 border border-stone-900/65 p-4 rounded-md flex flex-col gap-4 max-h-[45vh] lg:max-h-[82vh] overflow-y-auto pr-2">
           
-          {/* Header title */}
-          <div className="border-b border-border/15 pb-2">
+          {/* Header title & Add Entry shortcut */}
+          <div className="flex items-center justify-between border-b border-border/15 pb-2">
             <h3 className="text-xs font-mono font-bold tracking-widest text-amber-500/80 uppercase flex items-center gap-1.5">
               <BookMarked className="w-3.5 h-3.5" /> Registry Index
             </h3>
+            <Button 
+              onClick={handleStartAdd}
+              size="sm" 
+              className="h-5 text-[9px] uppercase font-mono tracking-widest bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded-none px-2 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 mr-0.5" /> Add
+            </Button>
+          </div>
+
+          {/* Search Bar prominently at top of sidebar */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input 
+              type="text" 
+              placeholder="Search index, tags..." 
+              value={searchTerm} 
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-8.5 bg-stone-950/40 border-stone-900 text-stone-200 text-xs font-serif rounded-md h-8.5 focus-visible:ring-amber-600/40"
+            />
           </div>
 
           {/* Reset All filter option */}
           <button
-            onClick={() => { setSelectedCategory("all"); setSelectedSubcategory("all"); }}
+            onClick={() => { setSelectedCategory("all"); setSelectedSubcategory("all"); setSearchTerm(""); }}
             className={`w-full text-left px-2 py-1.5 text-xs font-bold font-mono tracking-wider uppercase border cursor-pointer transition-all ${
-              selectedCategory === "all" && selectedSubcategory === "all"
+              selectedCategory === "all" && selectedSubcategory === "all" && searchTerm === ""
                 ? "bg-amber-950/20 border-amber-600/40 text-amber-400"
                 : "bg-transparent border-transparent text-stone-400 hover:text-stone-300"
             }`}
@@ -665,7 +637,7 @@ export default function Codex() {
                     </button>
                   </div>
 
-                  {/* Dynamic Geographical Nesting for WORLD category */}
+                  {/* Dynamic Geographical Nesting for VERIDIA category */}
                   {group.value === "world" && isExpanded && (
                     <div className="pl-3 border-l border-stone-900/80 space-y-2.5 pt-1 animate-in slide-in-from-top-1 duration-150">
                       {(() => {
@@ -722,7 +694,8 @@ export default function Codex() {
 
                               {/* Nested Subfolders list */}
                               {isCountryExpanded && (
-                                <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5">
+                                <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5 animate-in slide-in-from-top-1 duration-150">
+                                  
                                   {/* Folder 1: Cities & Settlements */}
                                   <div className="space-y-0.5">
                                     <button 
@@ -733,7 +706,7 @@ export default function Codex() {
                                       <span>Cities & Settlements ({childSettlements.length})</span>
                                     </button>
                                     {expandedFolders[`${country.id}-cities`] && (
-                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
+                                      <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40 transition-all">
                                         {childSettlements
                                           .sort((a, b) => {
                                             if (a.isCapital && !b.isCapital) return -1;
@@ -742,59 +715,113 @@ export default function Codex() {
                                           })
                                           .map(note => {
                                             const isSelectedNote = selectedNote?.id === note.id;
+                                            
+                                            // Find local landmarks nested under this town
+                                            const localLandmarks = codexNotes.filter(n => n.parentBurgId === note.id && isNoteVisible(n));
+                                            const hasLocalLandmarks = localLandmarks.length > 0;
+                                            const isTownExpanded = !!expandedTowns[note.id];
+
                                             return (
-                                              <button
-                                                key={note.id}
-                                                onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                                                className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
-                                                  isSelectedNote 
-                                                    ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                                    : "text-stone-400 border-transparent hover:text-stone-200"
-                                                }`}
-                                              >
-                                                {note.isCapital ? "👑 " : ""}{note.title}
-                                              </button>
+                                              <div key={note.id} className="space-y-0.5">
+                                                <div className="flex items-center justify-between group/town">
+                                                  <button
+                                                    onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                                    className={`flex-1 text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                                      isSelectedNote 
+                                                        ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                                        : "text-stone-400 border-transparent hover:text-stone-200"
+                                                    }`}
+                                                  >
+                                                    {note.isCapital ? "👑 " : ""}{note.title}
+                                                    {hasLocalLandmarks && (
+                                                      <span className="text-[7.5px] font-mono text-stone-600 pl-1">({localLandmarks.length})</span>
+                                                    )}
+                                                  </button>
+                                                  {hasLocalLandmarks && (
+                                                    <button
+                                                      onClick={() => toggleTownExpand(note.id)}
+                                                      className="p-0.5 text-stone-600 hover:text-stone-300 rounded transition-colors"
+                                                    >
+                                                      {isTownExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
+                                                    </button>
+                                                  )}
+                                                </div>
+
+                                                {/* Nested Local Landmarks (Indented with a thread line guide) */}
+                                                {hasLocalLandmarks && isTownExpanded && (
+                                                  <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5 animate-in slide-in-from-top-1 duration-150">
+                                                    {localLandmarks.map(landmark => {
+                                                      const isSelectedLandmark = selectedNote?.id === landmark.id;
+                                                      let icon = "📍";
+                                                      if (landmark.subcategory === "maps-dungeons") icon = "💀";
+                                                      else if (landmark.tags.includes("MINE")) icon = "⛏️";
+                                                      else if (landmark.tags.includes("TEMPLE") || landmark.tags.includes("SACRED")) icon = "✨";
+
+                                                      return (
+                                                        <button
+                                                          key={landmark.id}
+                                                          onClick={() => { setSelectedNoteId(landmark.id); setIsEditing(false); setIsAdding(false); }}
+                                                          className={`w-full text-left py-0.5 px-1.5 text-[10px] font-serif truncate cursor-pointer block border-l ${
+                                                            isSelectedLandmark 
+                                                              ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.01]" 
+                                                              : "text-stone-500 border-transparent hover:text-stone-300"
+                                                          }`}
+                                                        >
+                                                          {icon} {landmark.title}
+                                                        </button>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                )}
+                                              </div>
                                             );
                                           })}
                                         {childSettlements.length === 0 && (
-                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No settlements compiled.</div>
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No settlements compiled.</div>
                                         )}
                                       </div>
                                     )}
                                   </div>
 
-                                  {/* Folder 2: Landmarks & Dungeons */}
+                                  {/* Folder 2: Landmarks & Dungeons (Only non-nested/general ones) */}
                                   <div className="space-y-0.5">
-                                    <button 
-                                      onClick={() => toggleFolderExpand(`${country.id}-landmarks`)}
-                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
-                                      <span>Landmarks & Dungeons ({childLandmarks.length})</span>
-                                    </button>
-                                    {expandedFolders[`${country.id}-landmarks`] && (
-                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
-                                        {childLandmarks.map(note => {
-                                          const isSelectedNote = selectedNote?.id === note.id;
-                                          return (
-                                            <button
-                                              key={note.id}
-                                              onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
-                                                isSelectedNote 
-                                                  ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                                  : "text-stone-400 border-transparent hover:text-stone-200"
-                                              }`}
-                                            >
-                                              {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
-                                            </button>
-                                          );
-                                        })}
-                                        {childLandmarks.length === 0 && (
-                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No landmarks cataloged.</div>
-                                        )}
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const generalLandmarks = childLandmarks.filter(n => !n.parentBurgId);
+                                      return (
+                                        <>
+                                          <button 
+                                            onClick={() => toggleFolderExpand(`${country.id}-landmarks`)}
+                                            className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
+                                            <span>Landmarks & Dungeons ({generalLandmarks.length})</span>
+                                          </button>
+                                          {expandedFolders[`${country.id}-landmarks`] && (
+                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                              {generalLandmarks.map(note => {
+                                                const isSelectedNote = selectedNote?.id === note.id;
+                                                return (
+                                                  <button
+                                                    key={note.id}
+                                                    onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                                    className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                                      isSelectedNote 
+                                                        ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                                        : "text-stone-400 border-transparent hover:text-stone-200"
+                                                    }`}
+                                                  >
+                                                    {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
+                                                  </button>
+                                                );
+                                              })}
+                                              {generalLandmarks.length === 0 && (
+                                                <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No independent landmarks.</div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Folder 3: Entities & Factions */}
@@ -807,7 +834,7 @@ export default function Codex() {
                                       <span>Entities & Factions ({childEntities.length})</span>
                                     </button>
                                     {expandedFolders[`${country.id}-entities`] && (
-                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
+                                      <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
                                         {childEntities.map(note => {
                                           const isSelectedNote = selectedNote?.id === note.id;
                                           return (
@@ -825,7 +852,7 @@ export default function Codex() {
                                           );
                                         })}
                                         {childEntities.length === 0 && (
-                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No entities linked.</div>
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No entities linked.</div>
                                         )}
                                       </div>
                                     )}
@@ -844,21 +871,49 @@ export default function Codex() {
                     <div className="pl-6 border-l border-stone-900/80 space-y-1 pt-0.5 animate-in slide-in-from-top-1 duration-150">
                       {group.subcategories.map((sub) => {
                         const isSubSelected = selectedSubcategory === sub.value;
-                        const subCount = codexNotes.filter(n => n.subcategory === sub.value && isNoteVisible(n)).length;
-
+                        
+                        // Count notes matching this subcategory AND search term
+                        const matchingSubnotes = codexNotes.filter(n => n.subcategory === sub.value && isNoteVisible(n));
+                        
                         return (
-                          <button
-                            key={sub.value}
-                            onClick={() => { setSelectedCategory(group.value); setSelectedSubcategory(sub.value); }}
-                            className={`w-full text-left py-1 px-2 text-xs font-serif transition-all cursor-pointer flex justify-between items-center ${
-                              isSubSelected 
-                                ? "text-amber-400 font-bold border-l-2 border-amber-600 pl-1.5 bg-amber-950/[0.03]" 
-                                : "text-stone-400 hover:text-stone-200"
-                            }`}
-                          >
-                            <span>{sub.label}</span>
-                            <span className="text-[8px] font-mono text-stone-600 font-normal">({subCount})</span>
-                          </button>
+                          <div key={sub.value} className="space-y-0.5">
+                            <button
+                              onClick={() => { setSelectedCategory(group.value); setSelectedSubcategory(sub.value); }}
+                              className={`w-full text-left py-1 px-2 text-xs font-serif transition-all cursor-pointer flex justify-between items-center ${
+                                isSubSelected 
+                                  ? "text-amber-400 font-bold border-l-2 border-amber-600 pl-1.5 bg-amber-950/[0.03]" 
+                                  : "text-stone-400 hover:text-stone-200"
+                              }`}
+                            >
+                              <span>{sub.label}</span>
+                              <span className="text-[8px] font-mono text-stone-600 font-normal">({matchingSubnotes.length})</span>
+                            </button>
+
+                            {/* List matching notes directly under subcategory folder for non-world categories */}
+                            {isSubSelected && (
+                              <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                {matchingSubnotes.map(note => {
+                                  const isSelectedNote = selectedNote?.id === note.id;
+                                  return (
+                                    <button
+                                      key={note.id}
+                                      onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                      className={`w-full text-left py-0.5 px-1.5 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                        isSelectedNote 
+                                          ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                          : "text-stone-500 border-transparent hover:text-stone-300"
+                                      }`}
+                                    >
+                                      • {note.title}
+                                    </button>
+                                  );
+                                })}
+                                {matchingSubnotes.length === 0 && (
+                                  <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No entries.</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -899,104 +954,8 @@ export default function Codex() {
           )}
         </div>
 
-        {/* CENTER COLUMN: Search results card list */}
-        <div className="lg:col-span-4 flex flex-col gap-4 max-h-[82vh]">
-          
-          {/* SEARCH BAR (Front & Center) */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input 
-              type="text" 
-              placeholder="Search index, tags, landmarks..." 
-              value={searchTerm} 
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-9 bg-stone-950/40 border-stone-900 text-stone-200 text-xs font-serif rounded-md h-9 focus-visible:ring-amber-600/40"
-            />
-          </div>
-
-          {/* Active Filter Description bar */}
-          <div className="bg-stone-900/15 border border-stone-900/60 p-2.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-stone-400">
-            <span>{getFilterLabel()}</span>
-            <span className="font-bold text-amber-500">Cards: {filteredNotes.length}</span>
-          </div>
-
-          {/* Entry Cards List Scrollblock */}
-          <div className="flex-1 overflow-y-auto pr-1 space-y-2.5">
-            <div className="flex justify-end px-1">
-              <Button 
-                onClick={handleStartAdd}
-                size="sm" 
-                className="h-6 text-[9px] uppercase font-mono tracking-widest bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold rounded-none px-2 cursor-pointer"
-              >
-                <Plus className="w-3 h-3 mr-1" /> Add Entry
-              </Button>
-            </div>
-
-            {isLoading ? (
-              <div className="text-center py-12 text-xs text-stone-500 italic">Consulting the library ledges...</div>
-            ) : filteredNotes.length === 0 ? (
-              <div className="text-center py-12 text-xs text-stone-500 italic bg-stone-950/10 border border-dashed border-stone-900 rounded-lg">
-                No entries match filters.
-              </div>
-            ) : (
-              filteredNotes.map((note) => {
-                const isSelected = selectedNote?.id === note.id;
-                return (
-                  <Card 
-                    key={note.id}
-                    onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                    className={`border transition-all cursor-pointer hover:border-amber-600/20 hover:bg-stone-900/10 rounded-none shadow-sm ${
-                      isSelected 
-                        ? "bg-amber-950/[0.04] border-amber-600/40 shadow-inner" 
-                        : "bg-stone-950/15 border-stone-900/60"
-                    }`}
-                  >
-                    <CardContent className="p-3.5 space-y-1.5">
-                      <div className="flex justify-between items-start gap-2">
-                        <h4 className={`text-sm font-bold leading-tight flex items-center gap-1.5 ${isSelected ? "text-amber-400" : "text-stone-300"}`}>
-                          {note.title}
-                          {note.secretPassword && (
-                            <Lock className="w-3 h-3 text-amber-500" title="Decrypted secret entry" />
-                          )}
-                        </h4>
-                        <span className="text-[7px] uppercase font-mono tracking-wider px-1.5 py-0.25 border border-stone-850 rounded bg-stone-900/40 text-stone-400">
-                          {note.subcategory ? (note.subcategory.split("-")[1] || note.category) : note.category}
-                        </span>
-                      </div>
-                      
-                      <p className="text-[11px] text-stone-400/90 font-serif leading-relaxed line-clamp-2">
-                        {note.content}
-                      </p>
-
-                      {note.tags && note.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {note.tags.slice(0, 3).map((tag, idx) => (
-                            <span key={idx} className="text-[8px] font-mono text-amber-500/50 font-semibold uppercase">
-                              #{tag}
-                            </span>
-                          ))}
-                          {note.tags.length > 3 && (
-                            <span className="text-[8px] font-mono text-stone-600 font-semibold">
-                              +{note.tags.length - 3}
-                            </span>
-                          )}
-                          {note.coordinates && (
-                            <span className="text-[8px] font-mono text-teal-400/60 font-bold ml-auto flex items-center gap-0.5">
-                              {note.coordinates.label} Coord
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Parchment Scroll View / Add Form / Edit Form */}
-        <div className="lg:col-span-5 flex flex-col min-h-[480px]">
+        {/* RIGHT COLUMN: Parchment Scroll View / Add Form / Edit Form (takes 9 cols for wide reading layout) */}
+        <div className="lg:col-span-9 flex flex-col min-h-[480px]">
           {isAdding || isEditing ? (
             /* Chronicle Editor/Creator Form */
             <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="flex-1 bg-[#120e0a] border border-amber-900/30 p-6 shadow-2xl flex flex-col justify-between text-xs max-w-3xl mx-auto w-full relative">
@@ -1046,7 +1005,6 @@ export default function Codex() {
                       onChange={e => {
                         const catVal = e.target.value;
                         setEditCategory(catVal);
-                        // Auto-align default subcategory
                         const firstSub = TAXONOMY.find(t => t.value === catVal)?.subcategories[0]?.value || "";
                         setEditSubcategory(firstSub);
                       }}
@@ -1128,14 +1086,14 @@ export default function Codex() {
             </form>
           ) : selectedNote ? (
             /* Parchment Read Screen */
-            <div className="flex-1 bg-[#16110c] border border-amber-900/45 p-7 shadow-2xl relative flex flex-col justify-between parchment-glow w-full max-w-3xl mx-auto animate-in fade-in duration-300">
+            <div className="flex-1 bg-[#16110c] border border-amber-900/45 p-4 sm:p-7 shadow-2xl relative flex flex-col justify-between parchment-glow w-full max-w-3xl mx-auto animate-in fade-in duration-300">
               {/* Decorative border overlays */}
               <div className="absolute inset-1.5 border border-amber-950/20 pointer-events-none" />
               <div className="absolute top-3.5 left-3.5 right-3.5 bottom-3.5 border border-dashed border-amber-900/15 pointer-events-none" />
 
-              <div className="flex flex-col flex-1 justify-between">
+              <div className="flex flex-col flex-1 justify-between z-10">
                 {/* Header Title & Tags */}
-                <div className="space-y-3 z-10 border-b border-amber-900/20 pb-4">
+                <div className="space-y-3 border-b border-amber-900/20 pb-4">
                   <div className="flex justify-between items-baseline flex-wrap gap-2">
                     <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight flex items-center gap-2">
                       {selectedNote.title}
@@ -1177,7 +1135,7 @@ export default function Codex() {
                 </div>
 
                 {/* Scroll Description contents */}
-                <div className="flex-1 overflow-y-auto font-serif text-sm leading-relaxed text-stone-200/90 py-5 pr-2 whitespace-pre-wrap select-text max-h-[36vh] min-h-[180px]">
+                <div className="flex-1 overflow-y-auto font-serif text-sm sm:text-base leading-relaxed text-stone-200/90 py-5 pr-2 whitespace-pre-wrap select-text max-h-[38vh] min-h-[180px]">
                   {selectedNote.content || <em className="text-stone-500">No chronicle description. Click edit to compile.</em>}
                 </div>
 
@@ -1186,7 +1144,7 @@ export default function Codex() {
                   const residents = codexNotes.filter(n => n.stateId === selectedNote.stateId && !n.isState && (n.category === "entities" || n.category === "systems") && isNoteVisible(n));
                   if (residents.length === 0) return null;
                   return (
-                    <div className="border-t border-amber-900/10 pt-4 mt-4 space-y-1.5 text-left z-10">
+                    <div className="border-t border-amber-900/10 pt-4 mt-4 space-y-1.5 text-left">
                       <span className="text-[9px] font-mono uppercase tracking-widest text-stone-500/80 font-bold block">
                         Resident Figures & Factions Reference:
                       </span>
@@ -1208,7 +1166,7 @@ export default function Codex() {
               </div>
 
               {/* Actions Bottom Bar */}
-              <div className="border-t border-amber-900/20 pt-4 flex justify-between items-center mt-4">
+              <div className="border-t border-amber-900/20 pt-4 flex justify-between items-center mt-4 z-10">
                 <Button
                   onClick={() => handleDeleteNote(selectedNote.id)}
                   variant="ghost" 

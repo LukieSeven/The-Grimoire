@@ -224,6 +224,7 @@ export interface CodexNote {
   coordinates?: { x: number; y: number; label?: string } | null;
   secretPassword?: string | null;
   stateId?: number | null;
+  parentBurgId?: number | null;
   isState?: boolean;
   isCapital?: boolean;
   population?: number;
@@ -834,6 +835,7 @@ export const storage = {
         if (initMatch) {
           if (
             n.stateId !== initMatch.stateId || 
+            n.parentBurgId !== initMatch.parentBurgId || 
             n.isState !== initMatch.isState || 
             n.isCapital !== initMatch.isCapital ||
             n.population !== initMatch.population ||
@@ -843,6 +845,7 @@ export const storage = {
             return {
               ...n,
               stateId: initMatch.stateId,
+              parentBurgId: initMatch.parentBurgId,
               isState: initMatch.isState,
               isCapital: initMatch.isCapital,
               population: initMatch.population,

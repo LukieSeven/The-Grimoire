@@ -2033,33 +2033,28 @@ export default function CharacterSheet() {
     <div className="p-4 max-w-7xl mx-auto animate-in fade-in duration-500 space-y-4">
       
       {/* ── Top Header Controls ── */}
-      <div className="flex items-center justify-between border-b border-border/40 pb-3 flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => setLocation("/grimoire")} className="text-muted-foreground hover:text-foreground rounded-none cursor-pointer pl-0 font-serif">
-            <ArrowLeft className="w-4 h-4 mr-1.5" /> Return to Grimoire
+      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-4 flex flex-wrap items-center justify-between gap-4 rounded-lg shadow-sm w-full mb-4">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => setLocation("/grimoire")} className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all">
+            <ArrowLeft className="w-3.5 h-3.5 text-primary" /> Return to Grimoire
           </Button>
-          <div className="h-4 w-px bg-border/40" />
-          <div className="flex items-center gap-2">
-            <img 
-              src={`${import.meta.env.BASE_URL}logo.jpg`} 
-              alt="Logo" 
-              className="w-6 h-6 rounded-md object-cover border border-primary/25 shadow-sm" 
-            />
-            <span className="font-serif text-xs font-bold text-primary tracking-wider uppercase">The Grimoire</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+          <div className="h-4 w-px bg-border/30" />
           <CustomizeToolDialog />
+          <div className="h-4 w-px bg-border/30" />
           <RollGuideDialog />
-          <Button variant="outline" size="sm" onClick={() => exportCharacterJSON(id)} className="h-8 text-xs border-primary/40 text-primary rounded-none cursor-pointer">
-            <Download className="w-3.5 h-3.5 mr-1" /> Export Character
-          </Button>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".json" className="hidden" />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs border-primary/40 text-primary rounded-none cursor-pointer">
-            <Upload className="w-3.5 h-3.5 mr-1" /> Import Character
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all">
+            <Upload className="w-3.5 h-3.5" /> Import Character
           </Button>
+          <Button variant="outline" size="sm" onClick={() => exportCharacterJSON(id)} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all">
+            <Download className="w-3.5 h-3.5" /> Export Character
+          </Button>
+          
+          <div className="h-4 w-px bg-border/30" />
           <EditCharacterDialog character={character} />
-          <Button variant="destructive" size="icon" className="h-8 w-8 rounded-none cursor-pointer" onClick={handleDelete}>
+          <Button variant="destructive" size="icon" className="h-8 w-8 rounded-md cursor-pointer flex items-center justify-center transition-all" onClick={handleDelete}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
