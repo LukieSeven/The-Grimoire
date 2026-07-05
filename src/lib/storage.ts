@@ -223,6 +223,10 @@ export interface CodexNote {
   images?: string[];
   coordinates?: { x: number; y: number; label?: string } | null;
   secretPassword?: string | null;
+  stateId?: number | null;
+  isState?: boolean;
+  isCapital?: boolean;
+  population?: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -21,22 +21,13 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// Taxonomy Configuration matching requested tiered hierarchy
+// Taxonomy Configuration
 const TAXONOMY = [
   {
     value: "world",
     label: "WORLD",
     icon: "🌍",
-    subcategories: [
-      { value: "world-veridia", label: "Veridia" },
-      { value: "world-regions", label: "Regions" },
-      { value: "world-kingdoms", label: "Kingdoms" },
-      { value: "world-cities", label: "Cities" },
-      { value: "world-settlements", label: "Settlements" },
-      { value: "world-landmarks", label: "Landmarks" },
-      { value: "world-biomes", label: "Biomes" },
-      { value: "world-planes", label: "Planes" }
-    ]
+    subcategories: [] // Nested dynamically in sidebar tree
   },
   {
     value: "entities",
@@ -133,6 +124,40 @@ const TAXONOMY = [
   }
 ];
 
+// Flat List of Governing Realms in Cormant Map Data
+const REALMS_LIST = [
+  { id: 0, name: "Wildlands (Neutral Territories)" },
+  { id: 1, name: "Kingdom of Pfaf" },
+  { id: 2, name: "Principality of Coulonia" },
+  { id: 3, name: "Duchy of Otnausern" },
+  { id: 4, name: "Kingdom of Schopfloch" },
+  { id: 5, name: "Duchy of Urgasia" },
+  { id: 6, name: "Duchy of Steileria" },
+  { id: 7, name: "Duchy of Ondijarvia" },
+  { id: 8, name: "Atiladian Empire" },
+  { id: 9, name: "Grand Duchy of Rorenia" },
+  { id: 10, name: "Principality of Lausachlinia" },
+  { id: 11, name: "Duchy of Torioria" },
+  { id: 12, name: "Kingdom of Sezasecia" },
+  { id: 13, name: "Duchy of Coria" },
+  { id: 14, name: "Kingdom of Naueschia" },
+  { id: 15, name: "Kingdom of Garfalgar" },
+  { id: 16, name: "Kingdom of Tivetrenaia" },
+  { id: 17, name: "Helolisian Empire" },
+  { id: 18, name: "Murg Theocracy" },
+  { id: 19, name: "Grand Duchy of Dubria" },
+  { id: 20, name: "Republic of Lolida" },
+  { id: 21, name: "Protectorate of Fuencoma" },
+  { id: 22, name: "Republic of Yunseguria" },
+  { id: 23, name: "Grand Duchy of Glins" },
+  { id: 24, name: "Kingdom of Gorbachzaria" },
+  { id: 25, name: "Grand Duchy of Buscadosia" },
+  { id: 26, name: "Protectorate of Sandilia" },
+  { id: 27, name: "Lougenian Empire" },
+  { id: 28, name: "Charian Marches" },
+  { id: 29, name: "Kingdom of Pontefia" }
+];
+
 export default function Codex() {
   const [, setLocation] = useLocation();
   
@@ -154,12 +179,14 @@ export default function Codex() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
   
-  // Track expanded parent tabs in the left sidebar
+  // Collapsible Left Index states
   const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({
     world: true,
     entities: false,
     bestiary: false
   });
+  const [expandedCountries, setExpandedCountries] = useState<Record<number, boolean>>({});
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
 
   // Editor states
   const [isEditing, setIsEditing] = useState(false);
@@ -170,6 +197,7 @@ export default function Codex() {
   const [editSubcategory, setEditSubcategory] = useState("world-cities");
   const [editTags, setEditTags] = useState("");
   const [editSecretPassword, setEditSecretPassword] = useState("");
+  const [editStateId, setEditStateId] = useState<number | null>(null);
 
   // Push to Character States
   const [isPushModalOpen, setIsPushModalOpen] = useState(false);
@@ -181,6 +209,29 @@ export default function Codex() {
   // Toggle Parent collapse
   const toggleParent = (parentVal: string) => {
     setExpandedParents(prev => ({ ...prev, [parentVal]: !prev[parentVal] }));
+  };
+
+  const toggleCountryExpand = (countryId: number) => {
+    setExpandedCountries(prev => ({ ...prev, [countryId]: !prev[countryId] }));
+  };
+
+  const toggleFolderExpand = (folderKey: string) => {
+    setExpandedFolders(prev => ({ ...prev, [folderKey]: !prev[folderKey] }));
+  };
+
+  // Helper to determine if a note is unlocked/visible
+  const isNoteVisible = (note: any) => {
+    if ((note.title || "").toLowerCase().includes("random encounter")) return false;
+    if (note.secretPassword) {
+      const sanitize = (str: string) => 
+        (str || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+          .replace(/\s+/g, " ");
+      return unlockedPasswords.some(pw => sanitize(pw) === sanitize(note.secretPassword));
+    }
+    return true;
   };
 
   // Filter notes based on hierarchy selection, search query, and secret password locks
@@ -218,42 +269,100 @@ export default function Codex() {
     return true;
   });
 
+  // Wildlands Virtual Region overview note
+  const wildlandsVirtualNote = {
+    id: -99,
+    title: "Wildlands (Neutral Territories)",
+    content: "Unclaimed lands, wild borderlands, and neutral ruins across Cormant governed by no crown.\n\nHistorically, these territories serve as buffer zones between warring kingdoms, populated by nomadic tribes, free companies, monster nests, and independent settlements that reject royal sovereignty. Dangerous but rich in unexplored mysteries.",
+    category: "world",
+    subcategory: "world-regions",
+    tags: ["WILDLANDS"],
+    stateId: 0,
+    isState: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
   // Selected Note fallback
-  const selectedNote = codexNotes.find(n => n.id === selectedNoteId) || filteredNotes[0] || null;
+  const selectedNote = selectedNoteId === -99 
+    ? wildlandsVirtualNote 
+    : (codexNotes.find(n => n.id === selectedNoteId) || filteredNotes[0] || null);
 
   // Auto-align selected note on search/navigation change
   useEffect(() => {
     if (filteredNotes.length > 0) {
-      const exists = filteredNotes.some(n => n.id === selectedNoteId);
+      const exists = filteredNotes.some(n => n.id === selectedNoteId) || selectedNoteId === -99;
       if (!exists) {
         setSelectedNoteId(filteredNotes[0].id);
       }
-    } else {
+    } else if (selectedNoteId !== -99) {
       setSelectedNoteId(null);
     }
   }, [selectedCategory, selectedSubcategory, searchTerm]);
 
+  // Auto-expand parents/countries on search query changes
+  useEffect(() => {
+    if (searchTerm.trim().length > 1) {
+      const activeMatches = filteredNotes;
+      const countriesToExpand: Record<number, boolean> = {};
+      const foldersToExpand: Record<string, boolean> = {};
+
+      activeMatches.forEach(note => {
+        if (note.stateId !== undefined && note.stateId !== null) {
+          const countryNode = codexNotes.find(c => c.category === "world" && c.isState && c.stateId === note.stateId);
+          const countryId = countryNode ? countryNode.id : (note.stateId === 0 ? -99 : null);
+          
+          if (countryId !== null) {
+            countriesToExpand[countryId] = true;
+            
+            if (note.subcategory === "world-cities" || note.subcategory === "world-settlements") {
+              foldersToExpand[`${countryId}-cities`] = true;
+            } else if (note.subcategory === "world-landmarks" || note.category === "maps" || note.category === "lore") {
+              foldersToExpand[`${countryId}-landmarks`] = true;
+            } else if (note.category === "entities" || note.category === "systems") {
+              foldersToExpand[`${countryId}-entities`] = true;
+            }
+          }
+        }
+      });
+
+      setExpandedCountries(prev => ({ ...prev, ...countriesToExpand }));
+      setExpandedFolders(prev => ({ ...prev, ...foldersToExpand }));
+      setExpandedParents(prev => ({ ...prev, world: true }));
+    }
+  }, [searchTerm, filteredNotes, codexNotes]);
+
   // Handle Edit Click
   const handleStartEdit = () => {
-    if (!selectedNote) return;
+    if (!selectedNote || selectedNote.id === -99) return;
     setEditTitle(selectedNote.title);
     setEditContent(selectedNote.content);
     setEditCategory(selectedNote.category || "world");
     setEditSubcategory(selectedNote.subcategory || "world-cities");
     setEditTags(selectedNote.tags ? selectedNote.tags.join(", ") : "");
     setEditSecretPassword(selectedNote.secretPassword || "");
+    setEditStateId(selectedNote.stateId !== undefined ? selectedNote.stateId : null);
     setIsEditing(true);
   };
 
   // Handle Save Edit
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedNote) return;
+    if (!selectedNote || selectedNote.id === -99) return;
     
     const tagsArray = editTags
       .split(",")
       .map(t => t.trim().toUpperCase())
       .filter(Boolean);
+
+    // Auto-tag with governing realm name
+    const realmObj = REALMS_LIST.find(r => r.id === editStateId);
+    if (realmObj && editStateId !== null) {
+      const realmTagName = realmObj.name.split(" ")[0].replace(/[^a-zA-Z]/g, "").toUpperCase();
+      if (realmTagName && !tagsArray.includes(realmTagName)) {
+        tagsArray.push(realmTagName);
+      }
+    }
 
     updateCodex.mutate({
       id: selectedNote.id,
@@ -263,7 +372,8 @@ export default function Codex() {
         category: editCategory,
         subcategory: editSubcategory,
         tags: tagsArray,
-        secretPassword: editSecretPassword.trim() || null
+        secretPassword: editSecretPassword.trim() || null,
+        stateId: editStateId
       }
     }, {
       onSuccess: () => {
@@ -281,6 +391,7 @@ export default function Codex() {
     setEditSubcategory(selectedSubcategory === "all" ? "world-cities" : selectedSubcategory);
     setEditTags("");
     setEditSecretPassword("");
+    setEditStateId(null);
     setIsAdding(true);
   };
 
@@ -292,6 +403,15 @@ export default function Codex() {
       .map(t => t.trim().toUpperCase())
       .filter(Boolean);
 
+    // Auto-tag with governing realm name
+    const realmObj = REALMS_LIST.find(r => r.id === editStateId);
+    if (realmObj && editStateId !== null) {
+      const realmTagName = realmObj.name.split(" ")[0].replace(/[^a-zA-Z]/g, "").toUpperCase();
+      if (realmTagName && !tagsArray.includes(realmTagName)) {
+        tagsArray.push(realmTagName);
+      }
+    }
+
     createCodex.mutate({
       title: editTitle,
       content: editContent,
@@ -299,7 +419,10 @@ export default function Codex() {
       subcategory: editSubcategory,
       tags: tagsArray,
       coordinates: null,
-      secretPassword: editSecretPassword.trim() || null
+      secretPassword: editSecretPassword.trim() || null,
+      stateId: editStateId,
+      isState: false,
+      isCapital: false
     }, {
       onSuccess: (newNote) => {
         setIsAdding(false);
@@ -311,6 +434,7 @@ export default function Codex() {
 
   // Handle Delete
   const handleDeleteNote = (id: number) => {
+    if (id === -99) return;
     if (confirm("Are you absolutely sure you want to erase this chronicle from the Codex?")) {
       deleteCodex.mutate({ id }, {
         onSuccess: () => {
@@ -367,7 +491,11 @@ export default function Codex() {
               subcategory: note.subcategory || "world-landmarks",
               tags: note.tags || ["IMPORTED"],
               coordinates: note.coordinates || null,
-              secretPassword: note.secretPassword || null
+              secretPassword: note.secretPassword || null,
+              stateId: note.stateId || null,
+              isState: !!note.isState,
+              isCapital: !!note.isCapital,
+              population: note.population || 0
             });
             importCount++;
           }
@@ -404,21 +532,6 @@ export default function Codex() {
         toast.success(`Pushed chronicle to ${charName}'s Campaign Notes!`);
       }
     });
-  };
-
-  // Helper to determine if a note is unlocked/visible
-  const isNoteVisible = (note: any) => {
-    if (note.title.toLowerCase().includes("random encounter")) return false;
-    if (note.secretPassword) {
-      const sanitize = (str: string) => 
-        (str || "")
-          .trim()
-          .toLowerCase()
-          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
-          .replace(/\s+/g, " ");
-      return unlockedPasswords.some(pw => sanitize(pw) === sanitize(note.secretPassword));
-    }
-    return true;
   };
 
   // Get active subcategory label
@@ -552,8 +665,182 @@ export default function Codex() {
                     </button>
                   </div>
 
-                  {/* Nested Subcategories child row list */}
-                  {isExpanded && (
+                  {/* Dynamic Geographical Nesting for WORLD category */}
+                  {group.value === "world" && isExpanded && (
+                    <div className="pl-3 border-l border-stone-900/80 space-y-2.5 pt-1 animate-in slide-in-from-top-1 duration-150">
+                      {(() => {
+                        const activeCountries = codexNotes.filter(n => n.category === "world" && n.isState && isNoteVisible(n));
+                        const wildlandsNode = {
+                          id: -99,
+                          title: "Wildlands (Neutral Territories)",
+                          content: "Unclaimed lands, wild borderlands, and neutral ruins across Cormant governed by no crown.",
+                          category: "world",
+                          subcategory: "world-regions",
+                          tags: ["WILDLANDS"],
+                          stateId: 0,
+                          isState: true
+                        };
+                        const allCountries = [...activeCountries, wildlandsNode];
+
+                        return allCountries.map(country => {
+                          const isCountryExpanded = !!expandedCountries[country.id];
+                          const isSelected = selectedNote?.id === country.id;
+                          
+                          // Get nested subfolders counts
+                          const childSettlements = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-cities" || n.subcategory === "world-settlements") && !n.isState && isNoteVisible(n));
+                          const childLandmarks = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-landmarks" || n.category === "maps" || n.category === "lore") && !n.isState && isNoteVisible(n));
+                          const childEntities = codexNotes.filter(n => n.stateId === country.stateId && (n.category === "entities" || n.category === "systems") && !n.isState && isNoteVisible(n));
+                          const totalChildren = childSettlements.length + childLandmarks.length + childEntities.length;
+
+                          return (
+                            <div key={country.id} className="space-y-1">
+                              {/* Country Title Row */}
+                              <div className="flex items-center justify-between group/country">
+                                <button
+                                  onClick={() => {
+                                    setSelectedNoteId(country.id);
+                                    setIsEditing(false);
+                                    setIsAdding(false);
+                                  }}
+                                  className={`flex-1 text-left py-0.5 px-1.5 text-xs font-serif transition-all cursor-pointer flex items-center gap-1 border border-transparent ${
+                                    isSelected 
+                                      ? "text-amber-400 font-bold bg-amber-950/[0.04] border-amber-900/20" 
+                                      : "text-stone-300 hover:text-white"
+                                  }`}
+                                >
+                                  <span>📍</span>
+                                  <span className="truncate">{country.title}</span>
+                                  <span className="text-[8px] font-mono text-stone-600 font-normal">({totalChildren})</span>
+                                </button>
+                                <button
+                                  onClick={() => toggleCountryExpand(country.id)}
+                                  className="p-1 text-stone-500 hover:text-stone-300 rounded hover:bg-stone-900/60 transition-colors"
+                                >
+                                  {isCountryExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+
+                              {/* Nested Subfolders list */}
+                              {isCountryExpanded && (
+                                <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5">
+                                  {/* Folder 1: Cities & Settlements */}
+                                  <div className="space-y-0.5">
+                                    <button 
+                                      onClick={() => toggleFolderExpand(`${country.id}-cities`)}
+                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>{expandedFolders[`${country.id}-cities`] ? "📂" : "📁"}</span>
+                                      <span>Cities & Settlements ({childSettlements.length})</span>
+                                    </button>
+                                    {expandedFolders[`${country.id}-cities`] && (
+                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
+                                        {childSettlements
+                                          .sort((a, b) => {
+                                            if (a.isCapital && !b.isCapital) return -1;
+                                            if (!a.isCapital && b.isCapital) return 1;
+                                            return (b.population || 0) - (a.population || 0);
+                                          })
+                                          .map(note => {
+                                            const isSelectedNote = selectedNote?.id === note.id;
+                                            return (
+                                              <button
+                                                key={note.id}
+                                                onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                                className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                                  isSelectedNote 
+                                                    ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                                    : "text-stone-400 border-transparent hover:text-stone-200"
+                                                }`}
+                                              >
+                                                {note.isCapital ? "👑 " : ""}{note.title}
+                                              </button>
+                                            );
+                                          })}
+                                        {childSettlements.length === 0 && (
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No settlements compiled.</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Folder 2: Landmarks & Dungeons */}
+                                  <div className="space-y-0.5">
+                                    <button 
+                                      onClick={() => toggleFolderExpand(`${country.id}-landmarks`)}
+                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
+                                      <span>Landmarks & Dungeons ({childLandmarks.length})</span>
+                                    </button>
+                                    {expandedFolders[`${country.id}-landmarks`] && (
+                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
+                                        {childLandmarks.map(note => {
+                                          const isSelectedNote = selectedNote?.id === note.id;
+                                          return (
+                                            <button
+                                              key={note.id}
+                                              onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                                isSelectedNote 
+                                                  ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                                  : "text-stone-400 border-transparent hover:text-stone-200"
+                                              }`}
+                                            >
+                                              {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
+                                            </button>
+                                          );
+                                        })}
+                                        {childLandmarks.length === 0 && (
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No landmarks cataloged.</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Folder 3: Entities & Factions */}
+                                  <div className="space-y-0.5">
+                                    <button 
+                                      onClick={() => toggleFolderExpand(`${country.id}-entities`)}
+                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>{expandedFolders[`${country.id}-entities`] ? "📂" : "📁"}</span>
+                                      <span>Entities & Factions ({childEntities.length})</span>
+                                    </button>
+                                    {expandedFolders[`${country.id}-entities`] && (
+                                      <div className="pl-3 space-y-0.5 border-l border-stone-900/40">
+                                        {childEntities.map(note => {
+                                          const isSelectedNote = selectedNote?.id === note.id;
+                                          return (
+                                            <button
+                                              key={note.id}
+                                              onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
+                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
+                                                isSelectedNote 
+                                                  ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
+                                                  : "text-stone-400 border-transparent hover:text-stone-200"
+                                              }`}
+                                            >
+                                              👤 {note.title}
+                                            </button>
+                                          );
+                                        })}
+                                        {childEntities.length === 0 && (
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5">No entities linked.</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Standard Flat Subcategories child list for other categories */}
+                  {group.value !== "world" && isExpanded && (
                     <div className="pl-6 border-l border-stone-900/80 space-y-1 pt-0.5 animate-in slide-in-from-top-1 duration-150">
                       {group.subcategories.map((sub) => {
                         const isSubSelected = selectedSubcategory === sub.value;
@@ -716,20 +1003,39 @@ export default function Codex() {
               <div className="absolute inset-1 border border-amber-950/15 pointer-events-none" />
               <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/10 pointer-events-none" />
 
-              <div className="space-y-4 flex-1">
+              <div className="space-y-3.5 flex-1 overflow-y-auto max-h-[72vh] pr-1">
                 <h3 className="text-base font-bold text-amber-500 border-b border-amber-900/30 pb-2">
                   {isAdding ? "Forge New Chronicle" : `Re-write: ${selectedNote?.title}`}
                 </h3>
 
-                <div className="space-y-1">
-                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Chronicle Title</label>
-                  <Input 
-                    value={editTitle} 
-                    onChange={e => setEditTitle(e.target.value)} 
-                    required 
-                    placeholder="e.g. Mount Troyzan" 
-                    className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Chronicle Title</label>
+                    <Input 
+                      value={editTitle} 
+                      onChange={e => setEditTitle(e.target.value)} 
+                      required 
+                      placeholder="e.g. Mount Troyzan" 
+                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
+                    />
+                  </div>
+
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold">Governing Realm / territory</label>
+                    <select
+                      value={editStateId !== null ? editStateId : ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditStateId(val === "" ? null : Number(val));
+                      }}
+                      className="w-full bg-stone-950 border border-stone-900 h-8 rounded-none px-2 text-xs font-serif text-stone-200 focus:outline-none focus:border-amber-600/40"
+                    >
+                      <option value="">Wildlands / None</option>
+                      {REALMS_LIST.filter(r => r.id !== 0).map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -783,25 +1089,25 @@ export default function Codex() {
                       value={editSecretPassword} 
                       onChange={e => setEditSecretPassword(e.target.value)} 
                       placeholder="e.g. corvustemple" 
-                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40 animate-pulse"
+                      className="bg-stone-950 border-stone-900 rounded-none h-8 text-xs font-serif text-stone-200 focus-visible:ring-amber-600/40"
                       title="If set, this note is hidden until this passphrase is typed in the bookcase ledge"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1 flex-1 flex flex-col">
+                <div className="space-y-1 flex flex-col">
                   <label className="text-[9px] font-mono uppercase tracking-widest text-stone-400 block font-bold mb-1">Description / Chronicle text</label>
                   <Textarea 
                     value={editContent} 
                     onChange={e => setEditContent(e.target.value)} 
                     required 
                     placeholder="Record what is written in the legends, or describe the landmarks..." 
-                    className="bg-stone-950 border-stone-900 rounded-none flex-1 min-h-[220px] text-xs font-serif leading-relaxed text-stone-200 focus-visible:ring-amber-600/40"
+                    className="bg-stone-950 border-stone-900 rounded-none min-h-[180px] text-xs font-serif leading-relaxed text-stone-200 focus-visible:ring-amber-600/40"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-amber-900/30 mt-4">
+              <div className="flex justify-end gap-2 pt-3 border-t border-amber-900/30 mt-3">
                 <Button 
                   type="button" 
                   variant="ghost" 
@@ -827,46 +1133,78 @@ export default function Codex() {
               <div className="absolute inset-1.5 border border-amber-950/20 pointer-events-none" />
               <div className="absolute top-3.5 left-3.5 right-3.5 bottom-3.5 border border-dashed border-amber-900/15 pointer-events-none" />
 
-              {/* Header Title & Tags */}
-              <div className="space-y-3 z-10 border-b border-amber-900/20 pb-4">
-                <div className="flex justify-between items-baseline flex-wrap gap-2">
-                  <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight flex items-center gap-2">
-                    {selectedNote.title}
-                    {selectedNote.secretPassword && (
-                      <Lock className="w-4 h-4 text-amber-500" title="Decrypted secret entry" />
-                    )}
-                  </h2>
-                  
-                  <span className="text-[9px] uppercase font-mono tracking-widest px-2 py-0.5 border border-amber-900/40 rounded bg-amber-950/20 text-amber-400">
-                    {selectedNote.subcategory ? selectedNote.subcategory.split("-")[1] : selectedNote.category}
-                  </span>
+              <div className="flex flex-col flex-1 justify-between">
+                {/* Header Title & Tags */}
+                <div className="space-y-3 z-10 border-b border-amber-900/20 pb-4">
+                  <div className="flex justify-between items-baseline flex-wrap gap-2">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-amber-500 tracking-wide leading-tight flex items-center gap-2">
+                      {selectedNote.title}
+                      {selectedNote.secretPassword && (
+                        <Lock className="w-4 h-4 text-amber-500" title="Decrypted secret entry" />
+                      )}
+                    </h2>
+                    
+                    <span className="text-[9px] uppercase font-mono tracking-widest px-2 py-0.5 border border-amber-900/40 rounded bg-amber-950/20 text-amber-400">
+                      {selectedNote.subcategory ? selectedNote.subcategory.split("-")[1] : selectedNote.category}
+                    </span>
+                  </div>
+
+                  {selectedNote.tags && selectedNote.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {selectedNote.tags.map((tag, idx) => (
+                        <span key={idx} className="text-[9px] font-mono bg-amber-950/15 border border-amber-900/30 text-amber-500/80 px-2 py-0.5 rounded-none font-semibold uppercase tracking-wider">
+                          #{tag}
+                        </span>
+                      ))}
+                      {selectedNote.secretPassword && (
+                        <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1">
+                          Lock: "{selectedNote.secretPassword}"
+                        </span>
+                      )}
+                      {selectedNote.stateId !== undefined && selectedNote.stateId !== null && (
+                        <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1.5">
+                          Realm: {REALMS_LIST.find(r => r.id === selectedNote.stateId)?.name || "Wildlands"}
+                        </span>
+                      )}
+                      {selectedNote.coordinates && (
+                        <span className="text-[9px] font-mono text-teal-400 font-semibold border border-teal-900/40 px-2 py-0.5 rounded-none bg-teal-950/10 flex items-center gap-1.5 ml-auto">
+                          <MapPin className="w-3 h-3 text-teal-400" />
+                          Coord: X: {selectedNote.coordinates.x.toFixed(0)}, Y: {selectedNote.coordinates.y.toFixed(0)} ({selectedNote.coordinates.label})
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                {selectedNote.tags && selectedNote.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    {selectedNote.tags.map((tag, idx) => (
-                      <span key={idx} className="text-[9px] font-mono bg-amber-950/15 border border-amber-900/30 text-amber-500/80 px-2 py-0.5 rounded-none font-semibold uppercase tracking-wider">
-                        #{tag}
-                      </span>
-                    ))}
-                    {selectedNote.secretPassword && (
-                      <span className="text-[9px] font-mono text-amber-500 font-semibold border border-amber-900/40 px-2 py-0.5 rounded-none bg-amber-950/10 flex items-center gap-1">
-                        Lock: "{selectedNote.secretPassword}"
-                      </span>
-                    )}
-                    {selectedNote.coordinates && (
-                      <span className="text-[9px] font-mono text-teal-400 font-semibold border border-teal-900/40 px-2 py-0.5 rounded-none bg-teal-950/10 flex items-center gap-1.5 ml-auto">
-                        <MapPin className="w-3 h-3 text-teal-400" />
-                        Coord: X: {selectedNote.coordinates.x.toFixed(0)}, Y: {selectedNote.coordinates.y.toFixed(0)} ({selectedNote.coordinates.label})
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+                {/* Scroll Description contents */}
+                <div className="flex-1 overflow-y-auto font-serif text-sm leading-relaxed text-stone-200/90 py-5 pr-2 whitespace-pre-wrap select-text max-h-[36vh] min-h-[180px]">
+                  {selectedNote.content || <em className="text-stone-500">No chronicle description. Click edit to compile.</em>}
+                </div>
 
-              {/* Scroll Description contents */}
-              <div className="flex-1 overflow-y-auto font-serif text-sm leading-relaxed text-stone-200/90 py-6 pr-2 whitespace-pre-wrap select-text max-h-[38vh] min-h-[220px]">
-                {selectedNote.content || <em className="text-stone-500">No chronicle description. Click edit to compile.</em>}
+                {/* Faint Resident Figures & Factions listing at the very bottom (as reference) */}
+                {selectedNote.isState && (() => {
+                  const residents = codexNotes.filter(n => n.stateId === selectedNote.stateId && !n.isState && (n.category === "entities" || n.category === "systems") && isNoteVisible(n));
+                  if (residents.length === 0) return null;
+                  return (
+                    <div className="border-t border-amber-900/10 pt-4 mt-4 space-y-1.5 text-left z-10">
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-stone-500/80 font-bold block">
+                        Resident Figures & Factions Reference:
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {residents.map(r => (
+                          <button
+                            key={r.id}
+                            onClick={() => setSelectedNoteId(r.id)}
+                            className="text-stone-400 hover:text-amber-500 hover:underline text-[10px] font-serif flex items-center gap-1 cursor-pointer bg-[#100b08] border border-amber-900/15 px-2 py-0.5 transition-colors"
+                          >
+                            <span>{r.category === "entities" ? "👤" : "🏛️"}</span>
+                            <span>{r.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Actions Bottom Bar */}
@@ -875,7 +1213,8 @@ export default function Codex() {
                   onClick={() => handleDeleteNote(selectedNote.id)}
                   variant="ghost" 
                   size="sm" 
-                  className="text-stone-500 hover:text-red-400 hover:bg-red-950/10 h-8 rounded-none cursor-pointer font-serif"
+                  disabled={selectedNote.id === -99}
+                  className="text-stone-500 hover:text-red-400 hover:bg-red-950/10 h-8 rounded-none cursor-pointer font-serif disabled:opacity-40"
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Erase
                 </Button>
@@ -885,7 +1224,8 @@ export default function Codex() {
                     onClick={handleStartEdit}
                     variant="outline"
                     size="sm"
-                    className="h-8 text-xs font-serif border border-stone-850 hover:bg-stone-900 text-stone-400 hover:text-stone-200 rounded-none px-3.5 font-bold cursor-pointer"
+                    disabled={selectedNote.id === -99}
+                    className="h-8 text-xs font-serif border border-stone-850 hover:bg-stone-900 text-stone-400 hover:text-stone-200 rounded-none px-3.5 font-bold cursor-pointer disabled:opacity-40"
                   >
                     Edit Note
                   </Button>
@@ -893,7 +1233,8 @@ export default function Codex() {
                   <Button 
                     onClick={() => handleOpenPushModal(selectedNote)}
                     size="sm" 
-                    className="h-8 text-xs font-serif bg-amber-600 hover:bg-amber-500 text-stone-950 px-4 font-bold rounded-none flex items-center gap-1.5 cursor-pointer shadow-md"
+                    disabled={selectedNote.id === -99}
+                    className="h-8 text-xs font-serif bg-amber-600 hover:bg-amber-500 text-stone-950 px-4 font-bold rounded-none flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-40"
                     title="Push this coordinate/lore note directly to a character notes sheet"
                   >
                     <Send className="w-3.5 h-3.5 text-stone-900" /> Push to Character
