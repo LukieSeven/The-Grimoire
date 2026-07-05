@@ -825,18 +825,51 @@ export const storage = {
       list = initialCodex as CodexNote[];
       setList(KEYS.codex, list);
     } else {
-      // Migrate legacy database entries that do not have the 'subcategory' property
       let modified = false;
+      const initialCodexMap = new Map((initialCodex as CodexNote[]).map(ic => [ic.title.toLowerCase(), ic]));
+
+      // 1. Sync updated fields for existing records
       list = list.map(n => {
+        const initMatch = initialCodexMap.get(n.title.toLowerCase());
+        if (initMatch) {
+          if (
+            n.stateId !== initMatch.stateId || 
+            n.isState !== initMatch.isState || 
+            n.isCapital !== initMatch.isCapital ||
+            n.population !== initMatch.population ||
+            !n.subcategory
+          ) {
+            modified = true;
+            return {
+              ...n,
+              stateId: initMatch.stateId,
+              isState: initMatch.isState,
+              isCapital: initMatch.isCapital,
+              population: initMatch.population,
+              coordinates: initMatch.coordinates || n.coordinates,
+              subcategory: initMatch.subcategory || n.subcategory,
+              category: initMatch.category || n.category
+            };
+          }
+        }
+        
         if (!n.subcategory) {
           modified = true;
-          // Look up matching default initialCodex entry by title
-          const match = (initialCodex as CodexNote[]).find(ic => ic.title.toLowerCase() === n.title.toLowerCase());
-          const subcat = match?.subcategory || (n.category === "location" ? "world-landmarks" : n.category === "npc" ? "entities-npcs" : n.category === "bestiary" ? "bestiary-monsters" : "lore-myths");
+          const subcat = initMatch?.subcategory || (n.category === "location" ? "world-landmarks" : n.category === "npc" ? "entities-npcs" : n.category === "bestiary" ? "bestiary-monsters" : "lore-myths");
           return { ...n, subcategory: subcat };
         }
         return n;
       });
+
+      // 2. Append new entries from initialCodex (like state pages, new landmarks)
+      const existingTitles = new Set(list.map(n => n.title.toLowerCase()));
+      (initialCodex as CodexNote[]).forEach(initNote => {
+        if (!existingTitles.has(initNote.title.toLowerCase())) {
+          list.push(initNote);
+          modified = true;
+        }
+      });
+
       if (modified) {
         setList(KEYS.codex, list);
       }

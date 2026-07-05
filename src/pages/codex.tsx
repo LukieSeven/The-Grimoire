@@ -25,7 +25,7 @@ import { toast } from "sonner";
 const TAXONOMY = [
   {
     value: "world",
-    label: "WORLD",
+    label: "VERIDIA",
     icon: "🌍",
     subcategories: [] // Nested dynamically in sidebar tree
   },
