@@ -24,13 +24,19 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-// Taxonomy Configuration (NPCs removed)
+// Taxonomy Configuration (NPCs removed, planes added)
 const TAXONOMY = [
   {
     value: "world",
-    label: "VERIDIA",
+    label: "LOCATIONS",
     icon: "🌍",
-    subcategories: [] // Nested dynamically in sidebar tree
+    subcategories: [
+      { value: "world-regions", label: "Regions & Kingdoms" },
+      { value: "world-cities", label: "Cities" },
+      { value: "world-settlements", label: "Settlements" },
+      { value: "world-landmarks", label: "Landmarks" },
+      { value: "world-planes", label: "Planes & Worlds" }
+    ]
   },
   {
     value: "entities",
@@ -126,7 +132,7 @@ const TAXONOMY = [
   }
 ];
 
-// Flat List of Governing Realms in Cormant Map Data
+// Flat List of Governing Realms in Cormant Map Data (reused for Veridia kingdoms and Planes)
 const REALMS_LIST = [
   { id: 0, name: "Wildlands (Neutral Territories)" },
   { id: 1, name: "Kingdom of Pfaf" },
@@ -157,7 +163,22 @@ const REALMS_LIST = [
   { id: 26, name: "Protectorate of Sandilia" },
   { id: 27, name: "Lougenian Empire" },
   { id: 28, name: "Charian Marches" },
-  { id: 29, name: "Kingdom of Pontefia" }
+  { id: 29, name: "Kingdom of Pontefia" },
+  // Planar Clusters mapping
+  { id: 100, name: "The Psychic Planes" },
+  { id: 101, name: "The Sound Scape" },
+  { id: 102, name: "The Chrono Hold" },
+  { id: 103, name: "Void Realms" },
+  { id: 104, name: "Deverloche Plains" },
+  { id: 105, name: "The Ore Realms" },
+  { id: 106, name: "The Flora-scapes" },
+  { id: 107, name: "The Expanse" },
+  { id: 108, name: "The Stormhold" },
+  { id: 109, name: "The Stonehold" },
+  { id: 110, name: "The Lumosdeep" },
+  { id: 111, name: "The Umbraldeep" },
+  { id: 112, name: "The Frost Deep" },
+  { id: 113, name: "The Emberdeep" }
 ];
 
 export default function Codex() {
@@ -207,12 +228,15 @@ export default function Codex() {
 
   // Collapsible Left Index states
   const [expandedParents, setExpandedParents] = useState<Record<string, boolean>>({
-    world: true,
+    world: true, // LOCATIONS parent open by default
     entities: false,
     bestiary: false
   });
   const [expandedCountries, setExpandedCountries] = useState<Record<number, boolean>>({});
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
+    "locations-veridia": true, // Veridia open by default
+    "locations-planes": true // Planes open by default
+  });
   const [expandedTowns, setExpandedTowns] = useState<Record<number, boolean>>({});
 
   // Editor states
@@ -306,7 +330,7 @@ export default function Codex() {
     ? wildlandsVirtualNote 
     : (codexNotes.find(n => n.id === selectedNoteId) || filteredNotes[0] || null);
 
-  // Auto-expand parents/countries on search query changes
+  // Auto-expand parents/countries/planes on search query changes
   useEffect(() => {
     if (searchTerm.trim().length > 1) {
       const activeMatches = filteredNotes;
@@ -316,23 +340,29 @@ export default function Codex() {
 
       activeMatches.forEach(note => {
         if (note.stateId !== undefined && note.stateId !== null) {
-          const countryNode = codexNotes.find(c => c.category === "world" && c.isState && c.stateId === note.stateId);
-          const countryId = countryNode ? countryNode.id : (note.stateId === 0 ? -99 : null);
-          
-          if (countryId !== null) {
-            countriesToExpand[countryId] = true;
+          if (note.subcategory === "world-planes") {
+            foldersToExpand["locations-planes"] = true;
+            foldersToExpand[`plane-${note.stateId}`] = true;
+          } else {
+            const countryNode = codexNotes.find(c => c.category === "world" && c.isState && c.stateId === note.stateId);
+            const countryId = countryNode ? countryNode.id : (note.stateId === 0 ? -99 : null);
             
-            if (note.subcategory === "world-cities" || note.subcategory === "world-settlements") {
-              foldersToExpand[`${countryId}-cities`] = true;
-            } else if (note.subcategory === "world-landmarks" || note.category === "maps" || note.category === "lore") {
-              if (note.parentBurgId) {
+            if (countryId !== null) {
+              countriesToExpand[countryId] = true;
+              foldersToExpand["locations-veridia"] = true;
+              
+              if (note.subcategory === "world-cities" || note.subcategory === "world-settlements") {
                 foldersToExpand[`${countryId}-cities`] = true;
-                townsToExpand[note.parentBurgId] = true;
-              } else {
-                foldersToExpand[`${countryId}-landmarks`] = true;
+              } else if (note.subcategory === "world-landmarks" || note.category === "maps" || note.category === "lore") {
+                if (note.parentBurgId) {
+                  foldersToExpand[`${countryId}-cities`] = true;
+                  townsToExpand[note.parentBurgId] = true;
+                } else {
+                  foldersToExpand[`${countryId}-landmarks`] = true;
+                }
+              } else if (note.category === "entities" || note.category === "systems") {
+                foldersToExpand[`${countryId}-entities`] = true;
               }
-            } else if (note.category === "entities" || note.category === "systems") {
-              foldersToExpand[`${countryId}-entities`] = true;
             }
           }
         }
@@ -662,232 +692,257 @@ export default function Codex() {
                     </button>
                   </div>
 
-                  {/* Dynamic Geographical Nesting for VERIDIA category */}
+                  {/* Custom LOCATIONS tree layout (Veridia + Planes side-by-side nesting folders) */}
                   {group.value === "world" && isExpanded && (
                     <div className="pl-3 border-l border-stone-900/80 space-y-2.5 pt-1 animate-in slide-in-from-top-1 duration-150">
-                      {(() => {
-                        const activeCountries = codexNotes.filter(n => n.category === "world" && n.isState && isNoteVisible(n));
-                        const wildlandsNode = {
-                          id: -99,
-                          title: "Wildlands (Neutral Territories)",
-                          content: "Unclaimed lands, wild borderlands, and neutral ruins across Cormant governed by no crown.",
-                          category: "world",
-                          subcategory: "world-regions",
-                          tags: ["WILDLANDS"],
-                          stateId: 0,
-                          isState: true
-                        };
-                        const allCountries = [...activeCountries, wildlandsNode];
+                      
+                      {/* SUB-NODE 1: Veridia World Map */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between group/veridia-header">
+                          <button
+                            onClick={() => { setSelectedCategory("world"); setSelectedSubcategory("all"); }}
+                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 ${
+                              selectedCategory === "world" && selectedSubcategory !== "world-planes"
+                                ? "text-amber-400"
+                                : "text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            <span>🪐</span>
+                            <span>Veridia</span>
+                          </button>
+                          <button
+                            onClick={() => toggleFolderExpand("locations-veridia")}
+                            className="p-0.5 text-stone-500 hover:text-stone-300 transition-colors"
+                          >
+                            {expandedFolders["locations-veridia"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
 
-                        return allCountries.map(country => {
-                          const isCountryExpanded = !!expandedCountries[country.id];
-                          const isSelected = selectedNote?.id === country.id;
-                          
-                          // Get nested subfolders counts
-                          const childSettlements = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-cities" || n.subcategory === "world-settlements") && !n.isState && isNoteVisible(n));
-                          const childLandmarks = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-landmarks" || n.category === "maps" || n.category === "lore") && !n.isState && isNoteVisible(n));
-                          const childEntities = codexNotes.filter(n => n.stateId === country.stateId && (n.category === "entities" || n.category === "systems") && !n.isState && isNoteVisible(n));
-                          const totalChildren = childSettlements.length + childLandmarks.length + childEntities.length;
+                        {/* Veridia Geographic Tree */}
+                        {expandedFolders["locations-veridia"] && (
+                          <div className="pl-3 border-l border-stone-900/50 space-y-2 pt-0.5 transition-all">
+                            {(() => {
+                              const activeCountries = codexNotes.filter(n => n.category === "world" && n.isState && n.subcategory !== "world-planes" && isNoteVisible(n));
+                              const wildlandsNode = {
+                                id: -99,
+                                title: "Wildlands (Neutral Territories)",
+                                content: "Unclaimed lands, wild borderlands, and neutral ruins across Cormant governed by no crown.",
+                                category: "world",
+                                subcategory: "world-regions",
+                                tags: ["WILDLANDS"],
+                                stateId: 0,
+                                isState: true
+                              };
+                              const allCountries = [...activeCountries, wildlandsNode];
 
-                          return (
-                            <div key={country.id} className="space-y-1">
-                              {/* Country Title Row */}
-                              <div className="flex items-center justify-between group/country">
-                                <button
-                                  onClick={() => {
-                                    setSelectedNoteId(country.id);
-                                    setIsEditing(false);
-                                    setIsAdding(false);
-                                  }}
-                                  className={`flex-1 text-left py-0.5 px-1.5 text-xs font-serif transition-all cursor-pointer flex items-center gap-1 border border-transparent ${
-                                    isSelected 
-                                      ? "text-amber-400 font-bold bg-amber-950/[0.04] border-amber-900/20" 
-                                      : "text-stone-300 hover:text-white"
-                                  }`}
-                                >
-                                  <span>📍</span>
-                                  <span className="truncate">{country.title}</span>
-                                  <span className="text-[8px] font-mono text-stone-600 font-normal">({totalChildren})</span>
-                                </button>
-                                <button
-                                  onClick={() => toggleCountryExpand(country.id)}
-                                  className="p-1 text-stone-500 hover:text-stone-300 rounded hover:bg-stone-900/60 transition-colors"
-                                >
-                                  {isCountryExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                </button>
-                              </div>
+                              return allCountries.map(country => {
+                                const isCountryExpanded = !!expandedCountries[country.id];
+                                const isSelected = selectedNote?.id === country.id;
+                                
+                                const childSettlements = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-cities" || n.subcategory === "world-settlements") && !n.isState && isNoteVisible(n));
+                                const childLandmarks = codexNotes.filter(n => n.stateId === country.stateId && (n.subcategory === "world-landmarks" || n.category === "maps" || n.category === "lore") && !n.isState && isNoteVisible(n));
+                                const childEntities = codexNotes.filter(n => n.stateId === country.stateId && (n.category === "entities" || n.category === "systems") && !n.isState && isNoteVisible(n));
+                                const totalChildren = childSettlements.length + childLandmarks.length + childEntities.length;
 
-                              {/* Nested Subfolders list */}
-                              {isCountryExpanded && (
-                                <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5 animate-in slide-in-from-top-1 duration-150">
-                                  
-                                  {/* Folder 1: Cities & Settlements */}
-                                  <div className="space-y-0.5">
-                                    <button 
-                                      onClick={() => toggleFolderExpand(`${country.id}-cities`)}
-                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <span>{expandedFolders[`${country.id}-cities`] ? "📂" : "📁"}</span>
-                                      <span className="truncate">Cities & Settlements ({childSettlements.length})</span>
-                                    </button>
-                                    {expandedFolders[`${country.id}-cities`] && (
-                                      <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40 transition-all">
-                                        {childSettlements
-                                          .sort((a, b) => {
-                                            if (a.isCapital && !b.isCapital) return -1;
-                                            if (!a.isCapital && b.isCapital) return 1;
-                                            return (b.population || 0) - (a.population || 0);
-                                          })
-                                          .map(note => {
-                                            const isSelectedNote = selectedNote?.id === note.id;
-                                            
-                                            // Find local landmarks nested under this town
-                                            const localLandmarks = codexNotes.filter(n => n.parentBurgId === note.id && isNoteVisible(n));
-                                            const hasLocalLandmarks = localLandmarks.length > 0;
-                                            const isTownExpanded = !!expandedTowns[note.id];
+                                return (
+                                  <div key={country.id} className="space-y-1">
+                                    <div className="flex items-center justify-between group/country">
+                                      <button
+                                        onClick={() => { setSelectedNoteId(country.id); setIsEditing(false); setIsAdding(false); }}
+                                        className={`flex-1 text-left py-0.5 px-1.5 text-xs font-serif transition-all cursor-pointer flex items-center gap-1 border border-transparent ${
+                                          isSelected ? "text-amber-400 font-bold bg-amber-950/[0.04]" : "text-stone-300 hover:text-white"
+                                        }`}
+                                      >
+                                        <span>📍</span>
+                                        <span className="truncate">{country.title}</span>
+                                        <span className="text-[8px] font-mono text-stone-600">({totalChildren})</span>
+                                      </button>
+                                      <button onClick={() => toggleCountryExpand(country.id)} className="p-0.5 text-stone-500 hover:text-stone-300">
+                                        {isCountryExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                      </button>
+                                    </div>
 
-                                            return (
-                                              <div key={note.id} className="space-y-0.5">
-                                                <div className="flex items-center justify-between group/town">
-                                                  <button
-                                                    onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                                                    className={`flex-1 text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
-                                                      isSelectedNote 
-                                                        ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                                        : "text-stone-400 border-transparent hover:text-stone-200"
-                                                    }`}
-                                                  >
-                                                    {note.isCapital ? "👑 " : ""}{note.title}
-                                                    {hasLocalLandmarks && (
-                                                      <span className="text-[7.5px] font-mono text-stone-600 pl-1">({localLandmarks.length})</span>
-                                                    )}
-                                                  </button>
-                                                  {hasLocalLandmarks && (
-                                                    <button
-                                                      onClick={() => toggleTownExpand(note.id)}
-                                                      className="p-0.5 text-stone-600 hover:text-stone-300 rounded transition-colors"
-                                                    >
-                                                      {isTownExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
-                                                    </button>
-                                                  )}
-                                                </div>
+                                    {isCountryExpanded && (
+                                      <div className="pl-4 border-l border-stone-900/60 space-y-2 pt-0.5">
+                                        
+                                        {/* Folder 1.1: Cities & Settlements */}
+                                        <div className="space-y-0.5">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-cities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
+                                            <span>{expandedFolders[`${country.id}-cities`] ? "📂" : "📁"}</span>
+                                            <span className="truncate">Cities & Settlements ({childSettlements.length})</span>
+                                          </button>
+                                          {expandedFolders[`${country.id}-cities`] && (
+                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                              {childSettlements.map(note => {
+                                                const isSelectedNote = selectedNote?.id === note.id;
+                                                const localLandmarks = codexNotes.filter(n => n.parentBurgId === note.id && isNoteVisible(n));
+                                                const hasLocalLandmarks = localLandmarks.length > 0;
+                                                const isTownExpanded = !!expandedTowns[note.id];
 
-                                                {/* Nested Local Landmarks (Indented with a thread line guide) */}
-                                                {hasLocalLandmarks && isTownExpanded && (
-                                                  <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5 animate-in slide-in-from-top-1 duration-150">
-                                                    {localLandmarks.map(landmark => {
-                                                      const isSelectedLandmark = selectedNote?.id === landmark.id;
-                                                      let icon = "📍";
-                                                      if (landmark.subcategory === "maps-dungeons") icon = "💀";
-                                                      else if (landmark.tags.includes("MINE")) icon = "⛏️";
-                                                      else if (landmark.tags.includes("TEMPLE") || landmark.tags.includes("SACRED")) icon = "✨";
-
-                                                      return (
-                                                        <button
-                                                          key={landmark.id}
-                                                          onClick={() => { setSelectedNoteId(landmark.id); setIsEditing(false); setIsAdding(false); }}
-                                                          className={`w-full text-left py-0.5 px-1.5 text-[10px] font-serif truncate cursor-pointer block border-l ${
-                                                            isSelectedLandmark 
-                                                              ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.01]" 
-                                                              : "text-stone-500 border-transparent hover:text-stone-300"
-                                                          }`}
-                                                        >
-                                                          {icon} {landmark.title}
+                                                return (
+                                                  <div key={note.id} className="space-y-0.5">
+                                                    <div className="flex items-center justify-between group/town">
+                                                      <button onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`flex-1 text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${isSelectedNote ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                        {note.isCapital ? "👑 " : ""}{note.title}
+                                                      </button>
+                                                      {hasLocalLandmarks && (
+                                                        <button onClick={() => toggleTownExpand(note.id)} className="p-0.5 text-stone-600 hover:text-stone-300">
+                                                          {isTownExpanded ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
                                                         </button>
-                                                      );
-                                                    })}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                        {childSettlements.length === 0 && (
-                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No settlements compiled.</div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
+                                                      )}
+                                                    </div>
 
-                                  {/* Folder 2: Landmarks & Dungeons (Only non-nested/general ones) */}
-                                  <div className="space-y-0.5">
-                                    {(() => {
-                                      const generalLandmarks = childLandmarks.filter(n => !n.parentBurgId);
-                                      return (
-                                        <>
-                                          <button 
-                                            onClick={() => toggleFolderExpand(`${country.id}-landmarks`)}
-                                            className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
-                                          >
+                                                    {hasLocalLandmarks && isTownExpanded && (
+                                                      <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5">
+                                                        {localLandmarks.map(landmark => (
+                                                          <button key={landmark.id} onClick={() => { setSelectedNoteId(landmark.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1.5 text-[10px] font-serif truncate border-l ${selectedNote?.id === landmark.id ? "text-amber-400 font-bold border-amber-600" : "text-stone-500 border-transparent hover:text-stone-300"}`}>
+                                                            {landmark.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{landmark.title}
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Folder 1.2: Landmarks & Dungeons */}
+                                        <div className="space-y-0.5">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-landmarks`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
                                             <span>{expandedFolders[`${country.id}-landmarks`] ? "📂" : "📁"}</span>
-                                            <span className="truncate">Landmarks & Dungeons ({generalLandmarks.length})</span>
+                                            <span className="truncate">Landmarks & Dungeons ({childLandmarks.filter(n => !n.parentBurgId).length})</span>
                                           </button>
                                           {expandedFolders[`${country.id}-landmarks`] && (
                                             <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
-                                              {generalLandmarks.map(note => {
-                                                const isSelectedNote = selectedNote?.id === note.id;
-                                                return (
-                                                  <button
-                                                    key={note.id}
-                                                    onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                                                    className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
-                                                      isSelectedNote 
-                                                        ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                                        : "text-stone-400 border-transparent hover:text-stone-200"
-                                                    }`}
-                                                  >
-                                                    {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
-                                                  </button>
-                                                );
-                                              })}
-                                              {generalLandmarks.length === 0 && (
-                                                <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No independent landmarks.</div>
-                                              )}
+                                              {childLandmarks.filter(n => !n.parentBurgId).map(note => (
+                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${selectedNote?.id === note.id ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                  {note.subcategory === "maps-dungeons" ? "💀 " : "📍 "}{note.title}
+                                                </button>
+                                              ))}
                                             </div>
                                           )}
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
+                                        </div>
 
-                                  {/* Folder 3: Entities & Factions */}
-                                  <div className="space-y-0.5">
-                                    <button 
-                                      onClick={() => toggleFolderExpand(`${country.id}-entities`)}
-                                      className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1 cursor-pointer"
-                                    >
-                                      <span>{expandedFolders[`${country.id}-entities`] ? "📂" : "📁"}</span>
-                                      <span className="truncate">Entities & Factions ({childEntities.length})</span>
-                                    </button>
-                                    {expandedFolders[`${country.id}-entities`] && (
-                                      <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
-                                        {childEntities.map(note => {
-                                          const isSelectedNote = selectedNote?.id === note.id;
+                                        {/* Folder 1.3: Entities & Factions */}
+                                        <div className="space-y-0.5">
+                                          <button onClick={() => toggleFolderExpand(`${country.id}-entities`)} className="w-full text-left py-0.5 px-1 text-[9px] font-mono uppercase tracking-wider text-stone-500 hover:text-stone-400 flex items-center gap-1">
+                                            <span>{expandedFolders[`${country.id}-entities`] ? "📂" : "📁"}</span>
+                                            <span className="truncate">Entities & Factions ({childEntities.length})</span>
+                                          </button>
+                                          {expandedFolders[`${country.id}-entities`] && (
+                                            <div className="pl-3.5 space-y-0.5 border-l border-stone-900/40">
+                                              {childEntities.map(note => (
+                                                <button key={note.id} onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }} className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${selectedNote?.id === note.id ? "text-amber-400 font-bold border-amber-600 pl-1.5" : "text-stone-400 border-transparent"}`}>
+                                                  👤 {note.title}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* SUB-NODE 2: Planes & Other Worlds */}
+                      <div className="space-y-1.5 border-t border-stone-900/50 pt-2.5">
+                        <div className="flex items-center justify-between group/planes-header">
+                          <button
+                            onClick={() => { setSelectedCategory("world"); setSelectedSubcategory("world-planes"); }}
+                            className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 ${
+                              selectedCategory === "world" && selectedSubcategory === "world-planes"
+                                ? "text-amber-400"
+                                : "text-stone-400 hover:text-stone-200"
+                            }`}
+                          >
+                            <span>✨</span>
+                            <span>Planes & Other Worlds</span>
+                          </button>
+                          <button
+                            onClick={() => toggleFolderExpand("locations-planes")}
+                            className="p-0.5 text-stone-500 hover:text-stone-300 transition-colors"
+                          >
+                            {expandedFolders["locations-planes"] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+
+                        {/* Collapsible Planar Clusters Folder tree */}
+                        {expandedFolders["locations-planes"] && (
+                          <div className="pl-3 border-l border-stone-900/50 space-y-2 pt-0.5">
+                            {(() => {
+                              const planeClusters = codexNotes.filter(n => n.category === "world" && n.subcategory === "world-planes" && n.isState && isNoteVisible(n));
+                              
+                              if (planeClusters.length === 0) {
+                                return <div className="text-[9px] text-stone-600 italic pl-2">No planar clusters registered.</div>;
+                              }
+
+                              return planeClusters.map(cluster => {
+                                const isClusterExpanded = !!expandedFolders[`plane-${cluster.stateId}`];
+                                const isSelected = selectedNote?.id === cluster.id;
+                                
+                                const nestedWorlds = codexNotes.filter(n => n.category === "world" && n.subcategory === "world-planes" && !n.isState && n.stateId === cluster.stateId && isNoteVisible(n));
+
+                                return (
+                                  <div key={cluster.id} className="space-y-1">
+                                    {/* Planar Cluster Row */}
+                                    <div className="flex items-center justify-between group/cluster">
+                                      <button
+                                        onClick={() => { setSelectedNoteId(cluster.id); setIsEditing(false); setIsAdding(false); }}
+                                        className={`flex-grow text-left py-0.5 px-1.5 text-xs font-serif transition-all flex items-center gap-1 border border-transparent ${
+                                          isSelected ? "text-amber-400 font-bold bg-amber-950/[0.04]" : "text-stone-300 hover:text-stone-200"
+                                        }`}
+                                      >
+                                        <span>🌀</span>
+                                        <span className="truncate">{cluster.title}</span>
+                                        <span className="text-[8px] font-mono text-stone-600">({nestedWorlds.length})</span>
+                                      </button>
+                                      <button 
+                                        onClick={() => toggleFolderExpand(`plane-${cluster.stateId}`)}
+                                        className="p-0.5 text-stone-500 hover:text-stone-300"
+                                      >
+                                        {isClusterExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+
+                                    {/* Nested Child Worlds */}
+                                    {isClusterExpanded && (
+                                      <div className="pl-3.5 ml-1 border-l border-amber-900/10 space-y-0.5 pt-0.5">
+                                        {nestedWorlds.map(world => {
+                                          const isSelectedWorld = selectedNote?.id === world.id;
                                           return (
                                             <button
-                                              key={note.id}
-                                              onClick={() => { setSelectedNoteId(note.id); setIsEditing(false); setIsAdding(false); }}
-                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate cursor-pointer block border-l ${
-                                                isSelectedNote 
-                                                  ? "text-amber-400 font-bold border-amber-600 bg-amber-950/[0.02] pl-1.5" 
-                                                  : "text-stone-400 border-transparent hover:text-stone-200"
+                                              key={world.id}
+                                              onClick={() => { setSelectedNoteId(world.id); setIsEditing(false); setIsAdding(false); }}
+                                              className={`w-full text-left py-0.5 px-1 text-[11px] font-serif truncate border-l ${
+                                                isSelectedWorld 
+                                                  ? "text-amber-400 font-bold border-amber-600 pl-1.5" 
+                                                  : "text-stone-400 border-transparent hover:text-stone-300"
                                               }`}
                                             >
-                                              👤 {note.title}
+                                              🌌 {world.title}
                                             </button>
                                           );
                                         })}
-                                        {childEntities.length === 0 && (
-                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No entities linked.</div>
+                                        {nestedWorlds.length === 0 && (
+                                          <div className="text-[9px] text-stone-600 italic pl-1.5 py-0.5 font-sans">No worlds aligned.</div>
                                         )}
                                       </div>
                                     )}
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        });
-                      })()}
+                                );
+                              });
+                            })()}
+                          </div>
+                        )}
+                      </div>
+
                     </div>
                   )}
 
