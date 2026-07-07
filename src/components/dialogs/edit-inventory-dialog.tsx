@@ -3,13 +3,14 @@ import {
   useAddEquipment, useUpdateEquipment,
   useAddCurrency, useUpdateCurrency,
   useAddInventoryItem, useUpdateInventoryItem,
-  useListNotes, useCreateNote
+  useListNotes, useCreateNote,
+  useListAbilities, useDeleteAbility
 } from "@/hooks/useStorage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, BookText } from "lucide-react";
+import { Search, BookText, Edit2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -19,11 +20,22 @@ interface Props {
   mode: "add" | "edit";
   type: "currency" | "equipment" | "item";
   initialData?: any;
+  onAddAbilityClick?: (eqId: number | null, invItemId: number | null) => void;
+  onEditAbilityClick?: (ability: any) => void;
 }
 
 const STATS_LIST = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
 
-export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, type, initialData }: Props) {
+export function EditInventoryDialog({
+  characterId,
+  isOpen,
+  onOpenChange,
+  mode,
+  type,
+  initialData,
+  onAddAbilityClick,
+  onEditAbilityClick
+}: Props) {
   // Mutations
   const addEquipment = useAddEquipment();
   const updateEquipment = useUpdateEquipment();
@@ -34,6 +46,8 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
   
   const createNote = useCreateNote();
   const { data: notes } = useListNotes(characterId);
+  const { data: abilities = [] } = useListAbilities(characterId);
+  const deleteAbility = useDeleteAbility();
 
   // Searchable Notes Picker states
   const [isNotesPickerOpen, setIsNotesPickerOpen] = useState(false);
@@ -218,14 +232,17 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border-border shadow-2xl">
-        <DialogHeader className="border-b border-border/30 pb-2">
+      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-6">
+        <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+        <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+        <DialogHeader className="border-b border-border/30 pb-2 z-10 relative">
           <DialogTitle className="font-serif text-2xl text-primary font-bold">
             {mode === "add" ? `Add ${type.toUpperCase()}` : `Edit ${type.toUpperCase()}`}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-4 mt-4 text-sm font-sans">
+        <form onSubmit={handleSave} className="space-y-4 mt-4 text-xs font-sans z-10 relative">
           
           {/* Add from Notes picker trigger */}
           {mode === "add" && (
@@ -235,18 +252,21 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
                   <Button 
                     type="button" 
                     variant="outline" 
-                    className="w-full flex items-center justify-center gap-1.5 border-primary/45 text-primary hover:bg-primary/5 rounded-none font-bold uppercase tracking-wider font-mono h-8 text-xs"
+                    className="w-full flex items-center justify-center gap-1.5 border-primary/45 text-primary hover:bg-primary/5 rounded-none font-bold uppercase tracking-wider font-mono h-8 text-[10px]"
                   >
                     <BookText className="w-3.5 h-3.5" /> Add from Notes
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[450px] max-h-[75vh] overflow-y-auto bg-card border border-border shadow-2xl p-5 rounded-none z-[100]">
-                  <DialogHeader className="border-b border-border/30 pb-2">
+                  <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+                  <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+                  <DialogHeader className="border-b border-border/30 pb-2 z-10 relative">
                     <DialogTitle className="font-serif text-xl text-primary font-bold">
                       Select Item from Campaign Notes
                     </DialogTitle>
                   </DialogHeader>
-                  <div className="space-y-4 mt-4 font-sans text-xs">
+                  <div className="space-y-4 mt-4 font-sans text-xs z-10 relative">
                     {/* Search Bar */}
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -302,22 +322,22 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
 
           {/* Common name input */}
           <div>
-            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Name</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Name</label>
             <Input 
               value={name} 
               onChange={e => setName(e.target.value)} 
               placeholder={type === "currency" ? "Gold, Silver, etc." : "Item name"}
               required 
               disabled={mode === "edit" && type === "currency"} // Block renaming currency on edit
-              className="bg-background" 
+              className="bg-background rounded-none h-9 text-xs" 
             />
           </div>
 
           {/* Currency specific fields */}
           {type === "currency" && (
             <div>
-              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Amount</label>
-              <Input type="number" min={0} value={amount} onChange={e => setAmount(Number(e.target.value))} required className="bg-background font-mono" />
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Amount</label>
+              <Input type="number" min={0} value={amount} onChange={e => setAmount(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
             </div>
           )}
 
@@ -325,12 +345,12 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
           {type === "item" && (
             <>
               <div>
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Quantity</label>
-                <Input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} required className="bg-background font-mono" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Quantity</label>
+                <Input type="number" min={1} value={quantity} onChange={e => setQuantity(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
               </div>
               <div>
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Description</label>
-                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Item details..." className="bg-background font-serif" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Description</label>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Item details..." className="bg-background font-serif rounded-none min-h-[70px]" />
               </div>
             </>
           )}
@@ -339,42 +359,42 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
           {type === "equipment" && (
             <>
               <div>
-                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Description</label>
-                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Armor, weapon, or accessory details..." className="bg-background font-serif" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Description</label>
+                <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Armor, weapon, or accessory details..." className="bg-background font-serif rounded-none min-h-[70px]" />
               </div>
 
-              <div className="grid grid-cols-2 gap-4 border-t border-border/30 pt-3">
+              <div className="grid grid-cols-2 gap-4 border-t border-border/20 pt-3">
                 <div>
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">DT Bonus (Armor protection)</label>
-                  <Input type="number" min={0} value={dtBonus} onChange={e => setDtBonus(Number(e.target.value))} required className="bg-background font-mono" />
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">DT Bonus</label>
+                  <Input type="number" min={0} value={dtBonus} onChange={e => setDtBonus(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
                 </div>
                 <div>
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Weapon Damage Die (e.g. d8)</label>
-                  <Input value={diceType} onChange={e => setDiceType(e.target.value)} placeholder="e.g. d8, d10 (optional)" className="bg-background font-mono" />
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Weapon Damage Die</label>
+                  <Input value={diceType} onChange={e => setDiceType(e.target.value)} placeholder="e.g. d8, d10" className="bg-background font-mono rounded-none h-9 text-xs" />
                 </div>
               </div>
 
               {diceType && (
                 <div>
-                  <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Weapon Modifier (e.g. +2, POWr+6, prer+2)</label>
-                  <Input value={modifier} onChange={e => setModifier(e.target.value)} required className="bg-background font-mono" />
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Weapon Modifier (e.g. +2, POWr+6)</label>
+                  <Input value={modifier} onChange={e => setModifier(e.target.value)} required className="bg-background font-mono rounded-none h-9 text-xs" />
                 </div>
               )}
 
               {/* Stat Modifiers section */}
-              <div className="border-t border-border/30 pt-3">
-                <label className="text-xs font-bold text-primary uppercase tracking-widest block mb-2">Stat Modifiers (Adds to character stats)</label>
+              <div className="border-t border-border/20 pt-3">
+                <label className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-2 font-serif">Stat Modifiers</label>
                 <div className="grid grid-cols-4 gap-2">
                   {STATS_LIST.map((stat) => {
                     const currentVal = statModifiers[stat] || 0;
                     return (
-                      <div key={stat} className="bg-background/40 p-1.5 rounded border border-border/40 text-center">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">{stat.substring(0,3)}</label>
+                      <div key={stat} className="bg-background/40 p-1 rounded border border-border/40 text-center">
+                        <label className="text-[8px] font-bold text-stone-500 uppercase block mb-0.5">{stat.substring(0,3)}</label>
                         <Input 
                           type="number" 
                           value={currentVal} 
                           onChange={(e) => handleStatModifierChange(stat, Number(e.target.value))} 
-                          className="h-7 text-center font-mono bg-background text-xs" 
+                          className="h-7 text-center font-mono bg-background text-xs rounded-none" 
                         />
                       </div>
                     );
@@ -384,10 +404,77 @@ export function EditInventoryDialog({ characterId, isOpen, onOpenChange, mode, t
             </>
           )}
 
+          {/* Integrated Item Abilities Management */}
+          {mode === "edit" && type !== "currency" && initialData && (
+            <div className="border-t border-border/30 pt-4 mt-3 space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold text-primary uppercase tracking-widest block font-serif">Item Abilities</label>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => {
+                    const eqId = type === "equipment" ? initialData.id : null;
+                    const invItemId = type === "item" ? initialData.id : null;
+                    onAddAbilityClick?.(eqId, invItemId);
+                  }}
+                  className="h-6 text-[9px] uppercase font-mono tracking-wider border-primary/45 text-primary hover:bg-primary/5 rounded-none"
+                >
+                  + Add Ability
+                </Button>
+              </div>
+              {(() => {
+                const itemAbilities = abilities.filter(a => 
+                  (type === "equipment" && a.equipmentId === initialData.id) ||
+                  (type === "item" && a.inventoryItemId === initialData.id)
+                );
+                if (itemAbilities.length === 0) {
+                  return <p className="text-[11px] text-muted-foreground/60 italic font-serif pl-1">No abilities attached to this item.</p>;
+                }
+                return (
+                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                    {itemAbilities.map(ab => (
+                      <div key={ab.id} className="flex justify-between items-center bg-background/50 border border-border/40 p-2 text-xs">
+                        <div className="min-w-0 flex-1 pr-2">
+                          <span className="font-serif font-bold text-foreground block truncate">{ab.name}</span>
+                          {ab.description && <span className="text-[10px] text-muted-foreground/80 block line-clamp-1 truncate font-serif">{ab.description}</span>}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onEditAbilityClick?.(ab)}
+                            className="h-6 w-6 text-primary hover:bg-primary/10 rounded-none cursor-pointer"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              if (confirm(`Erase ability "${ab.name}"?`)) {
+                                deleteAbility.mutate({ id: ab.id, charId: characterId });
+                              }
+                            }}
+                            className="h-6 w-6 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 border-t border-border/30 pt-4">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" className="bg-primary text-primary-foreground font-serif">
-              Save changes
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="rounded-none">Cancel</Button>
+            <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-none">
+              Save Changes
             </Button>
           </div>
         </form>

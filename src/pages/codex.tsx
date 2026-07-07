@@ -313,9 +313,41 @@ export default function Codex() {
     updatedAt: new Date().toISOString()
   };
 
+  // Veridia Virtual Region overview note
+  const veridiaVirtualNote = {
+    id: -100,
+    title: "Veridia",
+    content: "The mortal realm and primary continent of Cormant. Veridia is a land of diverse kingdoms, rolling valleys, ancient forests, and high peaks.\n\nFrom the Grand Duchy of Rorenia to the Wildlands border zones, this land holds the history of mortal crowns, magic confluences, and age-old conflicts.",
+    category: "world",
+    subcategory: "world-regions",
+    tags: ["MORTAL", "MAINLAND"],
+    stateId: -100,
+    isState: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  // Planes & Other Worlds Virtual Region overview note
+  const planesVirtualNote = {
+    id: -101,
+    title: "Planes & Other Worlds",
+    content: "Cosmic clusters and realms outside of the mortal continent of Veridia.\n\nThese foreign dimensions consist of planes governed by unique elemental forces, spiritual laws, or eldritch entities. Traversable only via dimensional gates, ley line confluences, or powerful conjuration spells.",
+    category: "world",
+    subcategory: "world-planes",
+    tags: ["PLANES", "COSMIC"],
+    stateId: -101,
+    isState: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
   // Selected Note fallback
   const selectedNote = selectedNoteId === -99 
     ? wildlandsVirtualNote 
+    : selectedNoteId === -100
+    ? veridiaVirtualNote
+    : selectedNoteId === -101
+    ? planesVirtualNote
     : (codexNotes.find(n => n.id === selectedNoteId) || filteredNotes[0] || null);
 
   // Auto-expand parents/countries/planes on search query changes
@@ -710,10 +742,13 @@ export default function Codex() {
                             onClick={() => { 
                               setSelectedCategory("world"); 
                               setSelectedSubcategory("all");
+                              setSelectedNoteId(-100);
+                              setIsEditing(false);
+                              setIsAdding(false);
                               toggleFolderExpand("locations-veridia"); // Toggle folder state directly on name click!
                             }}
                             className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 cursor-pointer ${
-                              selectedCategory === "world" && selectedSubcategory !== "world-planes"
+                              selectedCategory === "world" && selectedSubcategory !== "world-planes" && selectedNoteId === -100
                                 ? "text-primary font-bold"
                                 : "text-stone-400 hover:text-primary"
                             }`}
@@ -884,10 +919,13 @@ export default function Codex() {
                             onClick={() => { 
                               setSelectedCategory("world"); 
                               setSelectedSubcategory("world-planes");
+                              setSelectedNoteId(-101);
+                              setIsEditing(false);
+                              setIsAdding(false);
                               toggleFolderExpand("locations-planes"); // Toggle folder state directly on name click!
                             }}
                             className={`flex-grow text-left text-xs font-serif font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 py-0.5 px-1 cursor-pointer ${
-                              selectedCategory === "world" && selectedSubcategory === "world-planes"
+                              selectedCategory === "world" && selectedSubcategory === "world-planes" && selectedNoteId === -101
                                 ? "text-primary font-bold"
                                 : "text-stone-400 hover:text-primary"
                             }`}
@@ -1091,137 +1129,9 @@ export default function Codex() {
           title="Drag to resize directory index"
         />
 
-        {/* RIGHT COLUMN: Themed Card View / Add Form / Edit Form (Flexible remainder width) */}
+        {/* RIGHT COLUMN: Themed Card View (Flexible remainder width) */}
         <div className="flex-grow flex flex-col min-h-[480px]">
-          {isAdding || isEditing ? (
-            /* Chronicle Editor/Creator Form */
-            <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="flex-1 bg-card border border-border/50 p-6 shadow-2xl flex flex-col justify-between text-xs max-w-3xl mx-auto w-full relative">
-              <div className="absolute inset-1 border border-border/10 pointer-events-none" />
-              <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
-
-              <div className="space-y-3.5 flex-1 overflow-y-auto max-h-[72vh] pr-1">
-                <h3 className="text-base font-bold text-primary border-b border-border/30 pb-2">
-                  {isAdding ? "Forge New Chronicle" : `Re-write: ${selectedNote?.title}`}
-                </h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Chronicle Title</label>
-                    <Input 
-                      value={editTitle} 
-                      onChange={e => setEditTitle(e.target.value)} 
-                      required 
-                      placeholder="e.g. Mount Troyzan" 
-                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
-                    />
-                  </div>
-
-                  <div className="space-y-1 col-span-2 sm:col-span-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-455 block font-bold">Governing Realm / territory</label>
-                    <select
-                      value={editStateId !== null ? editStateId : ""}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setEditStateId(val === "" ? null : Number(val));
-                      }}
-                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
-                    >
-                      <option value="">Wildlands / None</option>
-                      {REALMS_LIST.filter(r => r.id !== 0).map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Parent Category</label>
-                    <select
-                      value={editCategory}
-                      onChange={e => {
-                        const catVal = e.target.value;
-                        setEditCategory(catVal);
-                        const firstSub = TAXONOMY.find(t => t.value === catVal)?.subcategories[0]?.value || "";
-                        setEditSubcategory(firstSub);
-                      }}
-                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
-                    >
-                      {TAXONOMY.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Subcategory</label>
-                    <select
-                      value={editSubcategory}
-                      onChange={e => setEditSubcategory(e.target.value)}
-                      className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
-                    >
-                      {TAXONOMY.find(t => t.value === editCategory)?.subcategories.map(sub => (
-                        <option key={sub.value} value={sub.value}>{sub.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Tags (Comma separated)</label>
-                    <Input 
-                      value={editTags} 
-                      onChange={e => setEditTags(e.target.value)} 
-                      placeholder="e.g. POI, VOLCANO, DANGER" 
-                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Secret Password Lock (Optional)</label>
-                    <Input 
-                      value={editSecretPassword} 
-                      onChange={e => setEditSecretPassword(e.target.value)} 
-                      placeholder="e.g. corvustemple" 
-                      className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
-                      title="If set, this note is hidden until this passphrase is typed in the bookcase ledge"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1 flex flex-col">
-                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold mb-1">Description / Chronicle text</label>
-                  <Textarea 
-                    value={editContent} 
-                    onChange={e => setEditContent(e.target.value)} 
-                    required 
-                    placeholder="Record what is written in the legends, or describe the landmarks..." 
-                    className="bg-background border-border rounded-none min-h-[180px] text-xs font-serif leading-relaxed text-foreground focus-visible:ring-primary/40"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-border/30 mt-3">
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => { setIsEditing(false); setIsAdding(false); }}
-                  className="rounded-none hover:bg-background text-stone-400 font-serif"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  size="sm" 
-                  className="bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-none font-serif px-4 cursor-pointer"
-                >
-                  Forge Entry
-                </Button>
-              </div>
-            </form>
-          ) : selectedNote ? (
+          {selectedNote ? (
             /* Themed Read Card (Transforms color scheme dynamically with theme classes) */
             <div className="flex-1 bg-card/75 border border-border shadow-2xl p-4 sm:p-7 relative flex flex-col justify-between backdrop-blur-md w-full max-w-3xl mx-auto animate-in fade-in duration-300">
               {/* Decorative border overlays */}
@@ -1308,7 +1218,7 @@ export default function Codex() {
                   onClick={() => handleDeleteNote(selectedNote.id)}
                   variant="ghost" 
                   size="sm" 
-                  disabled={selectedNote.id === -99}
+                  disabled={selectedNote.id < 0}
                   className="text-stone-500 hover:text-red-400 hover:bg-red-950/10 h-8 rounded-none cursor-pointer font-serif disabled:opacity-40"
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Erase
@@ -1319,7 +1229,7 @@ export default function Codex() {
                     onClick={handleStartEdit}
                     variant="outline"
                     size="sm"
-                    disabled={selectedNote.id === -99}
+                    disabled={selectedNote.id < 0}
                     className="h-8 text-xs font-serif border border-border/50 hover:bg-background text-stone-400 hover:text-foreground rounded-none px-3.5 font-bold cursor-pointer disabled:opacity-40"
                   >
                     Edit Note
@@ -1328,7 +1238,7 @@ export default function Codex() {
                   <Button 
                     onClick={() => handleOpenPushModal(selectedNote)}
                     size="sm" 
-                    disabled={selectedNote.id === -99}
+                    disabled={selectedNote.id < 0}
                     className="h-8 text-xs font-serif bg-primary hover:bg-primary/90 text-primary-foreground px-4 font-bold rounded-none flex items-center gap-1.5 cursor-pointer shadow-md disabled:opacity-40"
                     title="Push this coordinate/lore note directly to a character notes sheet"
                   >
@@ -1350,7 +1260,7 @@ export default function Codex() {
 
       {/* ── Push to Character Modal dialog ── */}
       <Dialog open={isPushModalOpen} onOpenChange={setIsPushModalOpen}>
-        <DialogContent className="sm:max-w-[420px] bg-card border border-border text-foreground p-6 rounded-none relative">
+        <DialogContent className="sm:max-w-[420px] bg-card border border-border text-foreground p-6 rounded-none">
           <div className="absolute inset-1 border border-border/10 pointer-events-none" />
           <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
 
@@ -1361,7 +1271,7 @@ export default function Codex() {
           </DialogHeader>
           
           <div className="py-3 text-xs text-muted-foreground font-serif leading-relaxed">
-            Copying <strong className="text-foreground">\"{noteToPush?.title}\"</strong> into the selected character's private **Campaign Notes** log. Choose which active hero receives this registry:
+            Copying <strong className="text-foreground">"{noteToPush?.title}"</strong> into the selected character's private **Campaign Notes** log. Choose which active hero receives this registry:
           </div>
 
           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
@@ -1402,6 +1312,138 @@ export default function Codex() {
               Cancel
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add/Edit Chronicle Modal dialog ── */}
+      <Dialog open={isAdding || isEditing} onOpenChange={(open) => { if (!open) { setIsAdding(false); setIsEditing(false); } }}>
+        <DialogContent className="sm:max-w-[620px] bg-card border border-border text-foreground p-6 rounded-none max-h-[90vh] overflow-y-auto">
+          <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+          <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+          <DialogHeader className="border-b border-border/20 pb-3">
+            <DialogTitle className="font-serif text-lg font-bold text-primary">
+              {isAdding ? "Forge New Chronicle" : `Re-write: ${selectedNote?.title}`}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={isAdding ? handleSaveNew : handleSaveEdit} className="space-y-4 mt-4 text-xs font-sans">
+            <div className="space-y-3.5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1 col-span-2 sm:col-span-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Chronicle Title</label>
+                  <Input 
+                    value={editTitle} 
+                    onChange={e => setEditTitle(e.target.value)} 
+                    required 
+                    placeholder="e.g. Mount Troyzan" 
+                    className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
+                  />
+                </div>
+
+                <div className="space-y-1 col-span-2 sm:col-span-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-455 block font-bold">Governing Realm / territory</label>
+                  <select
+                    value={editStateId !== null ? editStateId : ""}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditStateId(val === "" ? null : Number(val));
+                    }}
+                    className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
+                  >
+                    <option value="">Wildlands / None</option>
+                    {REALMS_LIST.filter(r => r.id !== 0).map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Parent Category</label>
+                  <select
+                    value={editCategory}
+                    onChange={e => {
+                      const catVal = e.target.value;
+                      setEditCategory(catVal);
+                      const firstSub = TAXONOMY.find(t => t.value === catVal)?.subcategories[0]?.value || "";
+                      setEditSubcategory(firstSub);
+                    }}
+                    className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
+                  >
+                    {TAXONOMY.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Subcategory</label>
+                  <select
+                    value={editSubcategory}
+                    onChange={e => setEditSubcategory(e.target.value)}
+                    className="w-full bg-background border border-border h-8 rounded-none px-2 text-xs font-serif text-foreground focus:outline-none focus:border-primary/45"
+                  >
+                    {TAXONOMY.find(t => t.value === editCategory)?.subcategories.map(sub => (
+                      <option key={sub.value} value={sub.value}>{sub.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Tags (Comma separated)</label>
+                  <Input 
+                    value={editTags} 
+                    onChange={e => setEditTags(e.target.value)} 
+                    placeholder="e.g. POI, VOLCANO, DANGER" 
+                    className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold">Secret Password Lock (Optional)</label>
+                  <Input 
+                    value={editSecretPassword} 
+                    onChange={e => setEditSecretPassword(e.target.value)} 
+                    placeholder="e.g. corvustemple" 
+                    className="bg-background border-border rounded-none h-8 text-xs font-serif text-foreground focus-visible:ring-primary/40"
+                    title="If set, this note is hidden until this passphrase is typed in the bookcase ledge"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1 flex flex-col">
+                <label className="text-[9px] font-mono uppercase tracking-widest text-stone-450 block font-bold mb-1">Description / Chronicle text</label>
+                <Textarea 
+                  value={editContent} 
+                  onChange={e => setEditContent(e.target.value)} 
+                  required 
+                  placeholder="Record what is written in the legends, or describe the landmarks..." 
+                  className="bg-background border-border rounded-none min-h-[160px] text-xs font-serif leading-relaxed text-foreground focus-visible:ring-primary/40"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border/20 mt-4">
+              <Button 
+                type="button" 
+                variant="ghost" 
+                onClick={() => { setIsEditing(false); setIsAdding(false); }}
+                className="rounded-none hover:bg-background text-stone-400 font-serif"
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                className="bg-primary hover:bg-primary/95 text-primary-foreground font-bold rounded-none font-serif px-4 cursor-pointer"
+              >
+                Forge Entry
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

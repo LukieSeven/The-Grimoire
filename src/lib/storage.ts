@@ -176,6 +176,10 @@ export interface Ability {
   resistances?: string;
   immunities?: string;
   equipmentId?: number | null;
+  inventoryItemId?: number | null;
+  usageType?: string | null;
+  maxCharges?: number | null;
+  currentCharges?: number | null;
   sortOrder?: number;
   type?: string;
 }
@@ -186,6 +190,7 @@ export interface Skill {
   name: string;
   value: number;
   training: number;
+  category?: string | null;
 }
 
 export interface Roll {
@@ -829,7 +834,27 @@ export const storage = {
       let modified = false;
       const initialCodexMap = new Map((initialCodex as CodexNote[]).map(ic => [ic.title.toLowerCase(), ic]));
 
-      // 1. Sync updated fields for existing records
+      // 1. Deduplicate by title & align IDs with compiled entries to avoid sequence collisions
+      const seen = new Set<string>();
+      const dedupedList: CodexNote[] = [];
+      list.forEach(n => {
+        const lowerTitle = n.title.toLowerCase();
+        if (!seen.has(lowerTitle)) {
+          seen.add(lowerTitle);
+          const initMatch = initialCodexMap.get(lowerTitle);
+          if (initMatch && n.id !== initMatch.id) {
+            modified = true;
+            dedupedList.push({ ...n, id: initMatch.id });
+          } else {
+            dedupedList.push(n);
+          }
+        } else {
+          modified = true;
+        }
+      });
+      list = dedupedList;
+
+      // 2. Sync updated fields for existing records
       list = list.map(n => {
         const initMatch = initialCodexMap.get(n.title.toLowerCase());
         if (initMatch) {
@@ -864,7 +889,7 @@ export const storage = {
         return n;
       });
 
-      // 2. Append new entries from initialCodex (like state pages, new landmarks)
+      // 3. Append new entries from initialCodex (like state pages, new landmarks)
       const existingTitles = new Set(list.map(n => n.title.toLowerCase()));
       (initialCodex as CodexNote[]).forEach(initNote => {
         if (!existingTitles.has(initNote.title.toLowerCase())) {
@@ -1112,12 +1137,17 @@ const DEFAULT_ABILITY: Omit<Ability, "id" | "characterId" | "name"> = {
   essenceId: null,
   resistances: "",
   immunities: "",
-  equipmentId: null
+  equipmentId: null,
+  inventoryItemId: null,
+  usageType: "Permanent",
+  maxCharges: 0,
+  currentCharges: 0
 };
 
 const DEFAULT_SKILL: Omit<Skill, "id" | "characterId" | "name"> = {
   value: 3,
-  training: 0
+  training: 0,
+  category: null
 };
 
 const DEFAULT_NOTE: Omit<Note, "id" | "characterId" | "createdAt" | "updatedAt"> = {
@@ -1211,14 +1241,19 @@ export function importCharacterJSON(jsonString: string): Character {
   setList(KEYS.characters, chars);
 
   // Helper to remap IDs for nested lists defensively merging with default schemas
+  const equipmentIdMap: Record<number, number> = {};
   if (Array.isArray(data.equipment)) {
     const list = getList<Equipment>(KEYS.equipment);
     let nextId = list.length > 0 ? Math.max(...list.map(e => e.id)) + 1 : 1;
     data.equipment.forEach((item: any) => {
+      const newId = nextId++;
+      if (item.id) {
+        equipmentIdMap[item.id] = newId;
+      }
       list.push({
         ...DEFAULT_EQUIPMENT,
         ...item,
-        id: nextId++,
+        id: newId,
         characterId: nextCharId
       });
     });
@@ -1239,14 +1274,19 @@ export function importCharacterJSON(jsonString: string): Character {
     setList(KEYS.currencies, list);
   }
 
+  const inventoryIdMap: Record<number, number> = {};
   if (Array.isArray(data.inventory)) {
     const list = getList<InventoryItem>(KEYS.inventory);
     let nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
     data.inventory.forEach((item: any) => {
+      const newId = nextId++;
+      if (item.id) {
+        inventoryIdMap[item.id] = newId;
+      }
       list.push({
         ...DEFAULT_INVENTORY_ITEM,
         ...item,
-        id: nextId++,
+        id: newId,
         characterId: nextCharId
       });
     });
@@ -1279,6 +1319,12 @@ export function importCharacterJSON(jsonString: string): Character {
       const oldEssId = item.essenceId;
       const newEssId = oldEssId && essenceIdMap[oldEssId] ? essenceIdMap[oldEssId] : null;
 
+      const oldEqId = item.equipmentId;
+      const newEqId = oldEqId && equipmentIdMap[oldEqId] ? equipmentIdMap[oldEqId] : null;
+
+      const oldInvItemId = item.inventoryItemId;
+      const newInvItemId = oldInvItemId && inventoryIdMap[oldInvItemId] ? inventoryIdMap[oldInvItemId] : null;
+
       // Handle legacy linkedStat rekeying defensively
       let mappedStats = item.linkedStats;
       if (!mappedStats && item.linkedStat) {
@@ -1293,6 +1339,8 @@ export function importCharacterJSON(jsonString: string): Character {
         id: nextId++,
         characterId: nextCharId,
         essenceId: newEssId,
+        equipmentId: newEqId,
+        inventoryItemId: newInvItemId,
         linkedStats: mappedStats
       });
     });

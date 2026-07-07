@@ -2,8 +2,9 @@ import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Edit2 } from "lucide-react";
-import { Familiar, evaluateFormula } from "@/lib/storage";
+import { Textarea } from "@/components/ui/textarea";
+import { Edit2, Trash2, Plus } from "lucide-react";
+import { Familiar, FamiliarAbility, evaluateFormula } from "@/lib/storage";
 
 interface EditFamiliarDialogProps {
   familiar: Familiar;
@@ -38,6 +39,68 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   // Resistances/Immunities
   const [resistances, setResistances] = useState(familiar.resistances || "");
   const [immunities, setImmunities] = useState(familiar.immunities || "");
+
+  // Familiar Abilities state
+  const [abilities, setAbilities] = useState<FamiliarAbility[]>(familiar.abilities || []);
+
+  // Secondary Ability Form view state
+  const [isEditingAbility, setIsEditingAbility] = useState(false);
+  const [abilityIndexToEdit, setAbilityIndexToEdit] = useState<number | null>(null);
+  const [abilityName, setAbilityName] = useState("");
+  const [abilityDescription, setAbilityDescription] = useState("");
+  const [abilityRollFormula, setAbilityRollFormula] = useState("");
+  const [abilityCost, setAbilityCost] = useState(0);
+  const [abilityRange, setAbilityRange] = useState("Self");
+  const [abilitySpeed, setAbilitySpeed] = useState("Instant");
+
+  const handleStartAddAbility = () => {
+    setAbilityIndexToEdit(null);
+    setAbilityName("");
+    setAbilityDescription("");
+    setAbilityRollFormula("");
+    setAbilityCost(0);
+    setAbilityRange("Self");
+    setAbilitySpeed("Instant");
+    setIsEditingAbility(true);
+  };
+
+  const handleStartEditAbility = (ab: FamiliarAbility, idx: number) => {
+    setAbilityIndexToEdit(idx);
+    setAbilityName(ab.name);
+    setAbilityDescription(ab.description);
+    setAbilityRollFormula(ab.rollFormula || "");
+    setAbilityCost(ab.cost || 0);
+    setAbilityRange(ab.range || "Self");
+    setAbilitySpeed(ab.speed || "Instant");
+    setIsEditingAbility(true);
+  };
+
+  const handleSaveAbility = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!abilityName.trim()) return;
+
+    const newAbility: FamiliarAbility = {
+      id: abilityIndexToEdit !== null ? (abilities[abilityIndexToEdit].id || Date.now()) : Date.now(),
+      name: abilityName,
+      description: abilityDescription,
+      rollFormula: abilityRollFormula,
+      cost: abilityCost,
+      range: abilityRange,
+      speed: abilitySpeed,
+      cooldown: 0,
+      linkedStats: [],
+      assignedToQuickRolls: false
+    };
+
+    if (abilityIndexToEdit !== null) {
+      const next = [...abilities];
+      next[abilityIndexToEdit] = newAbility;
+      setAbilities(next);
+    } else {
+      setAbilities([...abilities, newAbility]);
+    }
+    setIsEditingAbility(false);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,6 +151,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
       currentHp,
       currentMana,
       currentDt,
+      abilities, // Save updated abilities
     };
 
     onSave(updated);
@@ -95,122 +159,228 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if(!open) setIsEditingAbility(false); }}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 border-primary/40 text-primary hover:bg-primary/10 rounded-md cursor-pointer text-xs font-bold font-serif">
-          <Edit2 className="w-3 h-3 mr-1" /> Edit Stats
+        <Button variant="outline" size="sm" className="h-8 border-primary/40 text-primary hover:bg-primary/10 rounded-none cursor-pointer text-xs font-bold font-serif px-3">
+          <Edit2 className="w-3 h-3 mr-1" /> Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
-        <DialogHeader className="border-b border-border/20 pb-2">
+      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-6">
+        <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+        <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+        <DialogHeader className="border-b border-border/20 pb-2 z-10 relative">
           <DialogTitle className="font-serif text-lg text-primary font-bold">
-            Edit Familiar Stats: {familiar.name}
+            {isEditingAbility 
+              ? `${abilityIndexToEdit !== null ? "Edit" : "Add"} Familiar Ability` 
+              : `Edit Familiar: ${familiar.name}`
+            }
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-4 mt-4 text-xs font-sans">
-          {/* Base Info */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Familiar Name</label>
-              <Input value={name} onChange={e => setName(e.target.value)} required className="bg-background" />
+        {isEditingAbility ? (
+          <form onSubmit={handleSaveAbility} className="space-y-4 mt-4 text-xs font-sans z-10 relative">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
+                <Input value={abilityName} onChange={e => setAbilityName(e.target.value)} required placeholder="e.g. Bite, Shadow Dash" className="bg-background rounded-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost (MP)</label>
+                <Input type="number" min={0} value={abilityCost} onChange={e => setAbilityCost(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Species / Race</label>
-              <Input value={race} onChange={e => setRace(e.target.value)} required className="bg-background" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Familiar Rank</label>
-              <select 
-                value={className} 
-                onChange={e => setClassName(e.target.value)} 
-                className="w-full h-9 rounded-md border border-border/60 bg-background px-3 py-1 text-sm shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-              >
-                <option value="Lesser">Lesser</option>
-                <option value="Greater">Greater</option>
-                <option value="Ascendant">Ascendant</option>
-              </select>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Level</label>
-              <Input type="number" min={1} value={level} onChange={e => setLevel(Number(e.target.value))} required className="bg-background font-mono" />
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Effects</label>
+              <Textarea value={abilityDescription} onChange={e => setAbilityDescription(e.target.value)} placeholder="Describe what this action does..." className="bg-background font-serif min-h-[70px] rounded-none" />
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
-              <Input type="number" min={0} value={speed} onChange={e => setSpeed(Number(e.target.value))} required className="bg-background font-mono" />
-            </div>
-          </div>
 
-          {/* Attributes Grid */}
-          <div className="border-t border-border/20 pt-3">
-            <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest mb-2 font-serif">Attributes</h4>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: "POW", val: power, set: setPower },
-                { label: "VIT", val: vitality, set: setVitality },
-                { label: "SPI", val: spirit, set: setSpirit },
-                { label: "AGI", val: agility, set: setAgility },
-                { label: "END", val: endurance, set: setEndurance },
-                { label: "PRE", val: precision, set: setPrecision },
-                { label: "WIL", val: willpower, set: setWillpower },
-                { label: "CHA", val: charisma, set: setCharisma },
-              ].map(stat => (
-                <div key={stat.label}>
-                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">{stat.label}</label>
-                  <Input 
-                    type="number" 
-                    min={0}
-                    value={stat.val} 
-                    onChange={e => stat.set(Number(e.target.value))} 
-                    className="bg-background h-8 font-mono text-center" 
-                  />
-                </div>
-              ))}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Roll Formula / Action Modifier (Optional)</label>
+                <Input value={abilityRollFormula} onChange={e => setAbilityRollFormula(e.target.value)} placeholder="e.g. 1d6+powr, d20+pre" className="bg-background font-mono rounded-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Range</label>
+                <Input value={abilityRange} onChange={e => setAbilityRange(e.target.value)} required placeholder="e.g. 5 ft" className="bg-background font-serif rounded-none" />
+              </div>
             </div>
-          </div>
 
-          {/* Formulas Grid */}
-          <div className="border-t border-border/20 pt-3 space-y-3">
-            <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest font-serif">Resource Formulas</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
+                <Input value={abilitySpeed} onChange={e => setAbilitySpeed(e.target.value)} required placeholder="e.g. Instant" className="bg-background font-serif rounded-none" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-border/20 pt-3 mt-4">
+              <Button type="button" variant="ghost" onClick={() => setIsEditingAbility(false)} className="rounded-none">Back</Button>
+              <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-none">
+                Save Ability
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSave} className="space-y-4 mt-4 text-xs font-sans z-10 relative">
+            {/* Base Info */}
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">HP Formula</label>
-                <Input value={hpFormula} onChange={e => setHpFormula(e.target.value)} required className="bg-background font-mono text-xs" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Familiar Name</label>
+                <Input value={name} onChange={e => setName(e.target.value)} required className="bg-background rounded-none" />
               </div>
               <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Mana Formula</label>
-                <Input value={manaFormula} onChange={e => setManaFormula(e.target.value)} required className="bg-background font-mono text-xs" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Species / Race</label>
+                <Input value={race} onChange={e => setRace(e.target.value)} required className="bg-background rounded-none" />
               </div>
               <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">DT Formula</label>
-                <Input value={dtFormula} onChange={e => setDtFormula(e.target.value)} required className="bg-background font-mono text-xs" />
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Familiar Rank</label>
+                <select 
+                  value={className} 
+                  onChange={e => setClassName(e.target.value)} 
+                  className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="Lesser">Lesser</option>
+                  <option value="Greater">Greater</option>
+                  <option value="Ascendant">Ascendant</option>
+                </select>
               </div>
             </div>
-          </div>
 
-          {/* Resistances & Immunities */}
-          <div className="border-t border-border/20 pt-3 grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances</label>
-              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Slashing" className="bg-background" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Level</label>
+                <Input type="number" min={1} value={level} onChange={e => setLevel(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
+                <Input type="number" min={0} value={speed} onChange={e => setSpeed(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities</label>
-              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background" />
-            </div>
-          </div>
 
-          {/* Save / Back */}
-          <div className="flex justify-end gap-2 border-t border-border/20 pt-3">
-            <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-primary text-primary-foreground font-serif">
-              Save Stats
-            </Button>
-          </div>
-        </form>
+            {/* Attributes Grid */}
+            <div className="border-t border-border/20 pt-3">
+              <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest mb-2 font-serif">Attributes</h4>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "POW", val: power, set: setPower },
+                  { label: "VIT", val: vitality, set: setVitality },
+                  { label: "SPI", val: spirit, set: setSpirit },
+                  { label: "AGI", val: agility, set: setAgility },
+                  { label: "END", val: endurance, set: setEndurance },
+                  { label: "PRE", val: precision, set: setPrecision },
+                  { label: "WIL", val: willpower, set: setWillpower },
+                  { label: "CHA", val: charisma, set: setCharisma },
+                ].map(stat => (
+                  <div key={stat.label}>
+                    <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">{stat.label}</label>
+                    <Input 
+                      type="number" 
+                      min={0}
+                      value={stat.val} 
+                      onChange={e => stat.set(Number(e.target.value))} 
+                      className="bg-background h-8 font-mono text-center rounded-none text-xs" 
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Formulas Grid */}
+            <div className="border-t border-border/20 pt-3 space-y-3">
+              <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest font-serif">Resource Formulas</h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">HP Formula</label>
+                  <Input value={hpFormula} onChange={e => setHpFormula(e.target.value)} required className="bg-background font-mono text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Mana Formula</label>
+                  <Input value={manaFormula} onChange={e => setManaFormula(e.target.value)} required className="bg-background font-mono text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">DT Formula</label>
+                  <Input value={dtFormula} onChange={e => setDtFormula(e.target.value)} required className="bg-background font-mono text-xs rounded-none" />
+                </div>
+              </div>
+            </div>
+
+            {/* Resistances & Immunities */}
+            <div className="border-t border-border/20 pt-3 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances</label>
+                <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Slashing" className="bg-background rounded-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities</label>
+                <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none" />
+              </div>
+            </div>
+
+            {/* Familiar Abilities List inside edit dialog */}
+            <div className="border-t border-border/20 pt-4 mt-3 space-y-3">
+              <div className="flex justify-between items-center">
+                <label className="text-[10px] font-bold text-primary uppercase tracking-widest block font-serif">Familiar Abilities / Actions</label>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => handleStartAddAbility()}
+                  className="h-6 text-[9px] uppercase font-mono tracking-wider border-primary/45 text-primary hover:bg-primary/5 rounded-none"
+                >
+                  + Add Ability
+                </Button>
+              </div>
+              
+              {abilities.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground/60 italic font-serif pl-1">No abilities or actions compiled for this familiar.</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                  {abilities.map((ab, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-background/50 border border-border/40 p-2 text-xs">
+                      <div className="min-w-0 flex-1 pr-2">
+                        <span className="font-serif font-bold text-foreground block truncate">{ab.name}</span>
+                        {ab.description && <span className="text-[10px] text-muted-foreground/80 block line-clamp-1 truncate font-serif">{ab.description}</span>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleStartEditAbility(ab, idx)}
+                          className="h-6 w-6 text-primary hover:bg-primary/10 rounded-none cursor-pointer"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm(`Erase ability "${ab.name}"?`)) {
+                              setAbilities(abilities.filter((_, i) => i !== idx));
+                            }
+                          }}
+                          className="h-6 w-6 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Save / Back */}
+            <div className="flex justify-end gap-2 border-t border-border/20 pt-3">
+              <Button type="button" variant="ghost" onClick={() => setIsOpen(false)} className="rounded-none">Cancel</Button>
+              <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-none">
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

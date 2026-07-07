@@ -13,12 +13,13 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   characterId: number;
   equipmentId: number | null;
+  inventoryItemId: number | null;
   initialData: Ability | null;
 }
 
 const STAT_OPTIONS = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
 
-export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equipmentId, initialData }: Props) {
+export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equipmentId, inventoryItemId, initialData }: Props) {
   const addAbility = useAddAbility();
   const updateAbility = useUpdateAbility();
 
@@ -34,6 +35,10 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
   const [resistances, setResistances] = useState("");
   const [immunities, setImmunities] = useState("");
+
+  // Usage & Charges State
+  const [usageType, setUsageType] = useState<"standard" | "one-time" | "rechargeable">("standard");
+  const [maxCharges, setMaxCharges] = useState<number>(0);
 
   // Stat Modifiers
   const [bonusPower, setBonusPower] = useState<number>(0);
@@ -76,6 +81,10 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setBonusHp(initialData.bonusHp !== undefined ? String(initialData.bonusHp) : "");
         setBonusMana(initialData.bonusMana !== undefined ? String(initialData.bonusMana) : "");
         setBonusDt(initialData.bonusDt !== undefined ? String(initialData.bonusDt) : "");
+        
+        // Load usage
+        setUsageType((initialData.usageType as any) || "standard");
+        setMaxCharges(initialData.maxCharges || 0);
       } else {
         setName("");
         setDescription("");
@@ -100,6 +109,10 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setBonusHp("");
         setBonusMana("");
         setBonusDt("");
+
+        // Reset usage
+        setUsageType("standard");
+        setMaxCharges(0);
       }
     }
   }, [isOpen, initialData]);
@@ -110,7 +123,8 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
 
     const payload = {
       characterId,
-      equipmentId,
+      equipmentId: equipmentId || null,
+      inventoryItemId: inventoryItemId || null,
       name,
       description,
       cost,
@@ -136,6 +150,11 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
       bonusDt,
       level: initialData ? initialData.level : 1,
       active: initialData ? !!initialData.active : false,
+      usageType,
+      maxCharges: usageType === "rechargeable" ? maxCharges : 0,
+      currentCharges: initialData && initialData.usageType === usageType
+        ? (initialData.currentCharges ?? maxCharges)
+        : maxCharges
     };
 
     if (initialData) {
@@ -149,7 +168,6 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         }
       });
     } else {
-      if (equipmentId === null) return;
       addAbility.mutate(payload, {
         onSuccess: () => {
           toast.success("Item ability added.");
@@ -162,13 +180,16 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-5">
-        <DialogHeader className="border-b border-border/30 pb-2">
+        <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+        <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+        <DialogHeader className="border-b border-border/30 pb-2 z-10 relative">
           <DialogTitle className="font-serif text-2xl text-primary font-bold">
             {initialData ? "Edit Item Ability" : "Add Item Ability"}
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSave} className="space-y-4 pt-3 font-sans text-xs">
+        <form onSubmit={handleSave} className="space-y-4 pt-3 font-sans text-xs z-10 relative">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
@@ -179,7 +200,7 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
               <select 
                 value={type} 
                 onChange={e => setType(e.target.value)} 
-                className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 <option value="">None</option>
                 <option value="Attack">Attack</option>
@@ -197,8 +218,37 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
             <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the effects of this ability..." className="bg-background font-serif min-h-[70px] rounded-none" />
           </div>
 
+          {/* Usage Type & Charges settings */}
+          <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-3">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Usage Type</label>
+              <select 
+                value={usageType} 
+                onChange={e => setUsageType(e.target.value as any)} 
+                className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm text-foreground focus:outline-none"
+              >
+                <option value="standard">Standard / Infinite</option>
+                <option value="one-time">One time use (Deducts Quantity)</option>
+                <option value="rechargeable">Rechargeable (Uses Charges)</option>
+              </select>
+            </div>
+            {usageType === "rechargeable" && (
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Max Charges</label>
+                <Input 
+                  type="number" 
+                  min={1} 
+                  value={maxCharges} 
+                  onChange={e => setMaxCharges(Math.max(1, Number(e.target.value)))} 
+                  required 
+                  className="bg-background font-mono rounded-none h-9 text-xs" 
+                />
+              </div>
+            )}
+          </div>
+
           {/* Linked Attributes checkboxes */}
-          <div>
+          <div className="border-t border-border/20 pt-3">
             <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1.5">Linked Attributes (For Roll Modifiers)</label>
             <div className="grid grid-cols-4 gap-2">
               {STAT_OPTIONS.map(stat => {
@@ -228,35 +278,35 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
           <div className="grid grid-cols-4 gap-3">
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost (MP)</label>
-              <Input type="number" min={0} value={cost} onChange={e => setCost(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+              <Input type="number" min={0} value={cost} onChange={e => setCost(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
             </div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Cooldown</label>
-              <Input type="number" min={0} value={cooldown} onChange={e => setCooldown(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+              <Input type="number" min={0} value={cooldown} onChange={e => setCooldown(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
             </div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Range</label>
-              <Input value={range} onChange={e => setRange(e.target.value)} required placeholder="e.g. 5 ft, Self" className="bg-background font-serif rounded-none" />
+              <Input value={range} onChange={e => setRange(e.target.value)} required placeholder="e.g. 5 ft, Self" className="bg-background font-serif rounded-none h-9 text-xs" />
             </div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
-              <Input value={speed} onChange={e => setSpeed(e.target.value)} required placeholder="e.g. Instant, 1 action" className="bg-background font-serif rounded-none" />
+              <Input value={speed} onChange={e => setSpeed(e.target.value)} required placeholder="e.g. Instant, 1 action" className="bg-background font-serif rounded-none h-9 text-xs" />
             </div>
           </div>
 
           <div>
             <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Roll Formula / Modifier (Optional)</label>
-            <Input value={rollFormula} onChange={e => setRollFormula(e.target.value)} placeholder="e.g. d20+powr+6, 2d6+prer" className="bg-background font-mono rounded-none" />
+            <Input value={rollFormula} onChange={e => setRollFormula(e.target.value)} placeholder="e.g. d20+powr+6, 2d6+prer" className="bg-background font-mono rounded-none h-9 text-xs" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-3">
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
-              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none" />
+              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none h-9 text-xs" />
             </div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
-              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none" />
+              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none h-9 text-xs" />
             </div>
           </div>
 
@@ -264,54 +314,42 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
           <div className="border-t border-border/20 pt-3 space-y-2">
             <h5 className="font-serif font-bold text-primary text-sm">Stat Modifiers (Granted while active)</h5>
             <div className="grid grid-cols-4 gap-2">
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
-                <Input type="number" value={bonusPower} onChange={e => setBonusPower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
-                <Input type="number" value={bonusVitality} onChange={e => setBonusVitality(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
-                <Input type="number" value={bonusSpirit} onChange={e => setBonusSpirit(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
-                <Input type="number" value={bonusAgility} onChange={e => setBonusAgility(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
-                <Input type="number" value={bonusEndurance} onChange={e => setBonusEndurance(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
-                <Input type="number" value={bonusPrecision} onChange={e => setBonusPrecision(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
-                <Input type="number" value={bonusWillpower} onChange={e => setBonusWillpower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
-                <Input type="number" value={bonusCharisma} onChange={e => setBonusCharisma(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-              </div>
+              {STAT_OPTIONS.map(stat => {
+                const stateSetter = {
+                  power: [bonusPower, setBonusPower],
+                  vitality: [bonusVitality, setBonusVitality],
+                  spirit: [bonusSpirit, setBonusSpirit],
+                  agility: [bonusAgility, setBonusAgility],
+                  endurance: [bonusEndurance, setBonusEndurance],
+                  precision: [bonusPrecision, setBonusPrecision],
+                  willpower: [bonusWillpower, setBonusWillpower],
+                  charisma: [bonusCharisma, setBonusCharisma]
+                }[stat];
+                if (!stateSetter) return null;
+                const [val, setter] = stateSetter;
+                return (
+                  <div key={stat}>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">{stat.substring(0,3)}</label>
+                    <Input type="number" value={val as number} onChange={e => (setter as any)(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* Vitals Modifiers Grid */}
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 border-t border-border/20 pt-3">
             <div>
               <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">HP Mod</label>
-              <Input value={bonusHp} onChange={e => setBonusHp(e.target.value)} placeholder="e.g. +5, -2" className="bg-background font-mono h-7 text-xs rounded-none" />
+              <Input value={bonusHp} onChange={e => setBonusHp(e.target.value)} placeholder="e.g. +5, -2" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
             </div>
             <div>
               <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Mana Mod</label>
-              <Input value={bonusMana} onChange={e => setBonusMana(e.target.value)} placeholder="e.g. +10, -5" className="bg-background font-mono h-7 text-xs rounded-none" />
+              <Input value={bonusMana} onChange={e => setBonusMana(e.target.value)} placeholder="e.g. +10, -5" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
             </div>
             <div>
               <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">DT Mod</label>
-              <Input value={bonusDt} onChange={e => setBonusDt(e.target.value)} placeholder="e.g. +1, -1" className="bg-background font-mono h-7 text-xs rounded-none" />
+              <Input value={bonusDt} onChange={e => setBonusDt(e.target.value)} placeholder="e.g. +1, -1" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
             </div>
           </div>
 
