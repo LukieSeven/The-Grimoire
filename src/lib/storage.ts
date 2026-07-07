@@ -34,9 +34,12 @@ export interface FamiliarAbility {
   bonusPrecision?: number;
   bonusWillpower?: number;
   bonusCharisma?: number;
-  bonusHp?: string | number;
-  bonusMana?: string | number;
-  bonusDt?: string | number;
+  hpAdd?: number;
+  hpBuff?: number;
+  manaAdd?: number;
+  manaBuff?: number;
+  dtAdd?: number;
+  dtBuff?: number;
   sortOrder?: number;
 }
 
@@ -169,9 +172,12 @@ export interface Ability {
   bonusPrecision?: number;
   bonusWillpower?: number;
   bonusCharisma?: number;
-  bonusHp?: string | number;
-  bonusMana?: string | number;
-  bonusDt?: string | number;
+  hpAdd?: number;
+  hpBuff?: number;
+  manaAdd?: number;
+  manaBuff?: number;
+  dtAdd?: number;
+  dtBuff?: number;
   essenceId?: number | null;
   resistances?: string;
   immunities?: string;
@@ -447,24 +453,10 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     dtbonus: char.dtBonus + armorDtBonus,
   };
 
-  // Sum active ability resource bonuses using evaluateFormula dynamically
-  const abilityHpBonus = activeAbilities.reduce((sum, ab) => {
-    if (!ab.bonusHp) return sum;
-    const evaluated = typeof ab.bonusHp === "number" ? ab.bonusHp : evaluateFormula(String(ab.bonusHp), variables);
-    return sum + evaluated;
-  }, 0);
-
-  const abilityManaBonus = activeAbilities.reduce((sum, ab) => {
-    if (!ab.bonusMana) return sum;
-    const evaluated = typeof ab.bonusMana === "number" ? ab.bonusMana : evaluateFormula(String(ab.bonusMana), variables);
-    return sum + evaluated;
-  }, 0);
-
-  const abilityDtBonus = activeAbilities.reduce((sum, ab) => {
-    if (!ab.bonusDt) return sum;
-    const evaluated = typeof ab.bonusDt === "number" ? ab.bonusDt : evaluateFormula(String(ab.bonusDt), variables);
-    return sum + evaluated;
-  }, 0);
+  // Sum active ability resource bonuses
+  const abilityHpBonus = activeAbilities.reduce((sum, ab) => sum + (ab.hpBuff || 0), 0);
+  const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + (ab.manaBuff || 0), 0);
+  const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + (ab.dtBuff || 0), 0);
 
   const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
   const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
@@ -1131,9 +1123,12 @@ const DEFAULT_ABILITY: Omit<Ability, "id" | "characterId" | "name"> = {
   bonusPrecision: 0,
   bonusWillpower: 0,
   bonusCharisma: 0,
-  bonusHp: "",
-  bonusMana: "",
-  bonusDt: "",
+  hpAdd: 0,
+  hpBuff: 0,
+  manaAdd: 0,
+  manaBuff: 0,
+  dtAdd: 0,
+  dtBuff: 0,
   essenceId: null,
   resistances: "",
   immunities: "",

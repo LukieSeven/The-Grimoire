@@ -434,34 +434,7 @@ export default function CharacterSheet() {
     }));
   };
 
-  // ── Familiar Ability Creator ───────────────────────────────
-  const [isAddingFamAbility, setIsAddingFamAbility] = useState<Record<string | number, boolean>>({});
-  const [famAbilityName, setFamAbilityName] = useState("");
-  const [famAbilityDesc, setFamAbilityDesc] = useState("");
-  const [famAbilityCost, setFamAbilityCost] = useState(0);
-  const [famAbilityFormula, setFamAbilityFormula] = useState("");
-  const [editingFamAbilityId, setEditingFamAbilityId] = useState<{ famId: string | number; abilityId: number } | null>(null);
-  const [famAbilityType, setFamAbilityType] = useState("");
-  const [famAbilityCooldown, setFamAbilityCooldown] = useState(0);
-  const [famAbilityRange, setFamAbilityRange] = useState("Melee");
-  const [famAbilitySpeed, setFamAbilitySpeed] = useState("Standard");
-  const [famAbilityLinkedStats, setFamAbilityLinkedStats] = useState<string[]>([]);
-  const [famAbilityAssignedToQuickRolls, setFamAbilityAssignedToQuickRolls] = useState(false);
-  const [famAbilityResistances, setFamAbilityResistances] = useState("");
-  const [famAbilityImmunities, setFamAbilityImmunities] = useState("");
 
-  const [famAbilityBonusPower, setFamAbilityBonusPower] = useState(0);
-  const [famAbilityBonusVitality, setFamAbilityBonusVitality] = useState(0);
-  const [famAbilityBonusSpirit, setFamAbilityBonusSpirit] = useState(0);
-  const [famAbilityBonusAgility, setFamAbilityBonusAgility] = useState(0);
-  const [famAbilityBonusEndurance, setFamAbilityBonusEndurance] = useState(0);
-  const [famAbilityBonusPrecision, setFamAbilityBonusPrecision] = useState(0);
-  const [famAbilityBonusWillpower, setFamAbilityBonusWillpower] = useState(0);
-  const [famAbilityBonusCharisma, setFamAbilityBonusCharisma] = useState(0);
-
-  const [famAbilityBonusHp, setFamAbilityBonusHp] = useState("");
-  const [famAbilityBonusMana, setFamAbilityBonusMana] = useState("");
-  const [famAbilityBonusDt, setFamAbilityBonusDt] = useState("");
 
   // ── Notes Import Ref ──
   const notesFileInputRef = React.useRef<HTMLInputElement>(null);
@@ -577,10 +550,15 @@ export default function CharacterSheet() {
       charisma: fam.charisma, cha: fam.charisma,
       dtbonus: fam.dtBonus
     };
+    const activeFamAbilities = fam.abilities?.filter(ab => ab.active) || [];
+    const abilityHpBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.hpBuff || 0), 0);
+    const abilityManaBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.manaBuff || 0), 0);
+    const abilityDtBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.dtBuff || 0), 0);
+
     return {
-      maxHp: Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars)),
-      maxMana: Math.max(0, evaluateFormula(fam.manaFormula || "Spirit * 5", vars)),
-      maxDt: Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars)),
+      maxHp: Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars) + abilityHpBonus),
+      maxMana: Math.max(0, evaluateFormula(fam.manaFormula || "Spirit * 5", vars) + abilityManaBonus),
+      maxDt: Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars) + abilityDtBonus),
     };
   };
 
@@ -1171,7 +1149,36 @@ export default function CharacterSheet() {
 
     const nextMana = curMana - ability.cost;
     setMana(nextMana);
-    updateChar.mutate({ id, data: { currentMana: nextMana } });
+
+    const updates: Record<string, number> = { currentMana: nextMana };
+    const changes: string[] = [];
+
+    if (ability.hpAdd) {
+      const curHp = hp ?? character.currentHp;
+      const nextHp = Math.min(finalStats.maxHp, curHp + ability.hpAdd);
+      setHp(nextHp);
+      updates.currentHp = nextHp;
+      changes.push(`+${ability.hpAdd} HP`);
+    }
+    if (ability.manaAdd) {
+      const nextM = Math.min(finalStats.maxMana, nextMana + ability.manaAdd);
+      setMana(nextM);
+      updates.currentMana = nextM;
+      changes.push(`+${ability.manaAdd} MP`);
+    }
+    if (ability.dtAdd) {
+      const curDt = dt ?? character.currentDt;
+      const nextDt = Math.min(finalStats.maxDt, curDt + ability.dtAdd);
+      setDt(nextDt);
+      updates.currentDt = nextDt;
+      changes.push(`+${ability.dtAdd} DT`);
+    }
+
+    updateChar.mutate({ id, data: updates });
+
+    if (changes.length > 0) {
+      toast.success(`${ability.name} activated! Restored ${changes.join(", ")}.`);
+    }
 
     if (ability.rollFormula) {
       let rollFormulaToUse = ability.rollFormula;
@@ -1235,7 +1242,7 @@ export default function CharacterSheet() {
 
       const totalMod = statMod + eqMod;
       handleRoll(rollFormulaToUse, `${ability.name} Cast`, undefined, totalMod);
-    } else {
+    } else if (changes.length === 0) {
       toast.success(`${ability.name} activated! (-${ability.cost} MP)`);
     }
   };
@@ -1334,7 +1341,33 @@ export default function CharacterSheet() {
       return;
     }
     const nextMana = curMana - ability.cost;
-    updateFamiliarData(fam.id, { ...fam, currentMana: nextMana });
+    
+    const fMax = getFamiliarMaxValues(fam);
+    const updates: Partial<Familiar> = { currentMana: nextMana };
+    const changes: string[] = [];
+
+    if (ability.hpAdd) {
+      const nextHp = Math.min(fMax.maxHp, fam.currentHp + ability.hpAdd);
+      updates.currentHp = nextHp;
+      changes.push(`+${ability.hpAdd} HP`);
+    }
+    if (ability.manaAdd) {
+      const nextM = Math.min(fMax.maxMana, nextMana + ability.manaAdd);
+      updates.currentMana = nextM;
+      changes.push(`+${ability.manaAdd} MP`);
+    }
+    if (ability.dtAdd) {
+      const nextDt = Math.min(fMax.maxDt, fam.currentDt + ability.dtAdd);
+      updates.currentDt = nextDt;
+      changes.push(`+${ability.dtAdd} DT`);
+    }
+
+    updateFamiliarData(fam.id, { ...fam, ...updates });
+    const vitalsMsg = changes.length > 0 ? ` Restored ${changes.join(", ")}.` : "";
+
+    if (changes.length > 0) {
+      toast.success(`${fam.name} activated ${ability.name}!${vitalsMsg}`);
+    }
 
     if (ability.rollFormula) {
       setRollingDice(`fam-ability-${ability.id}`);
@@ -1368,7 +1401,7 @@ export default function CharacterSheet() {
           onError: () => setRollingDice(null)
         }
       );
-    } else {
+    } else if (changes.length === 0) {
       toast.success(`${fam.name} used ${ability.name}!`);
     }
   };
@@ -1715,158 +1748,7 @@ export default function CharacterSheet() {
     setReleasingFamId(null);
   };
 
-  const handleCreateFamAbility = (famId: string | number, e: React.FormEvent) => {
-    e.preventDefault();
-    const list = character.familiars ? [...character.familiars] : [];
-    const fam = list.find(f => f.id === famId);
-    if (!fam || !famAbilityName.trim()) return;
 
-    const newAb: FamiliarAbility = {
-      id: Date.now(),
-      name: famAbilityName,
-      description: famAbilityDesc,
-      cost: famAbilityCost,
-      cooldown: famAbilityCooldown,
-      range: famAbilityRange,
-      speed: famAbilitySpeed,
-      rollFormula: famAbilityFormula,
-      linkedStats: famAbilityLinkedStats,
-      assignedToQuickRolls: famAbilityAssignedToQuickRolls,
-      type: famAbilityType,
-      resistances: famAbilityResistances,
-      immunities: famAbilityImmunities,
-      bonusPower: famAbilityBonusPower,
-      bonusVitality: famAbilityBonusVitality,
-      bonusSpirit: famAbilityBonusSpirit,
-      bonusAgility: famAbilityBonusAgility,
-      bonusEndurance: famAbilityBonusEndurance,
-      bonusPrecision: famAbilityBonusPrecision,
-      bonusWillpower: famAbilityBonusWillpower,
-      bonusCharisma: famAbilityBonusCharisma,
-      bonusHp: famAbilityBonusHp,
-      bonusMana: famAbilityBonusMana,
-      bonusDt: famAbilityBonusDt,
-      level: 1,
-      active: false
-    };
-
-    const updated = {
-      ...fam,
-      abilities: [...(fam.abilities || []), newAb]
-    };
-    updateFamiliarData(famId, updated);
-    resetFamAbilityForm(famId);
-    toast.success("Familiar ability added.");
-  };
-
-  const handleEditFamAbilityStart = (famId: string | number, ab: FamiliarAbility) => {
-    setEditingFamAbilityId({ famId, abilityId: ab.id });
-    setFamAbilityName(ab.name);
-    setFamAbilityDesc(ab.description);
-    setFamAbilityCost(ab.cost);
-    setFamAbilityCooldown(ab.cooldown || 0);
-    setFamAbilityRange(ab.range || "Melee");
-    setFamAbilitySpeed(ab.speed || "Standard");
-    setFamAbilityFormula(ab.rollFormula || "");
-    setFamAbilityType(ab.type || "");
-    setFamAbilityLinkedStats(ab.linkedStats || []);
-    setFamAbilityAssignedToQuickRolls(!!ab.assignedToQuickRolls);
-    setFamAbilityResistances(ab.resistances || "");
-    setFamAbilityImmunities(ab.immunities || "");
-    setFamAbilityBonusPower(ab.bonusPower || 0);
-    setFamAbilityBonusVitality(ab.bonusVitality || 0);
-    setFamAbilityBonusSpirit(ab.bonusSpirit || 0);
-    setFamAbilityBonusAgility(ab.bonusAgility || 0);
-    setFamAbilityBonusEndurance(ab.bonusEndurance || 0);
-    setFamAbilityBonusPrecision(ab.bonusPrecision || 0);
-    setFamAbilityBonusWillpower(ab.bonusWillpower || 0);
-    setFamAbilityBonusCharisma(ab.bonusCharisma || 0);
-    setFamAbilityBonusHp(ab.bonusHp !== undefined ? String(ab.bonusHp) : "");
-    setFamAbilityBonusMana(ab.bonusMana !== undefined ? String(ab.bonusMana) : "");
-    setFamAbilityBonusDt(ab.bonusDt !== undefined ? String(ab.bonusDt) : "");
-    
-    setIsAddingFamAbility(prev => ({ ...prev, [famId]: true }));
-  };
-
-  const handleUpdateFamAbility = (famId: string | number, abId: number) => {
-    const list = character.familiars ? [...character.familiars] : [];
-    const fam = list.find(f => f.id === famId);
-    if (!fam || !famAbilityName.trim()) return;
-
-    const updatedAbilities = fam.abilities.map(a => {
-      if (a.id === abId) {
-        return {
-          ...a,
-          name: famAbilityName,
-          description: famAbilityDesc,
-          cost: famAbilityCost,
-          cooldown: famAbilityCooldown,
-          range: famAbilityRange,
-          speed: famAbilitySpeed,
-          rollFormula: famAbilityFormula,
-          type: famAbilityType,
-          linkedStats: famAbilityLinkedStats,
-          assignedToQuickRolls: famAbilityAssignedToQuickRolls,
-          resistances: famAbilityResistances,
-          immunities: famAbilityImmunities,
-          bonusPower: famAbilityBonusPower,
-          bonusVitality: famAbilityBonusVitality,
-          bonusSpirit: famAbilityBonusSpirit,
-          bonusAgility: famAbilityBonusAgility,
-          bonusEndurance: famAbilityBonusEndurance,
-          bonusPrecision: famAbilityBonusPrecision,
-          bonusWillpower: famAbilityBonusWillpower,
-          bonusCharisma: famAbilityBonusCharisma,
-          bonusHp: famAbilityBonusHp,
-          bonusMana: famAbilityBonusMana,
-          bonusDt: famAbilityBonusDt
-        };
-      }
-      return a;
-    });
-
-    updateFamiliarData(famId, { ...fam, abilities: updatedAbilities });
-    resetFamAbilityForm(famId);
-    toast.success("Familiar ability updated.");
-  };
-
-  const resetFamAbilityForm = (famId: string | number) => {
-    setFamAbilityName("");
-    setFamAbilityDesc("");
-    setFamAbilityCost(0);
-    setFamAbilityCooldown(0);
-    setFamAbilityRange("Melee");
-    setFamAbilitySpeed("Standard");
-    setFamAbilityFormula("");
-    setFamAbilityType("");
-    setFamAbilityLinkedStats([]);
-    setFamAbilityAssignedToQuickRolls(false);
-    setFamAbilityResistances("");
-    setFamAbilityImmunities("");
-    setFamAbilityBonusPower(0);
-    setFamAbilityBonusVitality(0);
-    setFamAbilityBonusSpirit(0);
-    setFamAbilityBonusAgility(0);
-    setFamAbilityBonusEndurance(0);
-    setFamAbilityBonusPrecision(0);
-    setFamAbilityBonusWillpower(0);
-    setFamAbilityBonusCharisma(0);
-    setFamAbilityBonusHp("");
-    setFamAbilityBonusMana("");
-    setFamAbilityBonusDt("");
-    setEditingFamAbilityId(null);
-    setIsAddingFamAbility(prev => ({ ...prev, [famId]: false }));
-  };
-
-  const handleDeleteFamAbility = (famId: string | number, abId: number) => {
-    const list = character.familiars ? [...character.familiars] : [];
-    const fam = list.find(f => f.id === famId);
-    if (!fam) return;
-
-    const filtered = fam.abilities.filter(a => a.id !== abId);
-    updateFamiliarData(famId, { ...fam, abilities: filtered });
-    toast.success("Familiar ability removed.");
-  };
 
   // ── Notes Backup & Restore ──
   const handleExportNotes = () => {
@@ -3779,9 +3661,12 @@ export default function CharacterSheet() {
                 if (ability.bonusPrecision) bonuses.push(`+${ability.bonusPrecision} PRE`);
                 if (ability.bonusWillpower) bonuses.push(`+${ability.bonusWillpower} WIL`);
                 if (ability.bonusCharisma) bonuses.push(`+${ability.bonusCharisma} CHA`);
-                if (ability.bonusHp) bonuses.push(`+${ability.bonusHp} Max HP`);
-                if (ability.bonusMana) bonuses.push(`+${ability.bonusMana} Max Mana`);
-                if (ability.bonusDt) bonuses.push(`+${ability.bonusDt} Max DT`);
+                if (ability.hpAdd) bonuses.push(`+${ability.hpAdd} HP Heal`);
+                if (ability.hpBuff) bonuses.push(`+${ability.hpBuff} Max HP`);
+                if (ability.manaAdd) bonuses.push(`+${ability.manaAdd} Mana Restore`);
+                if (ability.manaBuff) bonuses.push(`+${ability.manaBuff} Max Mana`);
+                if (ability.dtAdd) bonuses.push(`+${ability.dtAdd} DT Shield`);
+                if (ability.dtBuff) bonuses.push(`+${ability.dtBuff} Max DT`);
                 if (ability.resistances) bonuses.push(`Resistances: ${ability.resistances}`);
                 if (ability.immunities) bonuses.push(`Immunities: ${ability.immunities}`);
 

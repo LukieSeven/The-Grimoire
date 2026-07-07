@@ -50,10 +50,12 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   const [bonusWillpower, setBonusWillpower] = useState<number>(0);
   const [bonusCharisma, setBonusCharisma] = useState<number>(0);
 
-  // Vitals Modifiers
-  const [bonusHp, setBonusHp] = useState<string>("");
-  const [bonusMana, setBonusMana] = useState<string>("");
-  const [bonusDt, setBonusDt] = useState<string>("");
+  const [hpAdd, setHpAdd] = useState<number>(0);
+  const [hpBuff, setHpBuff] = useState<number>(0);
+  const [manaAdd, setManaAdd] = useState<number>(0);
+  const [manaBuff, setManaBuff] = useState<number>(0);
+  const [dtAdd, setDtAdd] = useState<number>(0);
+  const [dtBuff, setDtBuff] = useState<number>(0);
 
   useEffect(() => {
     if (isOpen) {
@@ -78,9 +80,12 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setBonusPrecision(initialData.bonusPrecision || 0);
         setBonusWillpower(initialData.bonusWillpower || 0);
         setBonusCharisma(initialData.bonusCharisma || 0);
-        setBonusHp(initialData.bonusHp !== undefined ? String(initialData.bonusHp) : "");
-        setBonusMana(initialData.bonusMana !== undefined ? String(initialData.bonusMana) : "");
-        setBonusDt(initialData.bonusDt !== undefined ? String(initialData.bonusDt) : "");
+        setHpAdd(initialData.hpAdd || 0);
+        setHpBuff(initialData.hpBuff || 0);
+        setManaAdd(initialData.manaAdd || 0);
+        setManaBuff(initialData.manaBuff || 0);
+        setDtAdd(initialData.dtAdd || 0);
+        setDtBuff(initialData.dtBuff || 0);
         
         // Load usage
         setUsageType((initialData.usageType as any) || "standard");
@@ -106,9 +111,12 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setBonusPrecision(0);
         setBonusWillpower(0);
         setBonusCharisma(0);
-        setBonusHp("");
-        setBonusMana("");
-        setBonusDt("");
+        setHpAdd(0);
+        setHpBuff(0);
+        setManaAdd(0);
+        setManaBuff(0);
+        setDtAdd(0);
+        setDtBuff(0);
 
         // Reset usage
         setUsageType("standard");
@@ -145,9 +153,12 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
       bonusPrecision,
       bonusWillpower,
       bonusCharisma,
-      bonusHp,
-      bonusMana,
-      bonusDt,
+      hpAdd,
+      hpBuff,
+      manaAdd,
+      manaBuff,
+      dtAdd,
+      dtBuff,
       level: initialData ? initialData.level : 1,
       active: initialData ? !!initialData.active : false,
       usageType,
@@ -338,18 +349,45 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
           </div>
 
           {/* Vitals Modifiers Grid */}
-          <div className="grid grid-cols-3 gap-2 border-t border-border/20 pt-3">
-            <div>
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">HP Mod</label>
-              <Input value={bonusHp} onChange={e => setBonusHp(e.target.value)} placeholder="e.g. +5, -2" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+          <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-3">
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+              <div className="grid grid-cols-2 gap-1">
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                  <Input type="number" value={hpAdd} onChange={e => setHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                  <Input type="number" value={hpBuff} onChange={e => setHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Mana Mod</label>
-              <Input value={bonusMana} onChange={e => setBonusMana(e.target.value)} placeholder="e.g. +10, -5" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+              <div className="grid grid-cols-2 gap-1">
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                  <Input type="number" value={manaAdd} onChange={e => setManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                  <Input type="number" value={manaBuff} onChange={e => setManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">DT Mod</label>
-              <Input value={bonusDt} onChange={e => setBonusDt(e.target.value)} placeholder="e.g. +1, -1" className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+              <div className="grid grid-cols-2 gap-1">
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                  <Input type="number" value={dtAdd} onChange={e => setDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                  <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                </div>
+              </div>
             </div>
           </div>
 

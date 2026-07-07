@@ -52,6 +52,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   const [abilityCost, setAbilityCost] = useState(0);
   const [abilityRange, setAbilityRange] = useState("Self");
   const [abilitySpeed, setAbilitySpeed] = useState("Instant");
+  const [abilityHpAdd, setAbilityHpAdd] = useState<number>(0);
+  const [abilityHpBuff, setAbilityHpBuff] = useState<number>(0);
+  const [abilityManaAdd, setAbilityManaAdd] = useState<number>(0);
+  const [abilityManaBuff, setAbilityManaBuff] = useState<number>(0);
+  const [abilityDtAdd, setAbilityDtAdd] = useState<number>(0);
+  const [abilityDtBuff, setAbilityDtBuff] = useState<number>(0);
 
   const handleStartAddAbility = () => {
     setAbilityIndexToEdit(null);
@@ -61,6 +67,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     setAbilityCost(0);
     setAbilityRange("Self");
     setAbilitySpeed("Instant");
+    setAbilityHpAdd(0);
+    setAbilityHpBuff(0);
+    setAbilityManaAdd(0);
+    setAbilityManaBuff(0);
+    setAbilityDtAdd(0);
+    setAbilityDtBuff(0);
     setIsEditingAbility(true);
   };
 
@@ -72,6 +84,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     setAbilityCost(ab.cost || 0);
     setAbilityRange(ab.range || "Self");
     setAbilitySpeed(ab.speed || "Instant");
+    setAbilityHpAdd(ab.hpAdd || 0);
+    setAbilityHpBuff(ab.hpBuff || 0);
+    setAbilityManaAdd(ab.manaAdd || 0);
+    setAbilityManaBuff(ab.manaBuff || 0);
+    setAbilityDtAdd(ab.dtAdd || 0);
+    setAbilityDtBuff(ab.dtBuff || 0);
     setIsEditingAbility(true);
   };
 
@@ -87,6 +105,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
       cost: abilityCost,
       range: abilityRange,
       speed: abilitySpeed,
+      hpAdd: abilityHpAdd,
+      hpBuff: abilityHpBuff,
+      manaAdd: abilityManaAdd,
+      manaBuff: abilityManaBuff,
+      dtAdd: abilityDtAdd,
+      dtBuff: abilityDtBuff,
       cooldown: 0,
       linkedStats: [],
       assignedToQuickRolls: false
@@ -211,6 +235,49 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
                 <Input value={abilitySpeed} onChange={e => setAbilitySpeed(e.target.value)} required placeholder="e.g. Instant" className="bg-background font-serif rounded-none" />
+              </div>
+            </div>
+
+            {/* Vitals Modifiers Grid */}
+            <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input type="number" value={abilityHpAdd} onChange={e => setAbilityHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input type="number" value={abilityHpBuff} onChange={e => setAbilityHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input type="number" value={abilityManaAdd} onChange={e => setAbilityManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input type="number" value={abilityManaBuff} onChange={e => setAbilityManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input type="number" value={abilityDtAdd} onChange={e => setAbilityDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input type="number" value={abilityDtBuff} onChange={e => setAbilityDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
               </div>
             </div>
 
