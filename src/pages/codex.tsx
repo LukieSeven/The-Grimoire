@@ -553,7 +553,7 @@ export default function Codex() {
       characterId: charId,
       title: noteToPush.title,
       content: pushedContent,
-      category: noteToPush.category === "bestiary" ? "bestiary" : "lore",
+      category: noteToPush.category,
       tags: [...(noteToPush.tags || []), "CODEX"]
     }, {
       onSuccess: () => {

@@ -3931,12 +3931,14 @@ export default function CharacterSheet() {
                           className="w-full h-8 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                         >
                           <option value="general">GENERAL</option>
-                          <option value="location">PLACE / LOCATION</option>
-                          <option value="npc">PERSON / NPC</option>
-                          <option value="organization">ORGANIZATION</option>
-                          <option value="item">THING / ITEM</option>
-                          <option value="lore">FACT / LORE</option>
+                          <option value="world">LOCATIONS</option>
+                          <option value="entities">ENTITIES (PEOPLE / ORGS)</option>
                           <option value="bestiary">BESTIARY</option>
+                          <option value="systems">SYSTEMS</option>
+                          <option value="items">ITEMS</option>
+                          <option value="maps">MAPS</option>
+                          <option value="lore">LORE / ARCHIVES</option>
+                          <option value="glossary">THE GLOSSARY</option>
                         </select>
                       </div>
                       <div>
@@ -3994,7 +3996,7 @@ export default function CharacterSheet() {
                     className="bg-background/50 border-border/50 text-xs rounded-none h-8 flex-1"
                   />
                   <div className="flex gap-1 flex-wrap">
-                    {["all", "general", "npc", "organization", "location", "item", "lore", "bestiary"].map(cat => (
+                    {["all", "general", "world", "entities", "bestiary", "systems", "items", "maps", "lore", "glossary"].map(cat => (
                       <button
                         key={cat}
                         onClick={() => setNoteCategoryFilter(cat)}
@@ -4004,7 +4006,7 @@ export default function CharacterSheet() {
                             : "border-border/50 text-muted-foreground hover:text-foreground hover:bg-accent/30"
                         }`}
                       >
-                        {cat === "all" ? "All" : cat === "npc" ? "People" : cat === "organization" ? "Orgs" : cat === "location" ? "Places" : cat === "item" ? "Things" : cat === "lore" ? "Facts" : cat === "bestiary" ? "Bestiary" : "Gen"}
+                        {cat === "all" ? "All" : cat === "world" ? "Locations" : cat === "entities" ? "Entities" : cat === "bestiary" ? "Bestiary" : cat === "systems" ? "Systems" : cat === "items" ? "Items" : cat === "maps" ? "Maps" : cat === "lore" ? "Lore" : cat === "glossary" ? "Glossary" : "General"}
                       </button>
                     ))}
                   </div>
@@ -4024,7 +4026,15 @@ export default function CharacterSheet() {
                             <div>
                               <h4 className="font-serif text-lg font-bold text-primary">{note.title}</h4>
                               <Badge variant="outline" className="text-[8px] uppercase tracking-wider text-muted-foreground mt-1 border-border/50 rounded-md bg-background/50">
-                                {note.category === "npc" ? "👤 Person / NPC" : note.category === "location" ? "📍 Place / Location" : note.category === "item" ? "📦 Thing / Item" : note.category === "lore" ? "📜 Fact / Lore" : note.category === "bestiary" ? "🐉 Bestiary" : "📝 General"}
+                                {note.category === "world" ? "🌍 Location" 
+                                 : note.category === "entities" ? "👤 Entity" 
+                                 : note.category === "bestiary" ? "🐉 Bestiary" 
+                                 : note.category === "systems" ? "⚙️ System" 
+                                 : note.category === "items" ? "🧳 Item" 
+                                 : note.category === "maps" ? "🗺️ Map" 
+                                 : note.category === "lore" ? "📜 Lore / Archive" 
+                                 : note.category === "glossary" ? "📒 Glossary" 
+                                 : "📝 General"}
                               </Badge>
                             </div>
                           </div>
