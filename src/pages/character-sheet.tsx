@@ -1155,20 +1155,20 @@ export default function CharacterSheet() {
 
     if (ability.hpAdd) {
       const curHp = hp ?? character.currentHp;
-      const nextHp = Math.min(finalStats.maxHp, curHp + ability.hpAdd);
+      const nextHp = Math.min(maxHp, curHp + ability.hpAdd);
       setHp(nextHp);
       updates.currentHp = nextHp;
       changes.push(`+${ability.hpAdd} HP`);
     }
     if (ability.manaAdd) {
-      const nextM = Math.min(finalStats.maxMana, nextMana + ability.manaAdd);
+      const nextM = Math.min(maxMana, nextMana + ability.manaAdd);
       setMana(nextM);
       updates.currentMana = nextM;
       changes.push(`+${ability.manaAdd} MP`);
     }
     if (ability.dtAdd) {
       const curDt = dt ?? character.currentDt;
-      const nextDt = Math.min(finalStats.maxDt, curDt + ability.dtAdd);
+      const nextDt = Math.min(maxDt, curDt + ability.dtAdd);
       setDt(nextDt);
       updates.currentDt = nextDt;
       changes.push(`+${ability.dtAdd} DT`);
