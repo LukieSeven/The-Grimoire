@@ -982,27 +982,29 @@ export default function CharacterSheet() {
 
             const isCustomFormula = !statValue && (/[a-zA-Z]/.test(diceType) || /[+\-*/]/.test(diceType));
 
-            if (isCustomFormula) {
-              setLastRoll({
-                rawRoll: rolled,
-                modifier: 0,
-                total: rolled,
-                hadCrit: wasCrit,
-                maxChainCount: -1,
-                diceType: data.diceType,
-                label: lbl
+            if (wasCrit) {
+              const breakdownStr = `${rolled}!`;
+              const chainMod = isCustomFormula ? 0 : modifier;
+              setCritChain({
+                chainCount: 0,
+                chainDie,
+                runningDiceTotal: rolled,
+                modifier: chainMod,
+                label: lbl,
+                lastRolledValue: rolled,
+                rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
               });
             } else {
-              if (wasCrit) {
-                const breakdownStr = `${rolled}!`;
-                setCritChain({
-                  chainCount: 0,
-                  chainDie,
-                  runningDiceTotal: rolled,
-                  modifier,
+              if (isCustomFormula) {
+                setLastRoll({
+                  rawRoll: rolled,
+                  modifier: 0,
+                  total: rolled,
+                  hadCrit: false,
+                  maxChainCount: -1,
+                  diceType: data.diceType,
                   label: lbl,
-                  lastRolledValue: rolled,
-                  rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
+                  rolls: [{ label: "Roll 1", breakdown: String(rolled), total: rolled }]
                 });
               } else {
                 setLastRoll({
