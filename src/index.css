@@ -289,3 +289,21 @@ html.theme-grimoire [class*="card-"] {
   border: 1.5px solid hsl(43, 45%, 32%) !important;
 }
 
+/* ── Custom Theme Corner Style Support ── */
+.rounded-none,
+.rounded-sm,
+.rounded-md,
+.rounded-lg,
+.rounded-xl,
+button,
+input,
+textarea,
+select,
+.badge,
+.card,
+.bg-card,
+.border-dashed {
+  border-radius: var(--radius) !important;
+}
+
+

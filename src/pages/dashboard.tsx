@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { useListCharacters, useCreateCharacter, useListRecaps, useCreateRecap, useDeleteRecap } from "@/hooks/useStorage";
+import { useListCharacters, useCreateCharacter, useListRecaps, useCreateRecap, useDeleteRecap, useListUnlockedPasswords } from "@/hooks/useStorage";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +27,114 @@ export default function Dashboard() {
   const createRecap = useCreateRecap();
   const deleteRecap = useDeleteRecap();
   const [, setLocation] = useLocation();
+  const { data: unlockedPasswords = [] } = useListUnlockedPasswords();
+
+  const isChronicleUnlocked = unlockedPasswords.some(pw => {
+    const sanitize = (str: string) => 
+      (str || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+        .replace(/\s+/g, " ");
+    return sanitize(pw) === "please show me the way";
+  });
+
+  const [isChronicleImportOpen, setIsChronicleImportOpen] = useState(false);
+  const [selectedChronicleChars, setSelectedChronicleChars] = useState<number[]>([]);
+
+  const getChronicleCharacters = () => {
+    try {
+      const data = localStorage.getItem("aetherborne_chronicle_characters");
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  };
+
+  const handleImportFromChronicle = () => {
+    if (selectedChronicleChars.length === 0) return;
+    try {
+      const grimoireChars = JSON.parse(localStorage.getItem("aetherborne_characters") || "[]");
+      const grimoireEquip = JSON.parse(localStorage.getItem("aetherborne_equipment") || "[]");
+      const grimoireCurr = JSON.parse(localStorage.getItem("aetherborne_currencies") || "[]");
+      const grimoireInv = JSON.parse(localStorage.getItem("aetherborne_inventory") || "[]");
+      const grimoireEss = JSON.parse(localStorage.getItem("aetherborne_essences") || "[]");
+      const grimoireAbils = JSON.parse(localStorage.getItem("aetherborne_abilities") || "[]");
+      const grimoireSkills = JSON.parse(localStorage.getItem("aetherborne_skills") || "[]");
+
+      const chronicleBundles = getChronicleCharacters();
+
+      selectedChronicleChars.forEach(id => {
+        const bundle = chronicleBundles.find((b: any) => b.character.id === id);
+        if (!bundle) return;
+
+        const newCharId = grimoireChars.length > 0 ? Math.max(...grimoireChars.map((c: any) => c.id)) + 1 : 1;
+
+        const clonedChar = { ...bundle.character, id: newCharId };
+        grimoireChars.push(clonedChar);
+
+        if (Array.isArray(bundle.equipment)) {
+          bundle.equipment.forEach((eq: any) => {
+            const newEqId = grimoireEquip.length > 0 ? Math.max(...grimoireEquip.map((e: any) => e.id)) + 1 : 1;
+            grimoireEquip.push({ ...eq, id: newEqId, characterId: newCharId });
+          });
+        }
+        if (Array.isArray(bundle.currencies)) {
+          bundle.currencies.forEach((curr: any) => {
+            const newCurrId = grimoireCurr.length > 0 ? Math.max(...grimoireCurr.map((c: any) => c.id)) + 1 : 1;
+            grimoireCurr.push({ ...curr, id: newCurrId, characterId: newCharId });
+          });
+        }
+        if (Array.isArray(bundle.inventory)) {
+          bundle.inventory.forEach((inv: any) => {
+            const newInvId = grimoireInv.length > 0 ? Math.max(...grimoireInv.map((i: any) => i.id)) + 1 : 1;
+            grimoireInv.push({ ...inv, id: newInvId, characterId: newCharId });
+          });
+        }
+        if (Array.isArray(bundle.essences)) {
+          bundle.essences.forEach((ess: any) => {
+            const newEssId = grimoireEss.length > 0 ? Math.max(...grimoireEss.map((e: any) => e.id)) + 1 : 1;
+            grimoireEss.push({ ...ess, id: newEssId, characterId: newCharId });
+          });
+        }
+        if (Array.isArray(bundle.abilities)) {
+          bundle.abilities.forEach((ab: any) => {
+            const newAbId = grimoireAbils.length > 0 ? Math.max(...grimoireAbils.map((a: any) => a.id)) + 1 : 1;
+            grimoireAbils.push({ ...ab, id: newAbId, characterId: newCharId });
+          });
+        }
+        if (Array.isArray(bundle.skills)) {
+          bundle.skills.forEach((sk: any) => {
+            const newSkId = grimoireSkills.length > 0 ? Math.max(...grimoireSkills.map((s: any) => s.id)) + 1 : 1;
+            grimoireSkills.push({ ...sk, id: newSkId, characterId: newCharId });
+          });
+        }
+      });
+
+      localStorage.setItem("aetherborne_characters", JSON.stringify(grimoireChars));
+      localStorage.setItem("aetherborne_equipment", JSON.stringify(grimoireEquip));
+      localStorage.setItem("aetherborne_currencies", JSON.stringify(grimoireCurr));
+      localStorage.setItem("aetherborne_inventory", JSON.stringify(grimoireInv));
+      localStorage.setItem("aetherborne_essences", JSON.stringify(grimoireEss));
+      localStorage.setItem("aetherborne_abilities", JSON.stringify(grimoireAbils));
+      localStorage.setItem("aetherborne_skills", JSON.stringify(grimoireSkills));
+
+      queryClient.invalidateQueries();
+      toast.success(`Successfully imported ${selectedChronicleChars.length} characters into the Grimoire roster!`);
+      setIsChronicleImportOpen(false);
+      setSelectedChronicleChars([]);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to import selected characters.");
+    }
+  };
+
+  const handleToggleSelectChronicleChar = (id: number) => {
+    setSelectedChronicleChars(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -275,8 +383,80 @@ export default function Dashboard() {
             <DropdownMenuItem onClick={handleImportClick} className="cursor-pointer font-serif font-bold text-xs flex items-center gap-2 px-3 py-2 text-foreground hover:bg-accent/40 focus:bg-accent/40">
               <Upload className="w-3.5 h-3.5 text-primary" /> Import Character
             </DropdownMenuItem>
+            {isChronicleUnlocked && (
+              <DropdownMenuItem onClick={() => setIsChronicleImportOpen(true)} className="cursor-pointer font-serif font-bold text-xs flex items-center gap-2 px-3 py-2 text-foreground hover:bg-accent/40 focus:bg-accent/40 border-t border-border/25">
+                <BookOpen className="w-3.5 h-3.5 text-primary" /> Import from Chronicle
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Dialog open={isChronicleImportOpen} onOpenChange={setIsChronicleImportOpen}>
+          <DialogContent className="sm:max-w-[480px] max-h-[80vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
+            <div className="absolute inset-1 border border-border/10 pointer-events-none" />
+            <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
+
+            <DialogHeader>
+              <DialogTitle className="font-serif text-2xl text-primary font-bold border-b border-border/30 pb-2 flex items-center gap-2 z-10 relative">
+                <BookOpen className="w-5 h-5" /> Import from Chronicle
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-4 space-y-4 font-serif z-10 relative text-xs">
+              <p className="text-muted-foreground font-sans leading-relaxed">
+                Select one or more heroes currently stored in the Chronicle of the Creator database to clone them into the active Grimoire roster.
+              </p>
+
+              {chronicleChars.length === 0 ? (
+                <div className="text-center py-8 text-stone-500 italic border border-dashed border-border/20 bg-background/20 rounded-md">
+                  No characters found in the Chronicle roster.
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+                  {chronicleChars.map((item: any) => {
+                    const char = item.character;
+                    const isChecked = selectedChronicleChars.includes(char.id);
+                    return (
+                      <div
+                        key={char.id}
+                        onClick={() => handleToggleSelectChronicleChar(char.id)}
+                        className={`flex items-center gap-3 p-3 border transition-all cursor-pointer rounded-md ${
+                          isChecked 
+                            ? "border-primary bg-primary/10" 
+                            : "border-border/50 bg-background/30 hover:bg-accent/40"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20 accent-primary"
+                        />
+                        <div className="text-left font-sans flex-1">
+                          <div className="text-xs font-bold text-foreground">{char.name}</div>
+                          <div className="text-[10px] text-muted-foreground">Level {char.level} · {char.race} {char.rank}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border/30 z-10 relative">
+              <Button variant="ghost" size="sm" onClick={() => setIsChronicleImportOpen(false)} className="rounded-md font-bold text-xs">
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleImportFromChronicle} 
+                disabled={selectedChronicleChars.length === 0} 
+                className="bg-primary text-primary-foreground font-bold text-xs rounded-md shadow px-4"
+              >
+                Import Selected ({selectedChronicleChars.length})
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogContent className="sm:max-w-[700px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md">

@@ -19,16 +19,26 @@ export default function Bookshelf() {
   const unlockPassword = useUnlockPassword();
   const lockPassword = useLockPassword();
 
+  // Sanitizer matches letters only, case and punctuation insensitive
+  const sanitize = (str: string) => 
+    (str || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+      .replace(/\s+/g, " ");
+
   // Decryption input states
   const [passphrase, setPassphrase] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
   const [triggerCodexUnlockAnim, setTriggerCodexUnlockAnim] = useState(false);
+  const [triggerChronicleUnlockAnim, setTriggerChronicleUnlockAnim] = useState(false);
 
   const isCodexUnlocked = unlockedPasswords.some(pw => sanitize(pw) === "i seek greater knowledge");
+  const isChronicleUnlocked = unlockedPasswords.some(pw => sanitize(pw) === "please show me the way");
 
   // Smoldering Rune target state
-  const [smolderTarget, setSmolderTarget] = useState<"grimoire" | "codex" | "all" | null>(null);
+  const [smolderTarget, setSmolderTarget] = useState<"grimoire" | "codex" | "chronicle" | "all" | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -49,16 +59,16 @@ export default function Bookshelf() {
       coverImage: "veridia_codex_spine.png",
       path: "/codex",
       style: "bg-[#1f1610] border-amber-950/40"
+    },
+    {
+      id: "chronicle",
+      title: "Chronicle of the Creator",
+      subtitle: "Dungeon Master rules & tools",
+      coverImage: "chronicle_spine.png",
+      path: "/chronicle",
+      style: "bg-[#0b141a] border-sky-950/40"
     }
   ];
-
-  // Sanitizer matches letters only, case and punctuation insensitive
-  const sanitize = (str: string) => 
-    (str || "")
-      .trim()
-      .toLowerCase()
-      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
-      .replace(/\s+/g, " ");
 
   const handlePassphraseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,18 +112,44 @@ export default function Bookshelf() {
       return;
     }
 
-    if (cleanInput === "seal the archives") {
-      if (!isCodexUnlocked) {
-        toast.info("The archives are already sealed.");
+    if (cleanInput === "please show me the way") {
+      if (isChronicleUnlocked) {
+        toast.info("The Chronicle of the Creator has already been unlocked.");
         setPassphrase("");
         return;
       }
-      lockPassword.mutate("i seek greater knowledge", {
+      unlockPassword.mutate("please show me the way", {
         onSuccess: () => {
-          toast.success("The Codex has been sealed and hidden once more.");
+          setTriggerChronicleUnlockAnim(true);
+          setSmolderTarget("chronicle");
           setPassphrase("");
+          toast.success("The Creator's seal has broken! The Chronicle is unlocked.");
+          setTimeout(() => {
+            setSmolderTarget(null);
+            setTriggerChronicleUnlockAnim(false);
+          }, 3000);
         }
       });
+      return;
+    }
+
+    if (cleanInput === "seal the archives") {
+      let lockedAny = false;
+      if (isCodexUnlocked) {
+        lockPassword.mutate("i seek greater knowledge");
+        lockedAny = true;
+      }
+      if (isChronicleUnlocked) {
+        lockPassword.mutate("please show me the way");
+        lockedAny = true;
+      }
+
+      if (lockedAny) {
+        toast.success("The tomes have been sealed and hidden once more.");
+      } else {
+        toast.info("The archives are already sealed.");
+      }
+      setPassphrase("");
       return;
     }
 
@@ -385,11 +421,15 @@ export default function Bookshelf() {
                       </div>
                       {/* Book materializing */}
                       <div 
-                        className="book-shadow w-full h-[260px] rounded-r-md relative border border-t-2 border-b-2 bg-[#1f1610] border-amber-950/40 overflow-hidden animate-book-materialize"
+                        className="book-shadow w-full h-[260px] relative border border-t-2 border-b-2 bg-[#1f1610] border-amber-950/40 overflow-hidden animate-book-materialize"
                         style={{
                           backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(veridia_codex_spine.png)`,
                           backgroundSize: "cover",
-                          backgroundPosition: "center"
+                          backgroundPosition: "center",
+                          borderTopRightRadius: 'var(--radius)',
+                          borderBottomRightRadius: 'var(--radius)',
+                          borderTopLeftRadius: '2px',
+                          borderBottomLeftRadius: '2px'
                         }}
                       >
                         <div className="foil-shine-overlay" />
@@ -433,6 +473,73 @@ export default function Bookshelf() {
               }
             }
 
+            if (book.id === "chronicle") {
+              if (triggerChronicleUnlockAnim) {
+                return (
+                  <div 
+                    key={book.id}
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end relative"
+                  >
+                    <div className="book-container h-[260px] flex items-end relative w-[96px] sm:w-[86px]">
+                      {/* Locked Placeholder dissolving */}
+                      <div className="absolute inset-x-0 bottom-0 h-[260px] border border-dashed border-stone-800/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 bg-stone-950/10 animate-border-dissolve z-10">
+                        <Lock className="w-4.5 h-4.5 text-stone-700 animate-lock-break" />
+                        <span className="text-[8px] font-mono tracking-widest text-stone-700 uppercase animate-border-dissolve">Locked</span>
+                      </div>
+                      {/* Book materializing */}
+                      <div 
+                        className="book-shadow w-full h-[260px] relative border border-t-2 border-b-2 bg-[#0b141a] border-sky-950/40 overflow-hidden animate-book-materialize shadow-2xl"
+                        style={{
+                          backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(chronicle_spine.png)`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          borderTopRightRadius: 'var(--radius)',
+                          borderBottomRightRadius: 'var(--radius)',
+                          borderTopLeftRadius: '2px',
+                          borderBottomLeftRadius: '2px'
+                        }}
+                      >
+                        <div className="foil-shine-overlay" />
+                        <div className="absolute inset-1.5 border border-sky-500/10 pointer-events-none" />
+                        <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
+                      </div>
+                    </div>
+                    <div className="text-center pb-1">
+                      <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-sky-500 duration-1000 animate-pulse">
+                        Chronicle
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (!isChronicleUnlocked) {
+                return (
+                  <div 
+                    key={book.id}
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55"
+                    onClick={() => {
+                      toast.info("The Chronicle is sealed. Speak the passphrase to unlock its secrets.");
+                      setIsShaking(true);
+                      setTimeout(() => setIsShaking(false), 600);
+                    }}
+                  >
+                    <div className="book-container h-[260px] flex items-end">
+                      <div className={`w-[96px] sm:w-[86px] h-[260px] border border-dashed border-stone-850/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 bg-stone-950/20 shadow-inner ${isShaking ? "animate-shake border-red-900/60" : ""}`}>
+                        <Lock className={`w-4 h-4 text-stone-600 ${isShaking ? "text-red-500" : ""}`} />
+                        <span className="text-[8px] font-mono tracking-widest text-stone-600 uppercase">Locked</span>
+                      </div>
+                    </div>
+                    <div className="text-center pb-1">
+                      <span className="font-mono text-xs font-bold uppercase tracking-[0.25em] text-stone-600/50">
+                        ᚛ᚢᚦᚨᚱᚦ᚜
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
             return (
               <div 
                 key={book.id}
@@ -444,11 +551,15 @@ export default function Bookshelf() {
                 {/* 3D Book Container */}
                 <div className="book-container h-[260px] flex items-end">
                   <div 
-                    className={`book-shadow w-[96px] sm:w-[86px] h-[260px] rounded-r-md relative border border-t-2 border-b-2 ${book.style} overflow-hidden`}
+                    className={`book-shadow w-[96px] sm:w-[86px] h-[260px] relative border border-t-2 border-b-2 ${book.style} overflow-hidden`}
                     style={{
                       backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(${book.coverImage})`,
                       backgroundSize: "cover",
-                      backgroundPosition: "center"
+                      backgroundPosition: "center",
+                      borderTopRightRadius: 'var(--radius)',
+                      borderBottomRightRadius: 'var(--radius)',
+                      borderTopLeftRadius: '2px',
+                      borderBottomLeftRadius: '2px'
                     }}
                   >
                     {/* Metallic Gold Foil Sheen Overlay */}
@@ -465,15 +576,15 @@ export default function Bookshelf() {
                 {/* Spine Text Label BELOW the book */}
                 <div className="text-center pb-1">
                   <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-500 group-hover:text-amber-500 transition-colors duration-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                    {book.id === "grimoire" ? "Grimoire" : "Codex"}
+                    {book.id === "grimoire" ? "Grimoire" : book.id === "codex" ? "Codex" : "Chronicle"}
                   </span>
                 </div>
               </div>
             );
           })}
 
-          {/* 4 Empty Outlined placeholders representing future expansions */}
-          {Array(4).fill(null).map((_, idx) => (
+          {/* 3 Empty Outlined placeholders representing future expansions */}
+          {Array(3).fill(null).map((_, idx) => (
             <div 
               key={`empty-${idx}`}
               className="col-span-1 hidden sm:flex justify-center h-[300px] items-end pb-7 pointer-events-none"
@@ -498,14 +609,14 @@ export default function Bookshelf() {
               <span className={smolderTarget === "grimoire" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚠ</span>
               <span className={smolderTarget === "grimoire" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚢ</span>
               <span className={smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚦ</span>
-              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚨ</span>
-              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚱ</span>
-              <span className={smolderTarget === "codex" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>᚜</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "chronicle" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚨ</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "chronicle" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>ᚱ</span>
+              <span className={smolderTarget === "codex" || smolderTarget === "chronicle" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>᚜</span>
             </div>
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 58
+              Crafted by Lukie Seven · Mark 59
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -531,7 +642,9 @@ export default function Bookshelf() {
                   <p className="text-stone-300 text-xs leading-relaxed max-w-sm mx-auto">
                     {currentBook.id === "grimoire" 
                       ? "Consult the codices of active heroes. Track character stats, customize attributes, manage spell inventories, calculate Crit Chains, and roll active campaign D20 checks." 
-                      : "Chronicle the world map of Cormant. Filter taxonomy directories for cities, settlements, dungeons, monster bestiaries, and push lore items directly to character logs."
+                      : currentBook.id === "codex"
+                      ? "Chronicle the world map of Cormant. Filter taxonomy directories for cities, settlements, dungeons, monster bestiaries, and push lore items directly to character logs."
+                      : "The Dungeon Master's guide to Cormant. Run game sessions using rules directories, combat trackers, NPC/loot generators, sound mixers, and workspace boards."
                     }
                   </p>
                 </div>
@@ -548,7 +661,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 58
+          Lovingly crafted by LukieSeven — Mark 59
         </p>
       </footer>
     </div>
