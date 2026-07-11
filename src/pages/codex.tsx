@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportCodexBackup, importCodexBackup, sessionState } from "@/lib/storage";
+import { exportCodexBackup, importCodexBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { 
   Search, BookOpen, MapPin, Sparkles, Trash2, 
@@ -184,12 +184,6 @@ export default function Codex() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   
-  useEffect(() => {
-    if (!sessionState.isCodexUnlocked) {
-      setLocation("/");
-    }
-  }, [setLocation]);
-  
   // Storage hooks
   const { data: codexNotes = [], isLoading } = useListCodexNotes();
   const createCodex = useCreateCodexNote();
@@ -199,8 +193,23 @@ export default function Codex() {
   const pushToCharacterNote = useCreateNote();
 
   // Storage hooks for decryption passwords
-  const { data: unlockedPasswords = [] } = useListUnlockedPasswords();
+  const { data: unlockedPasswords = [], isLoading: loadingPasswords } = useListUnlockedPasswords();
   const lockPassword = useLockPassword();
+
+  const sanitize = (str: string) => 
+    (str || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'“]/g, "")
+      .replace(/\s+/g, " ");
+
+  const isCodexUnlocked = unlockedPasswords.some(pw => sanitize(pw) === "i seek greater knowledge");
+
+  useEffect(() => {
+    if (!loadingPasswords && !isCodexUnlocked) {
+      setLocation("/");
+    }
+  }, [loadingPasswords, isCodexUnlocked, setLocation]);
 
   // Component Search & Filter states
   const [searchTerm, setSearchTerm] = useState("");

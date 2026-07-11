@@ -2,9 +2,9 @@ import React, { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { Book, Compass, Lock, MessageSquare, Sparkles, Upload, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
+import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords, useLockPassword } from "@/hooks/useStorage";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportFullBackup, importFullBackup, sessionState } from "@/lib/storage";
+import { exportFullBackup, importFullBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -17,13 +17,15 @@ export default function Bookshelf() {
   const { data: codexNotes = [] } = useListCodexNotes();
   const { data: unlockedPasswords = [] } = useListUnlockedPasswords();
   const unlockPassword = useUnlockPassword();
+  const lockPassword = useLockPassword();
 
   // Decryption input states
   const [passphrase, setPassphrase] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
-  const [isCodexUnlocked, setIsCodexUnlocked] = useState(sessionState.isCodexUnlocked);
   const [triggerCodexUnlockAnim, setTriggerCodexUnlockAnim] = useState(false);
+
+  const isCodexUnlocked = unlockedPasswords.some(pw => sanitize(pw) === "i seek greater knowledge");
 
   // Smoldering Rune target state
   const [smolderTarget, setSmolderTarget] = useState<"grimoire" | "codex" | "all" | null>(null);
@@ -85,16 +87,33 @@ export default function Bookshelf() {
         setPassphrase("");
         return;
       }
-      sessionState.isCodexUnlocked = true;
-      setIsCodexUnlocked(true);
-      setTriggerCodexUnlockAnim(true);
-      setSmolderTarget("codex");
-      setPassphrase("");
-      toast.success("The seal of Veridia has broken! The Codex is unlocked.");
-      setTimeout(() => {
-        setSmolderTarget(null);
-        setTriggerCodexUnlockAnim(false);
-      }, 3000);
+      unlockPassword.mutate("i seek greater knowledge", {
+        onSuccess: () => {
+          setTriggerCodexUnlockAnim(true);
+          setSmolderTarget("codex");
+          setPassphrase("");
+          toast.success("The seal of Veridia has broken! The Codex is unlocked.");
+          setTimeout(() => {
+            setSmolderTarget(null);
+            setTriggerCodexUnlockAnim(false);
+          }, 3000);
+        }
+      });
+      return;
+    }
+
+    if (cleanInput === "seal the archives") {
+      if (!isCodexUnlocked) {
+        toast.info("The archives are already sealed.");
+        setPassphrase("");
+        return;
+      }
+      lockPassword.mutate("i seek greater knowledge", {
+        onSuccess: () => {
+          toast.success("The Codex has been sealed and hidden once more.");
+          setPassphrase("");
+        }
+      });
       return;
     }
 
