@@ -13,9 +13,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import { 
   Search, BookOpen, Sparkles, Trash2, 
   Plus, Upload, ArrowLeft, ChevronDown, ChevronRight, Lock, 
-  User, Shield, Heart, Activity, Dice5, Volume2, Save, Move, Copy, PlusCircle
+  User, Shield, Heart, Activity, Dice5, Volume2, Save, Move, Copy, PlusCircle, X
 } from "lucide-react";
 import { toast } from "sonner";
+
+interface FavoriteSlot {
+  type: "weapon" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
+  targetId: string | number;
+  label: string;
+  familiarId?: string | number;
+}
 
 // Rules Database for quick cheatsheet reference
 const RULES_CODEX = [
@@ -79,6 +86,16 @@ export default function Chronicle() {
 
   // Roster Store state
   const [chronicleRoster, setChronicleRoster] = useState<any[]>([]);
+  const [recentRolls, setRecentRolls] = useState<any[]>([]);
+
+  const refreshRecentRolls = () => {
+    try {
+      const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
+      setRecentRolls(rolls.slice(0, 6));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   useEffect(() => {
     const raw = localStorage.getItem("aetherborne_chronicle_characters");
@@ -89,6 +106,7 @@ export default function Chronicle() {
         console.error(e);
       }
     }
+    refreshRecentRolls();
   }, []);
 
   const saveChronicleRoster = (newRoster: any[]) => {
@@ -337,10 +355,10 @@ export default function Chronicle() {
       return;
     }
 
-    // Find first empty cell on grid (10 columns, 8 rows)
+    // Find first empty cell on grid (5 columns, 8 rows)
     let placed = false;
     for (let row = 0; row < 8; row++) {
-      for (let col = 0; col < 10; col++) {
+      for (let col = 0; col < 5; col++) {
         const hasCard = placements.some(p => p.boardId === activeBoardId && p.col === col && p.row === row);
         if (!hasCard) {
           const newP = [...placements, { characterId: charId, boardId: activeBoardId, col, row }];
@@ -414,11 +432,158 @@ export default function Chronicle() {
     saveChronicleRoster(updated);
   };
 
-  // Roll checks inside DM screen
-  const triggerD20Check = (charName: string, statLabel: string, mod: number) => {
+  const setDirectResource = (charId: number, type: "hp" | "mana" | "dt", val: number) => {
+    const updated = chronicleRoster.map(item => {
+      if (item.character.id === charId) {
+        const char = item.character;
+        if (type === "hp") {
+          const current = Math.max(0, Math.min(char.maxHp, val));
+          return { ...item, character: { ...char, currentHp: current } };
+        } else if (type === "mana") {
+          const maxMana = char.spirit * 3 + char.level * 2;
+          const current = Math.max(0, Math.min(maxMana, val));
+          return { ...item, character: { ...char, currentMana: current } };
+        } else if (type === "dt") {
+          const current = Math.max(0, val);
+          return { ...item, character: { ...char, currentDt: current } };
+        }
+      }
+      return item;
+    });
+    saveChronicleRoster(updated);
+  };
+
+  // ───── DICE ROLL LOGS ENGINE ─────
+  const logRoll = (charName: string, label: string, formula: string, result: string, total: number, charId?: number) => {
+    try {
+      const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
+      const newRoll = {
+        id: Date.now() + Math.random(),
+        characterId: charId,
+        characterName: charName,
+        rollType: "cit_check",
+        label,
+        formula,
+        result,
+        total,
+        rolledAt: new Date().toISOString()
+      };
+      rolls.unshift(newRoll);
+      localStorage.setItem("aetherborne_rolls", JSON.stringify(rolls.slice(0, 100)));
+      setRecentRolls(rolls.slice(0, 6));
+      toast.success(`${charName} rolled ${label}: [${result}] = ${total}`);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const evaluateFormulaRoll = (formula: string) => {
+    try {
+      const clean = formula.replace(/\s+/g, "").toLowerCase();
+      // Match d20 + modifiers
+      const d20Match = clean.match(/d20([+-]\d+)?/);
+      if (d20Match) {
+        const roll = Math.floor(Math.random() * 20) + 1;
+        const mod = d20Match[1] ? parseInt(d20Match[1]) : 0;
+        return { total: roll + mod, result: `${roll}${mod >= 0 ? "+" : ""}${mod}` };
+      }
+      // Match general dice like 2d6+3, 1d8-1
+      const diceMatch = clean.match(/(\d+)?d(\d+)([+-]\d+)?/);
+      if (diceMatch) {
+        const count = diceMatch[1] ? parseInt(diceMatch[1]) : 1;
+        const sides = parseInt(diceMatch[2]);
+        const mod = diceMatch[3] ? parseInt(diceMatch[3]) : 0;
+        let sum = 0;
+        const rolls = [];
+        for (let i = 0; i < count; i++) {
+          const r = Math.floor(Math.random() * sides) + 1;
+          rolls.push(r);
+          sum += r;
+        }
+        return { total: sum + mod, result: `${rolls.join("+")}${mod >= 0 ? "+" : ""}${mod}` };
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  };
+
+  const rollStat = (charName: string, label: string, score: number, charId?: number) => {
+    const mod = Math.floor((score - 10) / 2);
     const roll = Math.floor(Math.random() * 20) + 1;
     const total = roll + mod;
-    toast.success(`${charName} rolled ${statLabel} check: [D20: ${roll} + Mod: ${mod}] = ${total}!`);
+    const formula = `d20${mod >= 0 ? "+" : ""}${mod}`;
+    const result = `${roll}${mod >= 0 ? "+" : ""}${mod}`;
+    
+    logRoll(charName, `${label} Check`, formula, result, total, charId);
+  };
+
+  const rollFavorite = (charName: string, slot: FavoriteSlot, itemBundle: any) => {
+    const charId = itemBundle.character.id;
+    if (slot.type === "attribute") {
+      const score = itemBundle.character[slot.targetId] || 10;
+      rollStat(charName, slot.label, score, charId);
+      return;
+    }
+
+    // Try matching weapon
+    if (slot.type === "weapon") {
+      const weapon = itemBundle.equipment?.find((e: any) => e.id === Number(slot.targetId));
+      if (weapon && weapon.rollFormula) {
+        const parsed = evaluateFormulaRoll(weapon.rollFormula);
+        if (parsed) {
+          logRoll(charName, slot.label, weapon.rollFormula, parsed.result, parsed.total, charId);
+          return;
+        }
+      }
+      const mod = Math.floor(((itemBundle.character.power || 10) - 10) / 2);
+      const roll = Math.floor(Math.random() * 20) + 1;
+      logRoll(charName, slot.label, "d20+pow", `${roll}+${mod}`, roll + mod, charId);
+      return;
+    }
+
+    // Try matching ability
+    if (slot.type === "ability") {
+      const ability = itemBundle.abilities?.find((a: any) => a.id === Number(slot.targetId));
+      if (ability && ability.rollFormula) {
+        const parsed = evaluateFormulaRoll(ability.rollFormula);
+        if (parsed) {
+          logRoll(charName, ability.nickname || slot.label, ability.rollFormula, parsed.result, parsed.total, charId);
+          return;
+        }
+      }
+      const mod = Math.floor(((itemBundle.character.spirit || 10) - 10) / 2);
+      const roll = Math.floor(Math.random() * 20) + 1;
+      logRoll(charName, ability?.nickname || slot.label, "d20+spi", `${roll}+${mod}`, roll + mod, charId);
+      return;
+    }
+
+    // Try matching skill
+    if (slot.type === "skill") {
+      const skill = itemBundle.skills?.find((s: any) => s.id === Number(slot.targetId));
+      if (skill && skill.rollFormula) {
+        const parsed = evaluateFormulaRoll(skill.rollFormula);
+        if (parsed) {
+          logRoll(charName, slot.label, skill.rollFormula, parsed.result, parsed.total, charId);
+          return;
+        }
+      }
+      const mod = Math.floor(((itemBundle.character.precision || 10) - 10) / 2);
+      const roll = Math.floor(Math.random() * 20) + 1;
+      logRoll(charName, slot.label, "d20+pre", `${roll}+${mod}`, roll + mod, charId);
+      return;
+    }
+
+    // Fallback standard D20 check
+    const roll = Math.floor(Math.random() * 20) + 1;
+    logRoll(charName, slot.label, "d20", `${roll}`, roll, charId);
+  };
+
+  const getFavorites = (char: any): (FavoriteSlot | null)[] => {
+    if (char && char.favorites && Array.isArray(char.favorites)) {
+      return char.favorites;
+    }
+    return Array(20).fill(null);
   };
 
   return (
@@ -730,75 +895,102 @@ export default function Chronicle() {
 
       {/* View 2: Character Info Tool (Drag-and-Drop Workspace Canvas) */}
       {activeView === "info-tool" && (
-        <main className="flex-1 max-w-[1400px] w-full mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6 z-10 relative items-start">
+        <main className="flex-1 max-w-[1400px] w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 z-10 relative items-start">
           
-          {/* Left sidebar: Chronicle Roster and Add/Import options */}
-          <div className="lg:col-span-1 glass-panel p-5 rounded-lg space-y-6">
-            <div>
-              <h2 className="text-sm font-bold text-sky-500 uppercase tracking-widest border-b border-sky-950/40 pb-1.5 flex items-center justify-between">
-                <span>Chronicle Roster</span>
-                <span className="text-[10px] font-mono bg-sky-950/40 border border-sky-900/25 px-2 py-0.5 text-sky-400 font-bold">{chronicleRoster.length} Tomes</span>
-              </h2>
-              <div className="relative mt-3">
-                <Input
-                  value={rosterSearch}
-                  onChange={e => setRosterSearch(e.target.value)}
-                  placeholder="Filter roster..."
-                  className="bg-stone-950/50 border-stone-800 rounded-md h-8 text-xs pl-8 font-sans"
-                />
-                <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              </div>
-            </div>
-
-            {/* Chronicle Roster list directory */}
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-              {chronicleRoster.length === 0 ? (
-                <div className="text-center py-6 text-stone-600 italic border border-dashed border-border/10 rounded-md text-xs">
-                  Chronicle database is empty.
+          {/* Left sidebar: Chronicle Roster, Actions and Roll logs */}
+          <div className="lg:col-span-2 glass-panel p-4 rounded-lg flex flex-col justify-between h-[calc(100vh-140px)] min-h-[640px] sticky top-6">
+            <div className="space-y-4 flex flex-col flex-1 min-h-0">
+              <div>
+                <h2 className="text-xs font-bold text-sky-500 uppercase tracking-widest border-b border-sky-950/40 pb-1.5 flex items-center justify-between">
+                  <span>Chronicle Roster</span>
+                  <span className="text-[9px] font-mono bg-sky-950/40 border border-sky-900/25 px-1.5 py-0.5 text-sky-400 font-bold">{chronicleRoster.length}</span>
+                </h2>
+                <div className="relative mt-2">
+                  <Input
+                    value={rosterSearch}
+                    onChange={e => setRosterSearch(e.target.value)}
+                    placeholder="Filter..."
+                    className="bg-stone-950/50 border-stone-800 rounded-md h-8 text-[11px] pl-7 font-sans"
+                  />
+                  <Search className="w-3 h-3 text-stone-500 absolute left-2 top-1/2 -translate-y-1/2" />
                 </div>
-              ) : (
-                chronicleRoster
-                  .filter(item => item.character.name.toLowerCase().includes(rosterSearch.toLowerCase()))
-                  .map((item) => {
-                    const char = item.character;
-                    return (
-                      <div 
-                        key={char.id}
-                        draggable
-                        onDragStart={() => handleDragStart(char.id)}
-                        className="p-3 border border-sky-950/45 bg-stone-950/20 hover:border-sky-600/30 rounded-md transition-all flex items-center justify-between gap-2 cursor-grab active:cursor-grabbing group"
-                      >
-                        <div className="font-sans text-xs">
-                          <div className="font-serif font-bold text-foreground group-hover:text-sky-400 transition-colors">{char.name}</div>
-                          <div className="text-[10px] text-muted-foreground">Level {char.level} · {char.race}</div>
-                        </div>
-                        <Button
-                          size="sm"
-                          onClick={() => handlePlaceOnBoard(char.id)}
-                          className="h-6 text-[9px] bg-sky-950 border border-sky-600/30 text-sky-400 hover:bg-sky-500/10 px-2 font-serif font-bold"
-                          title="Place on Board Grid"
-                        >
-                          + Add
-                        </Button>
-                      </div>
-                    );
-                  })
-              )}
-            </div>
+              </div>
 
-            {/* Roster database actions */}
-            <div className="border-t border-sky-950/30 pt-4 space-y-2">
-              <Button
-                onClick={() => setIsBulkImportOpen(true)}
-                className="w-full bg-sky-950 border border-sky-600/40 text-sky-400 hover:bg-sky-500/10 text-xs font-bold rounded-md h-9 cursor-pointer flex items-center gap-1.5"
-              >
-                <PlusCircle className="w-4 h-4" /> Import from Grimoire
-              </Button>
+              {/* Chronicle Roster list directory */}
+              <div className="h-[28%] overflow-y-auto pr-1 space-y-1.5 min-h-0">
+                {chronicleRoster.length === 0 ? (
+                  <div className="text-center py-6 text-stone-600 italic border border-dashed border-border/10 rounded-md text-[10px]">
+                    Empty.
+                  </div>
+                ) : (
+                  chronicleRoster
+                    .filter(item => item.character.name.toLowerCase().includes(rosterSearch.toLowerCase()))
+                    .map((item) => {
+                      const char = item.character;
+                      return (
+                        <div 
+                          key={char.id}
+                          draggable
+                          onDragStart={() => handleDragStart(char.id)}
+                          className="p-2 border border-sky-950/45 bg-stone-950/20 hover:border-sky-600/30 rounded-md transition-all flex items-center justify-between gap-1.5 cursor-grab active:cursor-grabbing group"
+                        >
+                          <div className="font-sans text-[11px] truncate flex-1 pr-1">
+                            <div className="font-serif font-bold text-foreground group-hover:text-sky-400 transition-colors truncate">{char.name}</div>
+                            <div className="text-[9px] text-muted-foreground truncate">Lvl {char.level} · {char.race}</div>
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => handlePlaceOnBoard(char.id)}
+                            className="h-5 text-[8px] bg-sky-950 border border-sky-600/30 text-sky-400 hover:bg-sky-500/10 px-1.5 font-serif font-bold cursor-pointer"
+                            title="Place on Board"
+                          >
+                            +
+                          </Button>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
+
+              {/* Roster database actions */}
+              <div className="border-t border-sky-950/30 pt-3 mt-1.5 space-y-1.5">
+                <Button
+                  onClick={() => setIsBulkImportOpen(true)}
+                  className="w-full bg-sky-950 border border-sky-600/40 text-sky-400 hover:bg-sky-500/10 text-[10px] font-bold rounded-md h-8 cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" /> Import Grimoire
+                </Button>
+              </div>
+
+              {/* Roll History Log panel */}
+              <div className="border-t border-sky-950/30 pt-3 flex-1 flex flex-col min-h-0 space-y-2">
+                <h3 className="text-[10px] font-bold text-sky-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Dice5 className="w-3.5 h-3.5" /> Roll History Logs
+                </h3>
+                <div className="flex-1 overflow-y-auto pr-1 space-y-1.5 font-mono text-[9px] min-h-0">
+                  {recentRolls.length === 0 ? (
+                    <div className="text-center py-6 text-stone-600 italic">No rolls logged yet.</div>
+                  ) : (
+                    recentRolls.map((roll) => (
+                      <div key={roll.id} className="border border-sky-950/20 bg-stone-950/40 p-1.5 rounded space-y-0.5">
+                        <div className="flex justify-between text-stone-400 text-[8px] font-sans">
+                          <span className="font-bold text-stone-300 truncate w-24">{roll.characterName}</span>
+                          <span className="text-[7px] text-sky-600/80">{roll.label}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-foreground mt-0.5">
+                          <span className="text-stone-500">[{roll.result}]</span>
+                          <span className="font-serif font-bold text-sky-400 text-[10px]">{roll.total}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Right canvas board: Workspace Grid and Formation tabs */}
-          <div className="lg:col-span-3 space-y-4 flex flex-col h-full min-h-[600px]">
+          <div className="lg:col-span-10 space-y-4 flex flex-col h-full min-h-[600px]">
             {/* Formation Tabs bar */}
             <div className="flex items-center justify-between border-b border-sky-950/40 pb-2">
               <div className="flex items-center gap-2 overflow-x-auto pr-2">
@@ -835,10 +1027,10 @@ export default function Chronicle() {
             {/* The Invisible Drag Grid Canvas Board */}
             <div className="flex-1 w-full overflow-x-auto border border-sky-950/30 bg-stone-950/10 rounded-lg min-h-[500px] p-4 relative">
               
-              {/* Horizontal grid board sizing */}
-              <div className="grid grid-cols-10 gap-4 min-w-[1600px] h-[580px] select-none">
+              {/* Horizontal grid board sizing: 5 columns, 8 rows fits 320px width cards */}
+              <div className="grid grid-cols-5 gap-4 min-w-[1700px] h-[580px] select-none">
                 {Array(8).fill(null).map((_, row) => {
-                  return Array(10).fill(null).map((_, col) => {
+                  return Array(5).fill(null).map((_, col) => {
                     // Check if placement exists at this cell
                     const placement = placements.find(p => p.boardId === activeBoardId && p.col === col && p.row === row);
                     const item = placement ? chronicleRoster.find(r => r.character.id === placement.characterId) : null;
@@ -851,95 +1043,225 @@ export default function Chronicle() {
                         className={`col-span-1 border border-stone-900/15 rounded-md flex items-center justify-center p-0.5 relative transition-colors ${
                           placement ? "bg-stone-950/45 border-sky-900/25" : "bg-stone-950/5 hover:bg-sky-950/5 border-dashed border-stone-950/30"
                         }`}
-                        style={{ height: "260px", width: "150px" }}
+                        style={{ height: "260px", width: "320px" }}
                       >
                         {item ? (
-                          // Mini Resource Card Component
+                          // Mini Resource Card Component: 320px width, 260px height
                           <div 
                             draggable
                             onDragStart={() => handleDragStart(item.character.id)}
                             className="w-full h-full flex flex-col justify-between p-3 font-serif cursor-grab active:cursor-grabbing relative"
                           >
-                            {/* Card header details */}
+                            {/* Row 1: Header */}
                             <div className="flex justify-between items-start gap-1">
-                              <div className="truncate pr-1">
-                                <div className="text-[11px] font-bold text-foreground leading-tight truncate">{item.character.name}</div>
-                                <span className="text-[8px] font-mono text-stone-500 uppercase tracking-widest">Level {item.character.level}</span>
-                              </div>
-                              <button 
-                                onClick={() => handleRemoveFromBoard(item.character.id)}
-                                className="text-stone-700 hover:text-red-500/80 transition-colors text-[10px]"
-                                title="Remove from Board"
-                              >
-                                ×
-                              </button>
-                            </div>
-
-                            {/* Resource Trackers panel */}
-                            <div className="space-y-2 py-2">
-                              {/* HP Tracker */}
-                              <div className="flex items-center justify-between gap-1 text-[10px]">
-                                <span className="font-bold text-red-500 flex items-center gap-0.5"><Heart className="w-3 h-3" /> HP</span>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => updateResource(item.character.id, "hp", -1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">-</button>
-                                  <span className="font-mono text-foreground font-bold w-9 text-center">{item.character.currentHp}/{item.character.maxHp}</span>
-                                  <button onClick={() => updateResource(item.character.id, "hp", 1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">+</button>
+                              <div className="flex items-center gap-2 truncate pr-1">
+                                <div className="w-8 h-8 rounded-full border border-sky-500/20 bg-sky-950/45 flex items-center justify-center text-xs font-bold text-sky-400">
+                                  {item.character.name.charAt(0)}
+                                </div>
+                                <div className="truncate">
+                                  <div className="text-[11px] font-bold text-foreground leading-tight truncate">{item.character.name}</div>
+                                  <span className="text-[8px] font-mono text-stone-500 uppercase tracking-widest">{item.character.rank} · Lvl {item.character.level}</span>
                                 </div>
                               </div>
-
-                              {/* Mana Tracker */}
-                              <div className="flex items-center justify-between gap-1 text-[10px]">
-                                <span className="font-bold text-sky-500 flex items-center gap-0.5"><Activity className="w-3 h-3" /> MP</span>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => updateResource(item.character.id, "mana", -1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">-</button>
-                                  <span className="font-mono text-foreground font-bold w-9 text-center">
-                                    {item.character.currentMana}/{item.character.spirit * 3 + item.character.level * 2}
-                                  </span>
-                                  <button onClick={() => updateResource(item.character.id, "mana", 1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">+</button>
-                                </div>
-                              </div>
-
-                              {/* DT Tracker */}
-                              <div className="flex items-center justify-between gap-1 text-[10px]">
-                                <span className="font-bold text-amber-500 flex items-center gap-0.5"><Shield className="w-3 h-3" /> DT</span>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => updateResource(item.character.id, "dt", -1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">-</button>
-                                  <span className="font-mono text-foreground font-bold w-9 text-center">{item.character.currentDt}</span>
-                                  <button onClick={() => updateResource(item.character.id, "dt", 1)} className="text-[9px] font-mono border border-border/20 px-1 bg-stone-900 text-stone-400 hover:bg-accent/40 rounded">+</button>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Core Stat Quick Roll triggers */}
-                            <div className="grid grid-cols-3 gap-1 border-t border-sky-950/20 pt-1.5">
-                              {[
-                                { key: "pow", label: "POW", val: Math.floor((item.character.power - 10) / 2) },
-                                { key: "vit", label: "VIT", val: Math.floor((item.character.vitality - 10) / 2) },
-                                { key: "spi", label: "SPI", val: Math.floor((item.character.spirit - 10) / 2) },
-                                { key: "agi", label: "AGI", val: Math.floor((item.character.agility - 10) / 2) },
-                                { key: "will", label: "WIL", val: Math.floor((item.character.willpower - 10) / 2) },
-                                { key: "cha", label: "CHA", val: Math.floor((item.character.charisma - 10) / 2) }
-                              ].map(st => (
-                                <button
-                                  key={st.key}
-                                  onClick={() => triggerD20Check(item.character.name, st.label, st.val)}
-                                  className="text-[8px] font-sans text-center border border-border/20 py-0.5 rounded hover:bg-accent/30 text-stone-400 font-bold"
-                                  title={`${st.label} check: d20 + ${st.val}`}
+                              <div className="flex items-center gap-1 z-20">
+                                <button 
+                                  onClick={() => {
+                                    setInspectingChar(item);
+                                    setInspectorTab("stats");
+                                  }}
+                                  className="p-1 text-stone-500 hover:text-sky-400 transition-colors cursor-pointer"
+                                  title="Expand Sheet"
                                 >
-                                  {st.label} ({st.val >= 0 ? `+${st.val}` : st.val})
+                                  <BookOpen className="w-3.5 h-3.5" />
                                 </button>
-                              ))}
+                                <button 
+                                  onClick={() => handleRemoveFromBoard(item.character.id)}
+                                  className="p-1 text-stone-500 hover:text-red-500 transition-colors cursor-pointer"
+                                  title="Remove from Board"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
 
-                            <Button 
-                              onClick={() => {
-                                setInspectingChar(item);
-                                setInspectorTab("stats");
-                              }}
-                              className="w-full bg-sky-950 border border-sky-600/30 text-sky-400 hover:bg-sky-500/10 text-[9px] font-bold rounded h-5 mt-2 cursor-pointer"
-                            >
-                              Expand Sheet
-                            </Button>
+                            {/* Row 2 & 3: Color-coded Vitals (HP, MP, DT) Displays & Controls */}
+                            <div className="grid grid-cols-3 gap-1.5 py-1.5">
+                              {/* HP Column: Crimson color-coded */}
+                              <div className="flex flex-col items-center border border-red-950/45 bg-red-950/5 p-1 rounded-md">
+                                <div className="text-[9px] font-bold text-red-500 uppercase tracking-wide flex items-center gap-0.5"><Heart className="w-2.5 h-2.5" /> HP</div>
+                                <div className="text-[10px] font-mono text-foreground font-bold mt-0.5">{item.character.currentHp}/{item.character.maxHp}</div>
+                                
+                                <div className="flex items-center gap-1 mt-1 justify-center">
+                                  <button 
+                                    onClick={() => updateResource(item.character.id, "hp", -1)} 
+                                    className="text-[9px] font-mono border border-red-900/35 px-1 bg-red-950 text-red-400 hover:bg-red-900/25 rounded z-20 cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={item.character.currentHp}
+                                    onChange={(e) => setDirectResource(item.character.id, "hp", parseInt(e.target.value) || 0)}
+                                    className="w-8 text-center font-mono text-[9px] bg-stone-950 border border-red-950/45 rounded py-0.5 text-foreground z-20"
+                                  />
+                                  <button 
+                                    onClick={() => updateResource(item.character.id, "hp", 1)} 
+                                    className="text-[9px] font-mono border border-red-900/35 px-1 bg-red-950 text-red-400 hover:bg-red-900/25 rounded z-20 cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <button 
+                                  onClick={() => setDirectResource(item.character.id, "hp", item.character.maxHp)}
+                                  className="mt-1 text-[7px] font-serif font-bold tracking-wider text-red-400 hover:text-red-300 z-20 cursor-pointer"
+                                >
+                                  Restore
+                                </button>
+                              </div>
+
+                              {/* MP Column: Cerulean color-coded */}
+                              {(() => {
+                                const maxMana = item.character.spirit * 3 + item.character.level * 2;
+                                return (
+                                  <div className="flex flex-col items-center border border-sky-950/45 bg-sky-950/5 p-1 rounded-md">
+                                    <div className="text-[9px] font-bold text-sky-500 uppercase tracking-wide flex items-center gap-0.5"><Activity className="w-2.5 h-2.5" /> MP</div>
+                                    <div className="text-[10px] font-mono text-foreground font-bold mt-0.5">{item.character.currentMana}/{maxMana}</div>
+                                    
+                                    <div className="flex items-center gap-1 mt-1 justify-center">
+                                      <button 
+                                        onClick={() => updateResource(item.character.id, "mana", -1)} 
+                                        className="text-[9px] font-mono border border-sky-900/35 px-1 bg-sky-950 text-sky-400 hover:bg-sky-900/25 rounded z-20 cursor-pointer"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        value={item.character.currentMana}
+                                        onChange={(e) => setDirectResource(item.character.id, "mana", parseInt(e.target.value) || 0)}
+                                        className="w-8 text-center font-mono text-[9px] bg-stone-950 border border-sky-950/45 rounded py-0.5 text-foreground z-20"
+                                      />
+                                      <button 
+                                        onClick={() => updateResource(item.character.id, "mana", 1)} 
+                                        className="text-[9px] font-mono border border-sky-900/35 px-1 bg-sky-950 text-sky-400 hover:bg-sky-900/25 rounded z-20 cursor-pointer"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                    <button 
+                                      onClick={() => setDirectResource(item.character.id, "mana", maxMana)}
+                                      className="mt-1 text-[7px] font-serif font-bold tracking-wider text-sky-400 hover:text-sky-300 z-20 cursor-pointer"
+                                    >
+                                      Restore
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* DT Column: Amber Gold color-coded */}
+                              <div className="flex flex-col items-center border border-amber-950/45 bg-amber-950/5 p-1 rounded-md">
+                                <div className="text-[9px] font-bold text-amber-500 uppercase tracking-wide flex items-center gap-0.5"><Shield className="w-2.5 h-2.5" /> DT</div>
+                                <div className="text-[10px] font-mono text-foreground font-bold mt-0.5">{item.character.currentDt}</div>
+                                
+                                <div className="flex items-center gap-1 mt-1 justify-center">
+                                  <button 
+                                    onClick={() => updateResource(item.character.id, "dt", -1)} 
+                                    className="text-[9px] font-mono border border-amber-900/35 px-1 bg-amber-950 text-amber-400 hover:bg-amber-900/25 rounded z-20 cursor-pointer"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="number"
+                                    value={item.character.currentDt}
+                                    onChange={(e) => setDirectResource(item.character.id, "dt", parseInt(e.target.value) || 0)}
+                                    className="w-8 text-center font-mono text-[9px] bg-stone-950 border border-amber-950/45 rounded py-0.5 text-foreground z-20"
+                                  />
+                                  <button 
+                                    onClick={() => updateResource(item.character.id, "dt", 1)} 
+                                    className="text-[9px] font-mono border border-amber-900/35 px-1 bg-amber-950 text-amber-400 hover:bg-amber-900/25 rounded z-20 cursor-pointer"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                                <button 
+                                  onClick={() => setDirectResource(item.character.id, "dt", item.character.dtBonus || 0)}
+                                  className="mt-1 text-[7px] font-serif font-bold tracking-wider text-amber-400 hover:text-amber-300 z-20 cursor-pointer"
+                                >
+                                  Restore
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Row 4 & 5: Bottom compact Grid (6 Stats and 6 Favorites) */}
+                            <div className="grid grid-cols-6 gap-1 bg-black/15 p-1 rounded-md mt-1.5 z-20 relative">
+                              {/* Row 1 Stats & Favorites */}
+                              {[
+                                { type: "stat", key: "power", label: "POW", val: item.character.power || 10 },
+                                { type: "stat", key: "vitality", label: "VIT", val: item.character.vitality || 10 },
+                                { type: "stat", key: "spirit", label: "SPI", val: item.character.spirit || 10 },
+                                { type: "favorite", idx: 0 },
+                                { type: "favorite", idx: 1 },
+                                { type: "favorite", idx: 2 },
+                                // Row 2 Stats & Favorites
+                                { type: "stat", key: "agility", label: "AGI", val: item.character.agility || 10 },
+                                { type: "stat", key: "willpower", label: "WIL", val: item.character.willpower || 10 },
+                                { type: "stat", key: "charisma", label: "CHA", val: item.character.charisma || 10 },
+                                { type: "favorite", idx: 3 },
+                                { type: "favorite", idx: 4 },
+                                { type: "favorite", idx: 5 }
+                              ].map((cell, cIdx) => {
+                                if (cell.type === "stat") {
+                                  const mod = Math.floor((cell.val! - 10) / 2);
+                                  return (
+                                    <button
+                                      key={cIdx}
+                                      onClick={() => rollStat(item.character.name, cell.label!, cell.val!, item.character.id)}
+                                      className="text-[8px] font-sans text-center border border-border/10 py-1 bg-stone-950/30 rounded hover:bg-sky-500/10 hover:border-sky-500/30 text-stone-400 font-bold transition-all h-9 cursor-pointer flex flex-col justify-between"
+                                      title={`${cell.label} check: d20+${mod}`}
+                                    >
+                                      <span className="text-[7px] text-stone-500 leading-none">{cell.label}</span>
+                                      <span className="text-foreground leading-none font-bold">{mod >= 0 ? `+${mod}` : mod}</span>
+                                    </button>
+                                  );
+                                } else {
+                                  // Favorites cell
+                                  const activeFavs = getFavorites(item.character);
+                                  const fav = activeFavs[cell.idx!];
+                                  if (fav) {
+                                    // Check nickname fallback
+                                    let displayLabel = fav.label || "";
+                                    if (fav.type === "ability") {
+                                      const abItem = item.abilities?.find((a: any) => a.id === Number(fav.targetId));
+                                      if (abItem && abItem.nickname) {
+                                        displayLabel = abItem.nickname;
+                                      }
+                                    }
+                                    if (displayLabel.length > 6) {
+                                      displayLabel = displayLabel.substring(0, 6);
+                                    }
+                                    return (
+                                      <button
+                                        key={cIdx}
+                                        onClick={() => rollFavorite(item.character.name, fav, item)}
+                                        className="text-[8px] font-sans text-center border border-sky-950/40 py-1 bg-sky-950/20 rounded hover:bg-sky-500/15 hover:border-sky-500/30 text-sky-400 font-bold transition-all h-9 cursor-pointer flex flex-col justify-between truncate"
+                                        title={`Roll favorite: ${fav.label}`}
+                                      >
+                                        <span className="text-[6px] text-sky-600/80 leading-none font-mono">FAV</span>
+                                        <span className="text-sky-300 leading-none truncate max-w-full font-serif text-[7.5px] uppercase">{displayLabel}</span>
+                                      </button>
+                                    );
+                                  } else {
+                                    return (
+                                      <div
+                                        key={cIdx}
+                                        className="text-[8px] font-sans text-center border border-dashed border-stone-800/20 py-1 bg-transparent rounded text-stone-600/40 h-9 flex flex-col justify-center items-center pointer-events-none"
+                                      >
+                                        <span>•</span>
+                                      </div>
+                                    );
+                                  }
+                                }
+                              })}
+                            </div>
                           </div>
                         ) : null}
                       </div>
@@ -1138,6 +1460,9 @@ export default function Chronicle() {
                           <span className="font-serif font-bold text-primary text-xs">{ab.name}</span>
                           <span className="font-mono text-[9px] uppercase px-1.5 bg-primary/10 text-primary border border-primary/20">{ab.type || "Casting"}</span>
                         </div>
+                        {ab.nickname && (
+                          <div className="text-[10px] font-mono text-sky-400">CIT Nick Name: {ab.nickname}</div>
+                        )}
                         <p className="text-stone-400 leading-relaxed font-sans">{ab.description || "No ability description logged."}</p>
                       </div>
                     ))

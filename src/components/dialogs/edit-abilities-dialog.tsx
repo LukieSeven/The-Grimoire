@@ -29,6 +29,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
 
   // Form State
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState(0);
   const [cooldown, setCooldown] = useState(0);
@@ -60,6 +61,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
 
   const resetForm = () => {
     setName("");
+    setNickname("");
     setDescription("");
     setCost(0);
     setCooldown(0);
@@ -97,6 +99,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const handleOpenEdit = (ability: any) => {
     setEditingId(ability.id);
     setName(ability.name);
+    setNickname(ability.nickname || "");
     setDescription(ability.description);
     setCost(ability.cost);
     setCooldown(ability.cooldown);
@@ -142,6 +145,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     const payload = {
       characterId,
       name,
+      nickname,
       description,
       cost,
       cooldown,
@@ -254,10 +258,20 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-4 mt-4 text-xs font-sans">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
                 <Input value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Fireball, Cleave" className="bg-background rounded-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">CIT Nick Name (Max 6 Chars)</label>
+                <Input 
+                  value={nickname} 
+                  onChange={e => setNickname(e.target.value.substring(0, 6))} 
+                  placeholder="e.g. Fball" 
+                  maxLength={6}
+                  className="bg-background rounded-none font-mono" 
+                />
               </div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Essence Source</label>
