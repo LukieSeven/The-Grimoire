@@ -79,8 +79,10 @@ export function useDeleteCharacter() {
       storage.deleteCharacter(id);
       return Promise.resolve();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["characters"] });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(variables.id) });
+      queryClient.invalidateQueries({ queryKey: getListRecentRollsQueryKey() });
     },
   });
 }

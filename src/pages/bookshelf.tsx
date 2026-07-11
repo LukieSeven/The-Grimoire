@@ -4,7 +4,7 @@ import { Book, Compass, Lock, MessageSquare, Sparkles, Upload, Download } from "
 import { Button } from "@/components/ui/button";
 import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords } from "@/hooks/useStorage";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportFullBackup, importFullBackup } from "@/lib/storage";
+import { exportFullBackup, importFullBackup, sessionState } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -22,6 +22,8 @@ export default function Bookshelf() {
   const [passphrase, setPassphrase] = useState("");
   const [isShaking, setIsShaking] = useState(false);
   const [unlockedBook, setUnlockedBook] = useState<string | null>(null);
+  const [isCodexUnlocked, setIsCodexUnlocked] = useState(sessionState.isCodexUnlocked);
+  const [triggerCodexUnlockAnim, setTriggerCodexUnlockAnim] = useState(false);
 
   // Smoldering Rune target state
   const [smolderTarget, setSmolderTarget] = useState<"grimoire" | "codex" | "all" | null>(null);
@@ -74,6 +76,25 @@ export default function Bookshelf() {
         setSmolderTarget(null);
         setUnlockedBook(null);
       }, 5000);
+      return;
+    }
+
+    if (cleanInput === "i seek greater knowledge") {
+      if (isCodexUnlocked) {
+        toast.info("The Codex has already been unlocked.");
+        setPassphrase("");
+        return;
+      }
+      sessionState.isCodexUnlocked = true;
+      setIsCodexUnlocked(true);
+      setTriggerCodexUnlockAnim(true);
+      setSmolderTarget("codex");
+      setPassphrase("");
+      toast.success("The seal of Veridia has broken! The Codex is unlocked.");
+      setTimeout(() => {
+        setSmolderTarget(null);
+        setTriggerCodexUnlockAnim(false);
+      }, 3000);
       return;
     }
 
@@ -223,6 +244,36 @@ export default function Bookshelf() {
         .animate-shake {
           animation: shake 0.6s cubic-bezier(.36,.07,.19,.97) both;
         }
+
+        /* ── Lock breaking and falling away ── */
+        @keyframes lock-break-fall {
+          0% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+          20% { transform: translateY(-10px) scale(1.1) rotate(-10deg); opacity: 1; }
+          40% { transform: translateY(0) scale(1) rotate(15deg); opacity: 0.9; }
+          100% { transform: translateY(120px) scale(0.8) rotate(45deg); opacity: 0; }
+        }
+        .animate-lock-break {
+          animation: lock-break-fall 1.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        /* ── Border fade and shrink ── */
+        @keyframes border-dissolve {
+          0% { border-color: rgba(120, 113, 108, 0.4); opacity: 0.4; }
+          100% { border-color: rgba(120, 113, 108, 0); opacity: 0; }
+        }
+        .animate-border-dissolve {
+          animation: border-dissolve 1.2s ease-out forwards;
+        }
+
+        /* ── Book fading into existence ── */
+        @keyframes book-materialize {
+          0% { opacity: 0; transform: scale(0.9) rotateY(-30deg); filter: blur(8px); }
+          50% { opacity: 0.5; filter: blur(3px); }
+          100% { opacity: 1; transform: scale(1) rotateY(0); filter: blur(0); }
+        }
+        .animate-book-materialize {
+          animation: book-materialize 2.2s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
       `}</style>
 
       {/* Background Elements */}
@@ -300,6 +351,69 @@ export default function Bookshelf() {
         {/* Books Stand Area (Optimized grid for mobile and split screen) */}
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1 max-w-md sm:max-w-none mx-auto">
           {books.map((book) => {
+            if (book.id === "codex") {
+              if (triggerCodexUnlockAnim) {
+                return (
+                  <div 
+                    key={book.id}
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end relative"
+                  >
+                    <div className="book-container h-[260px] flex items-end relative w-[96px] sm:w-[86px]">
+                      {/* Locked Placeholder dissolving */}
+                      <div className="absolute inset-x-0 bottom-0 h-[260px] border border-dashed border-stone-800/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 bg-stone-950/10 animate-border-dissolve z-10">
+                        <Lock className="w-4.5 h-4.5 text-stone-700 animate-lock-break" />
+                        <span className="text-[8px] font-mono tracking-widest text-stone-700 uppercase animate-border-dissolve">Locked</span>
+                      </div>
+                      {/* Book materializing */}
+                      <div 
+                        className="book-shadow w-full h-[260px] rounded-r-md relative border border-t-2 border-b-2 bg-[#1f1610] border-amber-950/40 overflow-hidden animate-book-materialize"
+                        style={{
+                          backgroundImage: `linear-gradient(rgba(0,0,0,0.15), rgba(0,0,0,0.25)), url(veridia_codex_spine.png)`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center"
+                        }}
+                      >
+                        <div className="foil-shine-overlay" />
+                        <div className="absolute inset-1.5 border border-amber-500/10 pointer-events-none" />
+                        <div className="absolute left-0 top-0 bottom-0 w-2.5 bg-gradient-to-r from-black/60 via-black/10 to-transparent" />
+                      </div>
+                    </div>
+                    <div className="text-center pb-1">
+                      <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-amber-500 duration-1000 animate-pulse">
+                        Codex
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (!isCodexUnlocked) {
+                return (
+                  <div 
+                    key={book.id}
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55"
+                    onClick={() => {
+                      toast.info("The Codex is sealed. Speak the passphrase to unlock its secrets.");
+                      setIsShaking(true);
+                      setTimeout(() => setIsShaking(false), 600);
+                    }}
+                  >
+                    <div className="book-container h-[260px] flex items-end">
+                      <div className={`w-[96px] sm:w-[86px] h-[260px] border border-dashed border-stone-850/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 bg-stone-950/20 shadow-inner ${isShaking ? "animate-shake border-red-900/60" : ""}`}>
+                        <Lock className={`w-4 h-4 text-stone-600 ${isShaking ? "text-red-500" : ""}`} />
+                        <span className="text-[8px] font-mono tracking-widest text-stone-600 uppercase">Locked</span>
+                      </div>
+                    </div>
+                    <div className="text-center pb-1">
+                      <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-600">
+                        Codex
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+            }
+
             return (
               <div 
                 key={book.id}
@@ -372,7 +486,7 @@ export default function Bookshelf() {
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 57
+              Crafted by Lukie Seven · Mark 58
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -415,7 +529,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 57
+          Lovingly crafted by LukieSeven — Mark 58
         </p>
       </footer>
     </div>

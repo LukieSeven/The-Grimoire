@@ -1689,3 +1689,7 @@ function initializeDefaultSample(): void {
 
   safeStorage.setItem("aetherborne_initialized", "true");
 }
+
+export const sessionState = {
+  isCodexUnlocked: false
+};

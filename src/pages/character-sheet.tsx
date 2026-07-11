@@ -792,6 +792,7 @@ export default function CharacterSheet() {
     const next = Math.min(fMax.maxHp, fam.currentHp + amount);
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
     updateFamInput(fam.id, "hpAdd", "");
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} Heal`, familiarId: fam.id } });
   };
 
   const handleFamHpRemove = (fam: Familiar) => {
@@ -801,6 +802,7 @@ export default function CharacterSheet() {
     const next = Math.max(0, fam.currentHp - amount);
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
     updateFamInput(fam.id, "hpRemove", "");
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} DMG`, familiarId: fam.id } });
   };
 
   const handleFamHpBuff = (fam: Familiar) => {
@@ -810,11 +812,14 @@ export default function CharacterSheet() {
     const next = fam.currentHp + amount;
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
     updateFamInput(fam.id, "hpBuff", "");
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: `Fam: ${fam.name} Buff`, familiarId: fam.id } });
   };
 
   const handleFamFullRestoreHp = (fam: Familiar) => {
     const fMax = getFamiliarMaxValues(fam);
-    updateFamiliarData(fam.id, { ...fam, currentHp: fMax.maxHp });
+    const next = fMax.maxHp;
+    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} Full Restore`, familiarId: fam.id } });
   };
 
   // ── Familiar DT Adjustments ───────────────────────────────
@@ -826,6 +831,7 @@ export default function CharacterSheet() {
     const next = Math.min(fMax.maxDt, fam.currentDt + amount);
     updateFamiliarData(fam.id, { ...fam, currentDt: next });
     updateFamInput(fam.id, "dtAdd", "");
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: next - fam.currentDt, label: `Fam: ${fam.name} DT Add`, familiarId: fam.id } });
   };
 
   const handleFamDtRemove = (fam: Familiar) => {
@@ -860,6 +866,11 @@ export default function CharacterSheet() {
     updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
     updateFamInput(fam.id, "dtRemove", "");
     
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: dtVal - fam.currentDt, label: `Fam: ${fam.name} Took DMG`, familiarId: fam.id } });
+    if (hpLost > 0) {
+      createRoll.mutate({ id, data: { diceType: "hp-log", modifier: -hpLost, label: `Fam: ${fam.name} Took HP DMG`, familiarId: fam.id } });
+    }
+
     setTimeout(() => {
       setFamDtFlashes(prev => ({
         ...prev,
@@ -875,6 +886,7 @@ export default function CharacterSheet() {
     const next = fam.currentDt + amount;
     updateFamiliarData(fam.id, { ...fam, currentDt: next });
     updateFamInput(fam.id, "dtBuff", "");
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: `Fam: ${fam.name} DT Buff`, familiarId: fam.id } });
   };
 
   const handleFamRestoreDt = (fam: Familiar) => {
@@ -888,7 +900,9 @@ export default function CharacterSheet() {
       delete copy[fam.id];
       return copy;
     });
-    updateFamiliarData(fam.id, { ...fam, currentDt: fMax.maxDt });
+    const next = fMax.maxDt;
+    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: next - fam.currentDt, label: `Fam: ${fam.name} DT Restore`, familiarId: fam.id } });
     setTimeout(() => {
       setFamDtFlashes(prev => ({
         ...prev,
@@ -906,6 +920,7 @@ export default function CharacterSheet() {
     const next = Math.min(fMax.maxMana, fam.currentMana + amount);
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
     updateFamInput(fam.id, "manaAdd", "");
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Mana Add`, familiarId: fam.id } });
   };
 
   const handleFamManaRemove = (fam: Familiar) => {
@@ -915,6 +930,7 @@ export default function CharacterSheet() {
     const next = Math.max(0, fam.currentMana - amount);
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
     updateFamInput(fam.id, "manaRemove", "");
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Spent Mana`, familiarId: fam.id } });
   };
 
   const handleFamManaBuff = (fam: Familiar) => {
@@ -924,11 +940,14 @@ export default function CharacterSheet() {
     const next = fam.currentMana + amount;
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
     updateFamInput(fam.id, "manaBuff", "");
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: `Fam: ${fam.name} Mana Buff`, familiarId: fam.id } });
   };
 
   const handleFamFullRestoreMana = (fam: Familiar) => {
     const fMax = getFamiliarMaxValues(fam);
-    updateFamiliarData(fam.id, { ...fam, currentMana: fMax.maxMana });
+    const next = fMax.maxMana;
+    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Mana Restore`, familiarId: fam.id } });
   };
 
   // ── Delete character (Styled Trigger) ─────────────────────
@@ -1155,18 +1174,24 @@ export default function CharacterSheet() {
     const updates: Record<string, number> = { currentMana: nextMana };
     const changes: string[] = [];
 
+    if (ability.cost > 0) {
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `${ability.name} Cost` } });
+    }
+
     if (ability.hpAdd) {
       const curHp = hp ?? character.currentHp;
       const nextHp = Math.min(maxHp, curHp + ability.hpAdd);
       setHp(nextHp);
       updates.currentHp = nextHp;
       changes.push(`+${ability.hpAdd} HP`);
+      createRoll.mutate({ id, data: { diceType: "hp-log", modifier: nextHp - curHp, label: `${ability.name} Heal` } });
     }
     if (ability.manaAdd) {
       const nextM = Math.min(maxMana, nextMana + ability.manaAdd);
       setMana(nextM);
       updates.currentMana = nextM;
       changes.push(`+${ability.manaAdd} MP`);
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `${ability.name} Restore` } });
     }
     if (ability.dtAdd) {
       const curDt = dt ?? character.currentDt;
@@ -1174,6 +1199,7 @@ export default function CharacterSheet() {
       setDt(nextDt);
       updates.currentDt = nextDt;
       changes.push(`+${ability.dtAdd} DT`);
+      createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - curDt, label: `${ability.name} Shield` } });
     }
 
     updateChar.mutate({ id, data: updates });
@@ -1348,20 +1374,27 @@ export default function CharacterSheet() {
     const updates: Partial<Familiar> = { currentMana: nextMana };
     const changes: string[] = [];
 
+    if (ability.cost > 0) {
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `Fam: ${ability.name} Cost`, familiarId: fam.id } });
+    }
+
     if (ability.hpAdd) {
       const nextHp = Math.min(fMax.maxHp, fam.currentHp + ability.hpAdd);
       updates.currentHp = nextHp;
       changes.push(`+${ability.hpAdd} HP`);
+      createRoll.mutate({ id, data: { diceType: "hp-log", modifier: nextHp - fam.currentHp, label: `Fam: ${ability.name} Heal`, familiarId: fam.id } });
     }
     if (ability.manaAdd) {
       const nextM = Math.min(fMax.maxMana, nextMana + ability.manaAdd);
       updates.currentMana = nextM;
       changes.push(`+${ability.manaAdd} MP`);
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `Fam: ${ability.name} Restore`, familiarId: fam.id } });
     }
     if (ability.dtAdd) {
       const nextDt = Math.min(fMax.maxDt, fam.currentDt + ability.dtAdd);
       updates.currentDt = nextDt;
       changes.push(`+${ability.dtAdd} DT`);
+      createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - fam.currentDt, label: `Fam: ${ability.name} Shield`, familiarId: fam.id } });
     }
 
     updateFamiliarData(fam.id, { ...fam, ...updates });
@@ -1960,6 +1993,10 @@ export default function CharacterSheet() {
     return matchSearch && matchCat;
   });
 
+  const latestHpLog = rolls?.filter(r => r.diceType === "hp-log").sort((a,b) => b.id - a.id)[0];
+  const latestManaLog = rolls?.filter(r => r.diceType === "mana-log").sort((a,b) => b.id - a.id)[0];
+  const latestDtLog = rolls?.filter(r => r.diceType === "dt-log").sort((a,b) => b.id - a.id)[0];
+
   const tier = critChain ? CRIT_TIERS[Math.min(critChain.chainCount, CRIT_TIERS.length - 1)] : null;
   const finalTier = lastRoll?.hadCrit ? CRIT_TIERS[Math.min(lastRoll.maxChainCount, CRIT_TIERS.length - 1)] : null;
 
@@ -2186,9 +2223,9 @@ export default function CharacterSheet() {
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
-                      {damageResult && (
-                        <p className="text-[10px] font-mono text-center text-destructive">
-                          {damageResult.absorbed ? "✦ Absorbed" : "−1 DT"}
+                      {latestDtLog && (
+                        <p className={`text-[10px] font-mono text-center ${latestDtLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestDtLog.modifier >= 0 ? `+${latestDtLog.modifier}` : latestDtLog.modifier} DT ({latestDtLog.label})
                         </p>
                       )}
                     </div>
@@ -2290,9 +2327,9 @@ export default function CharacterSheet() {
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
-                      {damageResult && damageResult.hpLost > 0 && (
-                        <p className="text-[10px] font-mono text-center text-destructive">
-                          −{damageResult.hpLost} HP
+                      {latestHpLog && (
+                        <p className={`text-[10px] font-mono text-center ${latestHpLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestHpLog.modifier >= 0 ? `+${latestHpLog.modifier}` : latestHpLog.modifier} HP ({latestHpLog.label})
                         </p>
                       )}
                     </div>
@@ -2393,7 +2430,13 @@ export default function CharacterSheet() {
                       Full Restore Mana
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
-                    <div className="h-4 mt-1" />
+                    <div className="h-4 flex items-center justify-center mt-1">
+                      {latestManaLog && (
+                        <p className={`text-[10px] font-mono text-center ${latestManaLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestManaLog.modifier >= 0 ? `+${latestManaLog.modifier}` : latestManaLog.modifier} MP ({latestManaLog.label})
+                        </p>
+                      )}
+                    </div>
                     {/* Mana History Dialog */}
                     <Dialog>
                       <DialogTrigger asChild>
@@ -2576,7 +2619,7 @@ export default function CharacterSheet() {
                             </div>
                             <div className="text-right">
                               <div className={`text-base font-serif font-bold ${roll.isCrit ? "text-yellow-500 animate-pulse" : "text-primary"}`}>{roll.total}</div>
-                              <div className="text-[8px] text-muted-foreground/45">{format(new Date(roll.rolledAt), "HH:mm")}</div>
+                              <div className="text-[8px] text-muted-foreground/45 font-mono">{format(new Date(roll.rolledAt), "MMM d, HH:mm")}</div>
                             </div>
                           </div>
                         ))}
@@ -4201,6 +4244,10 @@ export default function CharacterSheet() {
                     const dmgRes = famDamageResults[fam.id] ?? null;
                     const inputs = famInputs[fam.id] || {};
 
+                    const latestFamHpLog = rolls?.filter(r => r.diceType === "hp-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
+                    const latestFamManaLog = rolls?.filter(r => r.diceType === "mana-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
+                    const latestFamDtLog = rolls?.filter(r => r.diceType === "dt-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
+
                     return (
                       <Card key={fam.id} className="bg-card border border-border/40 shadow-md rounded-none p-3.5 space-y-3">
                         
@@ -4326,9 +4373,9 @@ export default function CharacterSheet() {
                               </Button>
                               {/* Fixed Height Container to prevent layout shifts */}
                               <div className="h-3 flex items-center justify-center mt-0.5">
-                                {dmgRes && (
-                                  <p className={`text-[9px] font-mono text-center ${dmgRes.absorbed ? "text-primary" : "text-destructive"}`}>
-                                    {dmgRes.absorbed ? "✦ Absorbed" : dmgRes.hpLost > 0 ? `−${dmgRes.hpLost} HP` : "DT hit"}
+                                {latestFamDtLog && (
+                                  <p className={`text-[9px] font-mono text-center ${latestFamDtLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                                    {latestFamDtLog.result >= 0 ? `+${latestFamDtLog.result}` : latestFamDtLog.result} DT ({latestFamDtLog.label})
                                   </p>
                                 )}
                               </div>
@@ -4386,7 +4433,13 @@ export default function CharacterSheet() {
                                 onClick={() => handleFamFullRestoreHp(fam)}>
                                 Full Restore HP
                               </Button>
-                              <div className="h-3 mt-0.5" />
+                              <div className="h-3 flex items-center justify-center mt-0.5">
+                                {latestFamHpLog && (
+                                  <p className={`text-[9px] font-mono text-center ${latestFamHpLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                                    {latestFamHpLog.result >= 0 ? `+${latestFamHpLog.result}` : latestFamHpLog.result} HP ({latestFamHpLog.label})
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -4441,7 +4494,13 @@ export default function CharacterSheet() {
                                 onClick={() => handleFamFullRestoreMana(fam)}>
                                 Full Restore Mana
                               </Button>
-                              <div className="h-3 mt-0.5" />
+                              <div className="h-3 flex items-center justify-center mt-0.5">
+                                {latestFamManaLog && (
+                                  <p className={`text-[9px] font-mono text-center ${latestFamManaLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                                    {latestFamManaLog.result >= 0 ? `+${latestFamManaLog.result}` : latestFamManaLog.result} MP ({latestFamManaLog.label})
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
 

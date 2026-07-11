@@ -190,7 +190,7 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-5">
+      <DialogContent className="md:max-w-[800px] lg:max-w-[900px] sm:max-w-[650px] w-[95vw] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-5">
         <div className="absolute inset-1 border border-border/10 pointer-events-none" />
         <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
 

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportCodexBackup, importCodexBackup } from "@/lib/storage";
+import { exportCodexBackup, importCodexBackup, sessionState } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { 
   Search, BookOpen, MapPin, Sparkles, Trash2, 
@@ -183,6 +183,12 @@ const REALMS_LIST = [
 export default function Codex() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  
+  useEffect(() => {
+    if (!sessionState.isCodexUnlocked) {
+      setLocation("/");
+    }
+  }, [setLocation]);
   
   // Storage hooks
   const { data: codexNotes = [], isLoading } = useListCodexNotes();

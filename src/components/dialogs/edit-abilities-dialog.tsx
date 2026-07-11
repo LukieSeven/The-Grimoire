@@ -201,7 +201,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
           Edit Abilities
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-5">
+      <DialogContent className="md:max-w-[800px] lg:max-w-[900px] sm:max-w-[650px] w-[95vw] max-h-[85vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-none p-5">
         <DialogHeader className="border-b border-border/30 pb-2">
           <DialogTitle className="font-serif text-2xl text-primary font-bold flex justify-between items-center">
             <span>
