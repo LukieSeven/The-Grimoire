@@ -424,8 +424,8 @@ export default function Bookshelf() {
                       </div>
                     </div>
                     <div className="text-center pb-1">
-                      <span className="font-serif text-xs font-bold uppercase tracking-[0.25em] text-stone-600">
-                        Codex
+                      <span className="font-mono text-xs font-bold uppercase tracking-[0.25em] text-stone-600/50">
+                        ᚛ᚦᚨᚱᚠ᚜
                       </span>
                     </div>
                   </div>
