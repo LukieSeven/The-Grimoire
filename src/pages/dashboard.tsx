@@ -52,6 +52,8 @@ export default function Dashboard() {
     }
   };
 
+  const chronicleChars = getChronicleCharacters();
+
   const handleImportFromChronicle = () => {
     if (selectedChronicleChars.length === 0) return;
     try {
