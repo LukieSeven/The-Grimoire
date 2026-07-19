@@ -382,6 +382,7 @@ export default function CharacterSheet() {
   const [dtAdd, setDtAdd] = useState("");
   const [dtRemove, setDtRemove] = useState("");
   const [dtBuff, setDtBuff] = useState("");
+  const [damageAmount, setDamageAmount] = useState("");
 
   const [manaAdd, setManaAdd] = useState("");
   const [manaRemove, setManaRemove] = useState("");
@@ -673,7 +674,7 @@ export default function CharacterSheet() {
 
   // ── DT Adjustments ────────────────────────────────────────
   const handleApplyDamage = () => {
-    const amount = parseInt(dtRemove);
+    const amount = parseInt(damageAmount);
     if (isNaN(amount) || amount <= 0) return;
     
     applyDamageMut.mutate({ id, data: { amount } }, {
@@ -682,10 +683,27 @@ export default function CharacterSheet() {
         setHp(data.newHp);
         setDamageResult({ hpLost: data.hpLost, absorbed: data.absorbed });
         setDtFlash("hit");
-        setDtRemove("");
+        setDamageAmount("");
         setTimeout(() => setDtFlash(null), 600);
+        if (data.absorbed) {
+          toast.info("Damage fully absorbed by Damage Threshold!");
+        } else {
+          toast.error(`Took ${data.hpLost} damage after DT absorption!`);
+        }
       }
     });
+  };
+
+  const handleDtRemoveDirect = () => {
+    const amount = parseInt(dtRemove);
+    if (isNaN(amount) || amount <= 0) return;
+    const cur = currentDt ?? character.currentDt;
+    const next = Math.max(0, cur - amount);
+    setCurrentDt(next);
+    setDtRemove("");
+    updateChar.mutate({ id, data: { currentDt: next } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: "Manual DT Reduction" } });
+    toast.success(`Deducted ${amount} from DT directly.`);
   };
 
   const handleDtAdd = () => {
@@ -2116,6 +2134,28 @@ export default function CharacterSheet() {
                   </div>
                 </div>
 
+                {/* ── Pulsing Red Damage Area ── */}
+                <div className="flex items-center gap-2 border border-red-500/40 bg-red-950/20 px-3.5 py-1.5 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10">
+                  <span className="text-xs font-serif font-bold text-red-500 uppercase tracking-widest animate-pulse">Damage</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={damageAmount}
+                    onChange={e => setDamageAmount(e.target.value)}
+                    placeholder="Dmg Amount"
+                    className="h-7 w-20 text-xs text-center font-mono bg-background/60 border-red-900/30 rounded focus:border-red-500/60 text-foreground"
+                  />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-7 text-xs px-2.5 font-bold rounded cursor-pointer transition-all bg-red-600 hover:bg-red-700 text-white font-serif"
+                    onClick={handleApplyDamage}
+                    disabled={!damageAmount || applyDamageMut.isPending}
+                  >
+                    Hit
+                  </Button>
+                </div>
+
                 {/* Long Rest Confirmation Trigger */}
                 <div className="flex items-center gap-3">
                   <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
@@ -2197,13 +2237,13 @@ export default function CharacterSheet() {
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={dtRemove} placeholder="DMG Val"
+                        type="number" min="0" value={dtRemove} placeholder="Deduct Val"
                         onChange={e => { setDtRemove(e.target.value); setDamageResult(null); }}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
-                        onClick={handleApplyDamage} disabled={!dtRemove || applyDamageMut.isPending}>
-                        Hit
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold bg-red-650 hover:bg-red-700"
+                        onClick={handleDtRemoveDirect} disabled={!dtRemove}>
+                        Deduct
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
