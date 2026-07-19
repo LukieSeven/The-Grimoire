@@ -2238,13 +2238,13 @@ export default function CharacterSheet() {
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={dtRemove} placeholder="Deduct Val"
+                        type="number" min="0" value={dtRemove} placeholder="Dmg val"
                         onChange={e => { setDtRemove(e.target.value); setDamageResult(null); }}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold bg-red-650 hover:bg-red-700"
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
                         onClick={handleDtRemoveDirect} disabled={!dtRemove}>
-                        Deduct
+                        Dmg
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
