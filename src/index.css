@@ -320,4 +320,14 @@ select,
   animation: borderRedPulse 2s infinite ease-in-out;
 }
 
+/* Hide number input spinner arrows */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
 
