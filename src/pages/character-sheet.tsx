@@ -2135,20 +2135,19 @@ export default function CharacterSheet() {
                 </div>
 
                 {/* ── Pulsing Red Damage Area ── */}
-                <div className="flex items-center gap-2 border border-red-500/40 bg-red-950/20 px-3.5 py-1.5 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10">
-                  <span className="text-xs font-serif font-bold text-red-500 uppercase tracking-widest animate-pulse">Damage</span>
+                <div className="flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10 overflow-hidden h-8">
                   <Input
                     type="number"
                     min="0"
                     value={damageAmount}
                     onChange={e => setDamageAmount(e.target.value)}
-                    placeholder="Dmg Amount"
-                    className="h-7 w-20 text-xs text-center font-mono bg-background/60 border-red-900/30 rounded focus:border-red-500/60 text-foreground"
+                    placeholder="Damage"
+                    className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-mono text-center w-24 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
                   />
                   <Button
                     variant="destructive"
                     size="sm"
-                    className="h-7 text-xs px-2.5 font-bold rounded cursor-pointer transition-all bg-red-600 hover:bg-red-700 text-white font-serif"
+                    className="h-full px-3 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
                     onClick={handleApplyDamage}
                     disabled={!damageAmount || applyDamageMut.isPending}
                   >
