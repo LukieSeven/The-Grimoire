@@ -841,6 +841,55 @@ export default function CharacterSheet() {
   };
 
   // ── Familiar DT Adjustments ───────────────────────────────
+  const handleFamApplyDamage = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.damageAmount || "";
+    const amount = parseInt(inputVal);
+    if (isNaN(amount) || amount <= 0) return;
+
+    let dtVal = fam.currentDt;
+    let hpVal = fam.currentHp;
+    let hpLost = 0;
+    let absorbed = true;
+
+    if (amount > dtVal) {
+      hpLost = amount - dtVal;
+      hpVal = Math.max(0, hpVal - hpLost);
+      dtVal = 0;
+      absorbed = false;
+    } else {
+      dtVal -= amount;
+    }
+
+    setFamDamageResults(prev => ({
+      ...prev,
+      [fam.id]: { hpLost, absorbed }
+    }));
+    
+    setFamDtFlashes(prev => ({
+      ...prev,
+      [fam.id]: "hit"
+    }));
+
+    updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
+    updateFamInput(fam.id, "damageAmount", "");
+    
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: dtVal - fam.currentDt, label: `Fam: ${fam.name} Took DMG`, familiarId: fam.id } });
+    if (hpLost > 0) {
+      createRoll.mutate({ id, data: { diceType: "hp-log", modifier: -hpLost, label: `Fam: ${fam.name} Took HP DMG`, familiarId: fam.id } });
+    }
+  };
+
+  const handleFamDtRemoveDirect = (fam: Familiar) => {
+    const inputVal = famInputs[fam.id]?.dtRemove || "";
+    const amount = parseInt(inputVal);
+    if (isNaN(amount) || amount <= 0) return;
+    const next = Math.max(0, fam.currentDt - amount);
+    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    updateFamInput(fam.id, "dtRemove", "");
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: `Fam: ${fam.name} Manual DT Deduct`, familiarId: fam.id } });
+    toast.success(`Deducted ${amount} from ${fam.name}'s DT directly.`);
+  };
+
   const handleFamDtAdd = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.dtAdd || "";
     const amount = parseInt(inputVal);
@@ -2022,28 +2071,34 @@ export default function CharacterSheet() {
     <div className="p-4 max-w-7xl mx-auto animate-in fade-in duration-500 space-y-4">
       
       {/* ── Top Header Controls ── */}
-      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-4 flex flex-wrap items-center justify-between gap-4 rounded-lg shadow-sm w-full mb-4">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setLocation("/grimoire")} className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all">
-            <ArrowLeft className="w-3.5 h-3.5 text-primary" /> Return to Grimoire
+      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-3.5 flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap rounded-lg shadow-sm w-full mb-4 flex-nowrap shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => setLocation("/grimoire")} className="h-8 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3 font-bold text-muted-foreground transition-all">
+            <ArrowLeft className="w-3.5 h-3.5 text-primary" />
+            <span className="hidden sm:inline">Return to Grimoire</span>
+            <span className="sm:hidden">Grimoire</span>
           </Button>
           <div className="h-4 w-px bg-border/30" />
           <CustomizeToolDialog />
           <div className="h-4 w-px bg-border/30" />
           <RollGuideDialog />
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
           <input type="file" ref={fileInputRef} onChange={handleFileImport} accept=".soul,.json" className="hidden" />
-          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all">
-            <Upload className="w-3.5 h-3.5" /> Import Character
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all" title="Import Character">
+            <Upload className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Import Character</span>
+            <span className="md:hidden">Import</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportCharacterJSON(id)} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all">
-            <Download className="w-3.5 h-3.5" /> Export Character
+          <Button variant="outline" size="sm" onClick={() => exportCharacterJSON(id)} className="h-8 text-xs font-serif border border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer flex items-center gap-1.5 font-bold transition-all" title="Export Character">
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Export Character</span>
+            <span className="md:hidden">Export</span>
           </Button>
           
           <div className="h-4 w-px bg-border/30" />
           <EditCharacterDialog character={character} />
-          <Button variant="destructive" size="icon" className="h-8 w-8 rounded-md cursor-pointer flex items-center justify-center transition-all" onClick={handleDelete}>
+          <Button variant="destructive" size="icon" className="h-8 w-8 rounded-md cursor-pointer flex items-center justify-center transition-all" onClick={handleDelete} title="Delete Character">
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>
@@ -4345,7 +4400,28 @@ export default function CharacterSheet() {
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {/* ── Pulsing Red Familiar Damage Area ── */}
+                            <div className="flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10 overflow-hidden h-7">
+                              <Input
+                                type="number"
+                                min="0"
+                                value={inputs.damageAmount || ""}
+                                onChange={e => updateFamInput(fam.id, "damageAmount", e.target.value)}
+                                placeholder="Damage"
+                                className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-[10px] font-mono text-center w-20 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
+                              />
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-full px-2.5 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-[10px] cursor-pointer"
+                                onClick={() => handleFamApplyDamage(fam)}
+                                disabled={!inputs.damageAmount}
+                              >
+                                Hit
+                              </Button>
+                            </div>
+
                             <EditFamiliarDialog familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
                             <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer h-7 text-[10px] font-bold px-2" 
                               onClick={() => handleReleaseFamiliarClick(fam.id)}>
@@ -4388,13 +4464,13 @@ export default function CharacterSheet() {
                               </div>
                               <div className="flex gap-1">
                                 <Input
-                                  type="number" min="0" value={inputs.dtRemove || ""} placeholder="DMG Val"
+                                  type="number" min="0" value={inputs.dtRemove || ""} placeholder="Dmg val"
                                   onChange={e => { updateFamInput(fam.id, "dtRemove", e.target.value); setFamDamageResults(prev => ({ ...prev, [fam.id]: null })); }}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold"
-                                  onClick={() => handleFamDtRemove(fam)} disabled={!inputs.dtRemove}>
-                                  Hit
+                                  onClick={() => handleFamDtRemoveDirect(fam)} disabled={!inputs.dtRemove}>
+                                  Dmg
                                 </Button>
                               </div>
                               <div className="flex gap-1">

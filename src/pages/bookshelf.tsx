@@ -616,7 +616,7 @@ export default function Bookshelf() {
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 62
+              Crafted by Lukie Seven · Mark 63
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -624,13 +624,13 @@ export default function Bookshelf() {
       </div>
 
       {/* Description Panel Area (Parchment Card) */}
-      <div className="w-full max-w-xl mx-auto z-10 min-h-[140px] flex items-center justify-center transition-all duration-500">
+      <div className="w-full max-w-xl mx-auto z-10 min-h-[140px] flex items-center justify-center transition-all duration-300">
         {hoveredBook ? (
           (() => {
             const currentBook = books.find(b => b.id === hoveredBook);
             if (!currentBook) return null;
             return (
-              <div className="w-full bg-[#16110c] border border-amber-900/45 p-6 shadow-2xl relative parchment-glow animate-in fade-in duration-200">
+              <div className="w-full bg-[#16110c] border border-amber-900/45 p-6 shadow-2xl relative parchment-glow animate-smooth-fade-in">
                 {/* Decorative border overlays */}
                 <div className="absolute inset-1 border border-amber-950/20 pointer-events-none" />
                 <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-amber-900/15 pointer-events-none" />
@@ -639,7 +639,7 @@ export default function Bookshelf() {
                   <h3 className="text-amber-500 text-lg font-bold uppercase tracking-wider">{currentBook.title}</h3>
                   <span className="text-[10px] font-mono uppercase text-stone-500 tracking-widest block">{currentBook.subtitle}</span>
                   <div className="h-[1px] w-24 bg-amber-900/20 mx-auto my-2" />
-                  <p className="text-stone-300 text-xs leading-relaxed max-w-sm mx-auto">
+                  <p className="text-stone-300 text-xs leading-relaxed max-w-sm mx-auto font-serif">
                     {currentBook.id === "grimoire" 
                       ? "Consult the codices of active heroes. Track character stats, customize attributes, manage spell inventories, calculate Crit Chains, and roll active campaign D20 checks." 
                       : currentBook.id === "codex"
@@ -661,7 +661,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 62
+          Lovingly crafted by LukieSeven — Mark 63
         </p>
       </footer>
     </div>

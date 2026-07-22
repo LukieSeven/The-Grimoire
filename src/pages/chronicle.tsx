@@ -121,8 +121,6 @@ export default function Chronicle() {
   // 2. Initiative Tracker
   const [combatants, setCombatants] = useState<any[]>([]);
   const [initName, setInitName] = useState("");
-  const [initScore, setInitScore] = useState("");
-  const [initHp, setInitHp] = useState("");
   const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
   const [roundCount, setRoundCount] = useState(1);
 
@@ -219,20 +217,70 @@ export default function Chronicle() {
   // Initiative Tracker actions
   const handleAddCombatant = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!initName.trim()) return;
-    const score = parseInt(initScore) || 0;
-    const hp = parseInt(initHp) || 10;
+    const query = initName.trim();
+    if (!query) return;
+
+    // Search roster for matching character or familiar
+    let foundName = query;
+    let agility = 10;
+    let hp = 10;
+    let maxHp = 10;
+    let charId: any = null;
+
+    const lowerQuery = query.toLowerCase();
+    const matchedChar = chronicleRoster.find(c => c.name?.toLowerCase() === lowerQuery);
+
+    if (matchedChar) {
+      foundName = matchedChar.name;
+      agility = matchedChar.agility ?? 10;
+      hp = matchedChar.currentHp ?? 10;
+      maxHp = matchedChar.maxHp ?? 10;
+      charId = matchedChar.id;
+    } else {
+      // Check if it matches a familiar inside one of the characters
+      for (const c of chronicleRoster) {
+        if (c.familiars && Array.isArray(c.familiars)) {
+          const fam = c.familiars.find((f: any) => f.name?.toLowerCase() === lowerQuery);
+          if (fam) {
+            foundName = fam.name;
+            agility = fam.agility ?? 10;
+            hp = fam.currentHp ?? 10;
+            maxHp = fam.maxHp ?? 10;
+            break;
+          }
+        }
+      }
+    }
+
+    // Agility Modifier = Math.floor((agility - 10) / 2)
+    const agiMod = Math.floor((agility - 10) / 2);
+    const d20 = Math.floor(Math.random() * 20) + 1;
+    const totalInit = d20 + agiMod;
+
+    // Add to combatants array and auto-sort descending by initiative score
     setCombatants(prev => [...prev, {
       id: Date.now() + Math.random(),
-      name: initName,
-      score,
+      characterId: charId,
+      name: foundName,
+      score: totalInit,
       hp,
-      maxHp: hp,
+      maxHp,
       active: true
     }].sort((a,b) => b.score - a.score));
+
     setInitName("");
-    setInitScore("");
-    setInitHp("");
+
+    // Create roll history log & toast notification
+    const modStr = agiMod >= 0 ? `+${agiMod}` : `${agiMod}`;
+    createRoll.mutate({
+      data: {
+        diceType: "agility-init",
+        modifier: totalInit,
+        label: `Agility Initiative: ${foundName} [d20:${d20}${modStr}=${totalInit}]`
+      }
+    });
+
+    toast.success(`${foundName} rolled Agility Initiative: ${totalInit} (d20: ${d20}${modStr})`);
   };
 
   const stepTurn = (direction: number) => {
@@ -720,41 +768,23 @@ export default function Chronicle() {
               <span className="text-xs font-mono bg-sky-950/40 border border-sky-900/25 px-2 py-0.5 text-sky-400 font-bold uppercase">Round {roundCount}</span>
             </h2>
 
-            {/* Add Combatant Form */}
-            <form onSubmit={handleAddCombatant} className="grid grid-cols-3 gap-2 items-end">
-              <div className="col-span-1">
-                <label className="text-[9px] font-bold text-stone-500 uppercase block mb-1">Name</label>
-                <Input
-                  value={initName}
-                  onChange={e => setInitName(e.target.value)}
-                  placeholder="Garrick..."
-                  required
-                  className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-stone-500 uppercase block mb-1">Init Roll</label>
-                <Input
-                  type="number"
-                  value={initScore}
-                  onChange={e => setInitScore(e.target.value)}
-                  placeholder="18"
-                  className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-stone-500 uppercase block mb-1">Max HP</label>
-                <Input
-                  type="number"
-                  value={initHp}
-                  onChange={e => setInitHp(e.target.value)}
-                  placeholder="45"
-                  className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans"
-                />
-              </div>
-              <Button type="submit" className="col-span-3 bg-sky-950 text-sky-400 border border-sky-600/40 hover:bg-sky-500/10 text-xs font-bold rounded-md h-8 mt-2 cursor-pointer">
-                + Add Combatant
+            {/* Add Combatant Form - Single Row + and Name input */}
+            <form onSubmit={handleAddCombatant} className="flex items-center gap-2">
+              <Button 
+                type="submit" 
+                size="sm"
+                className="bg-sky-950 text-sky-400 border border-sky-600/40 hover:bg-sky-500/10 text-xs font-bold rounded-md h-8 px-3 cursor-pointer shrink-0"
+                title="Roll Agility Initiative & Add"
+              >
+                +
               </Button>
+              <Input
+                value={initName}
+                onChange={e => setInitName(e.target.value)}
+                placeholder="Character, Familiar, or NPC name..."
+                required
+                className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans flex-1"
+              />
             </form>
 
             {/* Combatants List */}

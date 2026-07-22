@@ -330,4 +330,114 @@ input[type=number] {
   -moz-appearance: textfield;
 }
 
+/* ── Hardware-Accelerated Modal & Popup Animations ── */
+@keyframes smoothFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes smoothFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes smoothModalOpen {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, -48%, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, -50%, 0) scale(1);
+  }
+}
+
+@keyframes smoothDropdownOpen {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-smooth-fade-in {
+  animation: smoothFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-smooth-modal-open {
+  animation: smoothModalOpen 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.animate-smooth-dropdown-open {
+  animation: smoothDropdownOpen 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* ── Universal Pointer Cursors & Click Highlights ── */
+button,
+[role="button"],
+a,
+select,
+.cursor-pointer,
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"],
+summary {
+  cursor: pointer !important;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"],
+input:disabled,
+select:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.45 !important;
+}
+
+/* Tactile Clickable Hover Micro-Interactions */
+button:not(:disabled):hover,
+[role="button"]:not([aria-disabled="true"]):hover,
+.clickable-card:hover {
+  filter: brightness(1.1);
+  transition: all 0.15s ease-in-out;
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* Theme-Aware Ambient Input Focus Glows */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  border-color: hsl(var(--primary)) !important;
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.25) !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Sleek Dark Glass Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 26, 0.35);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.6);
+}
+
 
