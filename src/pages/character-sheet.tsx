@@ -2286,7 +2286,7 @@ export default function CharacterSheet() {
                         onChange={e => setDtAdd(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleDtAdd} disabled={!dtAdd}>
                         Add
                       </Button>
@@ -2297,7 +2297,7 @@ export default function CharacterSheet() {
                         onChange={e => { setDtRemove(e.target.value); setDamageResult(null); }}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
                         onClick={handleDtRemoveDirect} disabled={!dtRemove}>
                         Dmg
                       </Button>
@@ -2308,12 +2308,12 @@ export default function CharacterSheet() {
                         onChange={e => setDtBuff(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
                         onClick={handleDtBuff} disabled={!dtBuff}>
                         Buff
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
                       onClick={handleRestoreDt}>
                       Full Restore DT
                     </Button>
@@ -2390,7 +2390,7 @@ export default function CharacterSheet() {
                         onChange={e => setHpAdd(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleHpAdd} disabled={!hpAdd}>
                         Heal
                       </Button>
@@ -2401,7 +2401,7 @@ export default function CharacterSheet() {
                         onChange={e => setHpRemove(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
                         onClick={handleHpRemove} disabled={!hpRemove}>
                         Dmg
                       </Button>
@@ -2412,12 +2412,12 @@ export default function CharacterSheet() {
                         onChange={e => setHpBuff(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
                         onClick={handleHpBuff} disabled={!hpBuff}>
                         Buff
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
                       onClick={handleFullRestoreHp}>
                       Full Restore HP
                     </Button>
@@ -2494,7 +2494,7 @@ export default function CharacterSheet() {
                         onChange={e => setManaAdd(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleManaAdd} disabled={!manaAdd}>
                         Add
                       </Button>
@@ -4457,7 +4457,7 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "dtAdd", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
                                   onClick={() => handleFamDtAdd(fam)} disabled={!inputs.dtAdd}>
                                   Add
                                 </Button>
@@ -4468,7 +4468,7 @@ export default function CharacterSheet() {
                                   onChange={e => { updateFamInput(fam.id, "dtRemove", e.target.value); setFamDamageResults(prev => ({ ...prev, [fam.id]: null })); }}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
                                   onClick={() => handleFamDtRemoveDirect(fam)} disabled={!inputs.dtRemove}>
                                   Dmg
                                 </Button>
@@ -4479,12 +4479,12 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "dtBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamDtBuff(fam)} disabled={!inputs.dtBuff}>
                                   Buff
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer"
+                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
                                 onClick={() => handleFamRestoreDt(fam)}>
                                 Full Restore DT
                               </Button>
@@ -4519,7 +4519,7 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "hpAdd", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
                                   onClick={() => handleFamHpAdd(fam)} disabled={!inputs.hpAdd}>
                                   Heal
                                 </Button>
@@ -4530,7 +4530,7 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "hpRemove", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
                                   onClick={() => handleFamHpRemove(fam)} disabled={!inputs.hpRemove}>
                                   Dmg
                                 </Button>
@@ -4541,12 +4541,12 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "hpBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamHpBuff(fam)} disabled={!inputs.hpBuff}>
                                   Buff
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer"
+                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
                                 onClick={() => handleFamFullRestoreHp(fam)}>
                                 Full Restore HP
                               </Button>
@@ -4580,7 +4580,7 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "manaAdd", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
                                   onClick={() => handleFamManaAdd(fam)} disabled={!inputs.manaAdd}>
                                   Add
                                 </Button>
@@ -4591,7 +4591,7 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "manaRemove", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
                                   onClick={() => handleFamManaRemove(fam)} disabled={!inputs.manaRemove}>
                                   Use
                                 </Button>
@@ -4602,12 +4602,12 @@ export default function CharacterSheet() {
                                   onChange={e => updateFamInput(fam.id, "manaBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold"
+                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamManaBuff(fam)} disabled={!inputs.manaBuff}>
                                   Buff
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer"
+                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
                                 onClick={() => handleFamFullRestoreMana(fam)}>
                                 Full Restore Mana
                               </Button>
