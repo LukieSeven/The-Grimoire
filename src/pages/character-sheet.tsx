@@ -631,8 +631,7 @@ export default function CharacterSheet() {
 
   // ── HP Adjustments ────────────────────────────────────────
   const handleHpAdd = () => {
-    const amount = parseInt(hpAdd);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(hpAdd) || 1;
     const cur = hp ?? character.currentHp;
     const limit = maxHp + abilityHpBonus;
     const next = Math.min(limit, cur + amount);
@@ -643,8 +642,7 @@ export default function CharacterSheet() {
   };
 
   const handleHpRemove = () => {
-    const amount = parseInt(hpRemove);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(hpRemove) || 1;
     const cur = hp ?? character.currentHp;
     const next = Math.max(0, cur - amount);
     setHp(next);
@@ -654,8 +652,7 @@ export default function CharacterSheet() {
   };
 
   const handleHpBuff = () => {
-    const amount = parseInt(hpBuff);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(hpBuff) || 1;
     const cur = hp ?? character.currentHp;
     const next = cur + amount;
     setHp(next);
@@ -674,9 +671,7 @@ export default function CharacterSheet() {
 
   // ── DT Adjustments ────────────────────────────────────────
   const handleApplyDamage = () => {
-    const amount = parseInt(damageAmount);
-    if (isNaN(amount) || amount <= 0) return;
-    
+    const amount = parseInt(damageAmount) || 1;
     applyDamageMut.mutate({ id, data: { amount } }, {
       onSuccess: (data) => {
         setCurrentDt(data.newDt);
@@ -695,8 +690,7 @@ export default function CharacterSheet() {
   };
 
   const handleDtRemoveDirect = () => {
-    const amount = parseInt(dtRemove);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(dtRemove) || 1;
     const cur = currentDt ?? character.currentDt;
     const next = Math.max(0, cur - amount);
     setCurrentDt(next);
@@ -707,8 +701,7 @@ export default function CharacterSheet() {
   };
 
   const handleDtAdd = () => {
-    const amount = parseInt(dtAdd);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(dtAdd) || 1;
     const cur = currentDt ?? character.currentDt;
     const limit = maxDt + abilityDtBonus;
     const next = Math.min(limit, cur + amount);
@@ -719,8 +712,7 @@ export default function CharacterSheet() {
   };
 
   const handleDtBuff = () => {
-    const amount = parseInt(dtBuff);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(dtBuff) || 1;
     const cur = currentDt ?? character.currentDt;
     const next = cur + amount;
     setCurrentDt(next);
@@ -742,8 +734,7 @@ export default function CharacterSheet() {
 
   // ── Mana Adjustments ──────────────────────────────────────
   const handleManaAdd = () => {
-    const amount = parseInt(manaAdd);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(manaAdd) || 1;
     const cur = mana ?? character.currentMana;
     const limit = maxMana + abilityManaBonus;
     const next = Math.min(limit, cur + amount);
@@ -754,8 +745,7 @@ export default function CharacterSheet() {
   };
 
   const handleManaRemove = () => {
-    const amount = parseInt(manaRemove);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(manaRemove) || 1;
     const cur = mana ?? character.currentMana;
     const next = Math.max(0, cur - amount);
     setMana(next);
@@ -765,7 +755,7 @@ export default function CharacterSheet() {
   };
 
   const handleManaBuff = () => {
-    const amount = parseInt(manaBuff);
+    const amount = parseInt(manaBuff) || 1;
     if (isNaN(amount) || amount <= 0) return;
     const cur = mana ?? character.currentMana;
     const next = cur + amount;
@@ -804,8 +794,7 @@ export default function CharacterSheet() {
   // ── Familiar HP Adjustments ───────────────────────────────
   const handleFamHpAdd = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.hpAdd || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxHp, fam.currentHp + amount);
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
@@ -815,8 +804,7 @@ export default function CharacterSheet() {
 
   const handleFamHpRemove = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.hpRemove || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentHp - amount);
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
     updateFamInput(fam.id, "hpRemove", "");
@@ -825,8 +813,7 @@ export default function CharacterSheet() {
 
   const handleFamHpBuff = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.hpBuff || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const next = fam.currentHp + amount;
     updateFamiliarData(fam.id, { ...fam, currentHp: next });
     updateFamInput(fam.id, "hpBuff", "");
@@ -843,8 +830,7 @@ export default function CharacterSheet() {
   // ── Familiar DT Adjustments ───────────────────────────────
   const handleFamApplyDamage = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.damageAmount || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
 
     let dtVal = fam.currentDt;
     let hpVal = fam.currentHp;
@@ -881,8 +867,7 @@ export default function CharacterSheet() {
 
   const handleFamDtRemoveDirect = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.dtRemove || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentDt - amount);
     updateFamiliarData(fam.id, { ...fam, currentDt: next });
     updateFamInput(fam.id, "dtRemove", "");
@@ -892,8 +877,7 @@ export default function CharacterSheet() {
 
   const handleFamDtAdd = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.dtAdd || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxDt, fam.currentDt + amount);
     updateFamiliarData(fam.id, { ...fam, currentDt: next });
@@ -903,8 +887,7 @@ export default function CharacterSheet() {
 
   const handleFamDtRemove = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.dtRemove || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
 
     let dtVal = fam.currentDt;
     let hpVal = fam.currentHp;
@@ -948,8 +931,7 @@ export default function CharacterSheet() {
 
   const handleFamDtBuff = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.dtBuff || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const next = fam.currentDt + amount;
     updateFamiliarData(fam.id, { ...fam, currentDt: next });
     updateFamInput(fam.id, "dtBuff", "");
@@ -981,8 +963,7 @@ export default function CharacterSheet() {
   // ── Familiar Mana Adjustments ─────────────────────────────
   const handleFamManaAdd = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.manaAdd || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxMana, fam.currentMana + amount);
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
@@ -992,8 +973,7 @@ export default function CharacterSheet() {
 
   const handleFamManaRemove = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.manaRemove || "";
-    const amount = parseInt(inputVal);
-    if (isNaN(amount) || amount <= 0) return;
+    const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentMana - amount);
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
     updateFamInput(fam.id, "manaRemove", "");
@@ -1002,7 +982,7 @@ export default function CharacterSheet() {
 
   const handleFamManaBuff = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.manaBuff || "";
-    const amount = parseInt(inputVal);
+    const amount = parseInt(inputVal) || 1;
     if (isNaN(amount) || amount <= 0) return;
     const next = fam.currentMana + amount;
     updateFamiliarData(fam.id, { ...fam, currentMana: next });
@@ -2287,7 +2267,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleDtAdd} disabled={!dtAdd}>
+                        onClick={handleDtAdd}>
                         Add
                       </Button>
                     </div>
@@ -2298,7 +2278,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
-                        onClick={handleDtRemoveDirect} disabled={!dtRemove}>
+                        onClick={handleDtRemoveDirect}>
                         Dmg
                       </Button>
                     </div>
@@ -2309,7 +2289,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
-                        onClick={handleDtBuff} disabled={!dtBuff}>
+                        onClick={handleDtBuff}>
                         Buff
                       </Button>
                     </div>
@@ -2391,7 +2371,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleHpAdd} disabled={!hpAdd}>
+                        onClick={handleHpAdd}>
                         Heal
                       </Button>
                     </div>
@@ -2402,7 +2382,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
-                        onClick={handleHpRemove} disabled={!hpRemove}>
+                        onClick={handleHpRemove}>
                         Dmg
                       </Button>
                     </div>
@@ -2413,7 +2393,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
-                        onClick={handleHpBuff} disabled={!hpBuff}>
+                        onClick={handleHpBuff}>
                         Buff
                       </Button>
                     </div>
@@ -2495,7 +2475,7 @@ export default function CharacterSheet() {
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleManaAdd} disabled={!manaAdd}>
+                        onClick={handleManaAdd}>
                         Add
                       </Button>
                     </div>
@@ -2505,8 +2485,8 @@ export default function CharacterSheet() {
                         onChange={e => setManaRemove(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold"
-                        onClick={handleManaRemove} disabled={!manaRemove}>
+                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
+                        onClick={handleManaRemove}>
                         Use
                       </Button>
                     </div>
@@ -2516,12 +2496,12 @@ export default function CharacterSheet() {
                         onChange={e => setManaBuff(e.target.value)}
                         className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold"
-                        onClick={handleManaBuff} disabled={!manaBuff}>
+                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
+                        onClick={handleManaBuff}>
                         Buff
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer"
+                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
                       onClick={handleFullRestoreMana}>
                       Full Restore Mana
                     </Button>
@@ -4458,7 +4438,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamDtAdd(fam)} disabled={!inputs.dtAdd}>
+                                  onClick={() => handleFamDtAdd(fam)}>
                                   Add
                                 </Button>
                               </div>
@@ -4469,7 +4449,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamDtRemoveDirect(fam)} disabled={!inputs.dtRemove}>
+                                  onClick={() => handleFamDtRemoveDirect(fam)}>
                                   Dmg
                                 </Button>
                               </div>
@@ -4480,7 +4460,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamDtBuff(fam)} disabled={!inputs.dtBuff}>
+                                  onClick={() => handleFamDtBuff(fam)}>
                                   Buff
                                 </Button>
                               </div>
@@ -4520,7 +4500,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamHpAdd(fam)} disabled={!inputs.hpAdd}>
+                                  onClick={() => handleFamHpAdd(fam)}>
                                   Heal
                                 </Button>
                               </div>
@@ -4531,7 +4511,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamHpRemove(fam)} disabled={!inputs.hpRemove}>
+                                  onClick={() => handleFamHpRemove(fam)}>
                                   Dmg
                                 </Button>
                               </div>
@@ -4542,7 +4522,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamHpBuff(fam)} disabled={!inputs.hpBuff}>
+                                  onClick={() => handleFamHpBuff(fam)}>
                                   Buff
                                 </Button>
                               </div>
@@ -4581,7 +4561,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamManaAdd(fam)} disabled={!inputs.manaAdd}>
+                                  onClick={() => handleFamManaAdd(fam)}>
                                   Add
                                 </Button>
                               </div>
@@ -4592,7 +4572,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamManaRemove(fam)} disabled={!inputs.manaRemove}>
+                                  onClick={() => handleFamManaRemove(fam)}>
                                   Use
                                 </Button>
                               </div>
@@ -4603,7 +4583,7 @@ export default function CharacterSheet() {
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamManaBuff(fam)} disabled={!inputs.manaBuff}>
+                                  onClick={() => handleFamManaBuff(fam)}>
                                   Buff
                                 </Button>
                               </div>
