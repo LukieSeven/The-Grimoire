@@ -593,7 +593,9 @@ export default function CharacterSheet() {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
       if (ability) {
         const eq = ability.equipmentId ? equipment.find(e => e.id === ability.equipmentId) : null;
-        name = eq ? `${eq.name}: ${ability.name}` : ability.name;
+        const invItem = ability.inventoryItemId ? inventory.find(i => i.id === ability.inventoryItemId) : null;
+        const parent = eq || invItem;
+        name = parent ? `${parent.name}: ${ability.name}` : ability.name;
         costStr = `${ability.cost} MP`;
         if (ability.linkedStats && ability.linkedStats.length > 0) {
           statStr = ability.linkedStats.map(s => s.toUpperCase().substring(0, 3)).join(", ");
@@ -3034,11 +3036,11 @@ export default function CharacterSheet() {
                 )}
 
                 {/* Shaped Spells */}
-                {abilities.filter(ab => !ab.equipmentId).length > 0 && (
+                {abilities.filter(ab => !ab.equipmentId && !ab.inventoryItemId).length > 0 && (
                   <div>
                     <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Shaped Spells</h4>
                     <div className="flex flex-wrap gap-1.5">
-                      {abilities.filter(ab => !ab.equipmentId).map(ab => (
+                      {abilities.filter(ab => !ab.equipmentId && !ab.inventoryItemId).map(ab => (
                         <Button 
                           key={ab.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
                           onClick={() => handleAssignFavorite(assigningSlotIndex!, "ability", ab.id, ab.name)}
@@ -3050,20 +3052,22 @@ export default function CharacterSheet() {
                   </div>
                 )}
 
-                {/* Item Abilities */}
-                {abilities.filter(ab => ab.equipmentId).length > 0 && (
+                {/* Item Abilities (Gear & Potion Abilities) */}
+                {abilities.filter(ab => ab.equipmentId || ab.inventoryItemId).length > 0 && (
                   <div>
                     <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Item Abilities</h4>
                     <div className="flex flex-wrap gap-1.5">
-                      {abilities.filter(ab => ab.equipmentId).map(ab => {
-                        const eq = equipment.find(e => e.id === ab.equipmentId);
-                        const displayName = eq ? `${eq.name}: ${ab.name}` : ab.name;
+                      {abilities.filter(ab => ab.equipmentId || ab.inventoryItemId).map(ab => {
+                        const eq = ab.equipmentId ? equipment.find(e => e.id === ab.equipmentId) : null;
+                        const invItem = ab.inventoryItemId ? inventory.find(i => i.id === ab.inventoryItemId) : null;
+                        const parentName = eq ? eq.name : invItem ? invItem.name : null;
+                        const displayName = parentName ? `${parentName}: ${ab.name}` : ab.name;
                         return (
                           <Button 
-                            key={ab.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
+                            key={ab.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif border-amber-500/30 text-amber-400"
                             onClick={() => handleAssignFavorite(assigningSlotIndex!, "ability", ab.id, displayName)}
                           >
-                            {displayName}
+                            ✨ {displayName}
                           </Button>
                         );
                       })}
