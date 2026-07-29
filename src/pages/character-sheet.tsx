@@ -1537,6 +1537,19 @@ export default function CharacterSheet() {
     toast.success(`Slot #${slotIdx + 1} cleared.`);
   };
 
+  const scrollToElement = (elementId: string) => {
+    setTimeout(() => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background", "transition-all");
+        setTimeout(() => {
+          el.classList.remove("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background");
+        }, 2500);
+      }
+    }, 120);
+  };
+
   const handleLocateFavorite = (fav: FavoriteSlot, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!fav) return;
@@ -1546,27 +1559,39 @@ export default function CharacterSheet() {
       const abId = Number(fav.targetId);
       setExpandedAbilities(prev => ({ ...prev, [abId]: true }));
       toast.success(`Navigated to Shaped Ability: ${fav.label}`);
+      scrollToElement(`ability-card-${abId}`);
     } else if (fav.type === "familiar-ability") {
       setActiveTab("familiar");
       if (fav.familiarId) {
         setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
       }
       toast.success(`Navigated to Familiar Action: ${fav.label}`);
+      scrollToElement(`fam-ability-card-${fav.targetId}`);
     } else if (fav.type === "weapon") {
       setActiveTab("inventory");
       toast.success(`Navigated to Inventory: ${fav.label}`);
+      scrollToElement(`equipment-card-${fav.targetId}`);
     } else if (fav.type === "skill") {
       setActiveTab("skills");
+      const skillId = Number(fav.targetId);
+      const skill = skills.find(s => s.id === skillId);
+      if (skill) {
+        const cat = skill.category?.trim() || "General Skills";
+        setExpandedCategories(prev => ({ ...prev, [cat]: true }));
+      }
       toast.success(`Navigated to Skills Log: ${fav.label}`);
+      scrollToElement(`skill-card-${skillId}`);
     } else if (fav.type === "attribute") {
       setActiveTab("stats");
       toast.success(`Navigated to Attributes: ${fav.label}`);
+      scrollToElement(`stat-card-${fav.targetId}`);
     } else if (fav.type === "familiar-attribute") {
       setActiveTab("familiar");
       if (fav.familiarId) {
         setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
       }
       toast.success(`Navigated to Familiar: ${fav.label}`);
+      scrollToElement(`familiar-card-${fav.familiarId}`);
     }
   };
 
@@ -3112,7 +3137,7 @@ export default function CharacterSheet() {
               const fullName = stat.key.charAt(0).toUpperCase() + stat.key.slice(1);
 
               return (
-                <Card key={stat.key} className="bg-card border-border/50 shadow-sm flex flex-col justify-between rounded-none">
+                <Card id={`stat-card-${stat.key}`} key={stat.key} className="bg-card border-border/50 shadow-sm flex flex-col justify-between rounded-none">
                   <CardContent className="p-3 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
@@ -3231,6 +3256,7 @@ export default function CharacterSheet() {
                             <div className="p-3 bg-background/25 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 animate-in slide-in-from-top-1 duration-150">
                               {catSkills.map(skill => (
                                 <Card 
+                                  id={`skill-card-${skill.id}`}
                                   key={skill.id} 
                                   onClick={() => handleSkillRoll(skill)}
                                   className="bg-card border-border/50 hover:border-primary/60 transition-all cursor-pointer rounded-none flex flex-col justify-between group"
@@ -3362,7 +3388,7 @@ export default function CharacterSheet() {
                     if (eq.dtBonus > 0) bonusList.push(`DT: +${eq.dtBonus}`);
                     
                     return (
-                      <Card key={eq.id} className={`bg-card/50 border-border/40 transition-all rounded-none ${eq.equipped ? "border-primary/40 shadow-sm bg-primary/[0.01]" : ""}`}>
+                      <Card id={`equipment-card-${eq.id}`} key={eq.id} className={`bg-card/50 border-border/40 transition-all rounded-none ${eq.equipped ? "border-primary/40 shadow-sm bg-primary/[0.01]" : ""}`}>
                         <CardContent className="p-3 space-y-2">
                           <div className="flex justify-between items-start">
                             <div>
@@ -3793,6 +3819,7 @@ export default function CharacterSheet() {
 
                 return (
                   <Card 
+                    id={`ability-card-${ability.id}`}
                     key={ability.id} 
                     draggable={true}
                     onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
@@ -4325,7 +4352,7 @@ export default function CharacterSheet() {
                     const latestFamDtLog = rolls?.filter(r => r.diceType === "dt-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
 
                     return (
-                      <Card key={fam.id} className="bg-card border border-border/40 shadow-md rounded-none p-3.5 space-y-3">
+                      <Card id={`familiar-card-${fam.id}`} key={fam.id} className="bg-card border border-border/40 shadow-md rounded-none p-3.5 space-y-3">
                         
                         {/* Title Banner */}
                         <div className="flex justify-between items-start flex-wrap gap-3 border-b border-border/20 pb-2">
@@ -4641,7 +4668,7 @@ export default function CharacterSheet() {
                             {isExpanded && (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1.5 animate-in slide-in-from-top-1 duration-150">
                                 {fam.abilities.map((ab) => (
-                                  <Card key={ab.id} className="bg-background border border-border/30 rounded-none relative">
+                                  <Card id={`fam-ability-card-${ab.id}`} key={ab.id} className="bg-background border border-border/30 rounded-none relative">
                                     <CardContent className="p-2.5 space-y-1.5">
                                       <div className="flex justify-between items-start pr-1 flex-wrap gap-2">
                                         <div>
