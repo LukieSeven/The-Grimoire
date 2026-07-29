@@ -2,9 +2,10 @@
 import initialCodex from "../data/initial_codex.json";
 
 export interface FavoriteSlot {
-  type: "weapon" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
+  type: "weapon" | "item" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
   targetId: string | number;
   label: string;
+  familiarId?: string | number;
 }
 
 export interface FamiliarAbility {

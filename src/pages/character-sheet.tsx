@@ -571,12 +571,23 @@ export default function CharacterSheet() {
     if (slot.type === "attribute") {
       name = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
       statStr = `${finalStats[slot.targetId as string] || 0} (${autoModifiers[slot.targetId as string] >= 0 ? "+" : ""}${autoModifiers[slot.targetId as string]})`;
-    } else if (slot.type === "weapon") {
-      const item = equipment.find(e => e.id === Number(slot.targetId));
-      if (item) {
-        name = item.name;
-        costStr = item.modifier !== undefined ? (typeof item.modifier === "number" ? `${item.modifier >= 0 ? "+" : ""}${item.modifier} Mod` : `${item.modifier} Mod`) : "";
-        statStr = item.diceType || "d8";
+    } else if (slot.type === "weapon" || slot.type === "item") {
+      const eq = equipment.find(e => e.id === Number(slot.targetId));
+      const invItem = inventory.find(i => i.id === Number(slot.targetId));
+      if (eq) {
+        name = eq.name;
+        costStr = eq.equipped ? "Equipped" : "Gear";
+        statStr = eq.diceType || "Item";
+      } else if (invItem) {
+        name = invItem.name;
+        const linkedAb = abilities.find(a => a.inventoryItemId === invItem.id);
+        if (linkedAb) {
+          statStr = linkedAb.rollFormula || linkedAb.name;
+          costStr = linkedAb.cost > 0 ? `${linkedAb.cost} MP (x${invItem.quantity})` : `x${invItem.quantity}`;
+        } else {
+          costStr = `x${invItem.quantity}`;
+          statStr = "Item";
+        }
       }
     } else if (slot.type === "ability") {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
@@ -1493,10 +1504,34 @@ export default function CharacterSheet() {
     if (slot.type === "attribute") {
       const statLabel = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
       handleStatRoll(slot.targetId as string, statLabel);
-    } else if (slot.type === "weapon") {
-      const item = equipment.find(e => e.id === Number(slot.targetId));
-      if (item) handleWeaponRoll(item);
-      else toast.error("Weapon no longer equipped or found");
+    } else if (slot.type === "weapon" || slot.type === "item") {
+      const eq = equipment.find(e => e.id === Number(slot.targetId));
+      const invItem = inventory.find(i => i.id === Number(slot.targetId));
+
+      if (eq) {
+        handleWeaponRoll(eq);
+      } else if (invItem) {
+        const linkedAb = abilities.find(a => a.inventoryItemId === invItem.id);
+        if (linkedAb) {
+          handleAbilityRoll(linkedAb);
+        } else {
+          if (invItem.quantity <= 0) {
+            toast.error(`Out of "${invItem.name}"!`);
+            return;
+          }
+          const nextQty = invItem.quantity - 1;
+          if (nextQty <= 0) {
+            deleteInvItem.mutate({ id: invItem.id, charId: id }, {
+              onSuccess: () => toast.success(`Used last of "${invItem.name}". Item consumed!`)
+            });
+          } else {
+            updateInvItem.mutate({ id: invItem.id, data: { quantity: nextQty } });
+            toast.success(`Used 1 of "${invItem.name}". Remaining: ${nextQty}`);
+          }
+        }
+      } else {
+        toast.error("Item no longer found in inventory");
+      }
     } else if (slot.type === "ability") {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
       if (ability) handleAbilityRoll(ability);
@@ -1567,10 +1602,16 @@ export default function CharacterSheet() {
       }
       toast.success(`Navigated to Familiar Action: ${fav.label}`);
       scrollToElement(`fam-ability-card-${fav.targetId}`);
-    } else if (fav.type === "weapon") {
+    } else if (fav.type === "weapon" || fav.type === "item") {
       setActiveTab("inventory");
       toast.success(`Navigated to Inventory: ${fav.label}`);
-      scrollToElement(`equipment-card-${fav.targetId}`);
+      const targetId = Number(fav.targetId);
+      const isEq = equipment.some(e => e.id === targetId);
+      if (isEq) {
+        scrollToElement(`equipment-card-${targetId}`);
+      } else {
+        scrollToElement(`inventory-card-${targetId}`);
+      }
     } else if (fav.type === "skill") {
       setActiveTab("skills");
       const skillId = Number(fav.targetId);
@@ -2965,17 +3006,27 @@ export default function CharacterSheet() {
                   </div>
                 </div>
 
-                {/* Weapons */}
-                {equipment.filter(e => e.equipped).length > 0 && (
+                {/* Items (Gear, Potions & Inventory) */}
+                {(equipment.length > 0 || inventory.length > 0) && (
                   <div>
-                    <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Equipped Weapons / Gear</h4>
+                    <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Items (Gear, Potions & Inventory)</h4>
                     <div className="flex flex-wrap gap-1.5">
-                      {equipment.filter(e => e.equipped).map(eq => (
+                      {/* Equipment (Weapons / Armor / Gear) */}
+                      {equipment.map(eq => (
                         <Button 
-                          key={eq.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
-                          onClick={() => handleAssignFavorite(assigningSlotIndex!, "weapon", eq.id, eq.name)}
+                          key={`eq-${eq.id}`} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
+                          onClick={() => handleAssignFavorite(assigningSlotIndex!, "item", eq.id, eq.name)}
                         >
-                          {eq.name} {eq.diceType ? `(${eq.diceType})` : ""}
+                          {eq.name} {eq.equipped ? "[Equipped]" : ""} {eq.diceType ? `(${eq.diceType})` : ""}
+                        </Button>
+                      ))}
+                      {/* General Inventory Items (Potions / Consumables) */}
+                      {inventory.map(item => (
+                        <Button 
+                          key={`inv-${item.id}`} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                          onClick={() => handleAssignFavorite(assigningSlotIndex!, "item", item.id, item.name)}
+                        >
+                          📦 {item.name} (x{item.quantity})
                         </Button>
                       ))}
                     </div>
@@ -3546,7 +3597,7 @@ export default function CharacterSheet() {
               {inventory && inventory.length > 0 ? (
                 <div className="space-y-2">
                   {inventory.map(item => (
-                    <Card key={item.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all rounded-none">
+                    <Card id={`inventory-card-${item.id}`} key={item.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all rounded-none">
                       <CardContent className="p-3 space-y-2">
                         <div className="flex justify-between items-start">
                           <div>
