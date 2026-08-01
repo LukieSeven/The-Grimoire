@@ -58,6 +58,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const [manaBuff, setManaBuff] = useState<number>(0);
   const [dtAdd, setDtAdd] = useState<number>(0);
   const [dtBuff, setDtBuff] = useState<number>(0);
+  const [bonusInitiative, setBonusInitiative] = useState<number>(0);
 
   const resetForm = () => {
     setName("");
@@ -88,6 +89,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setManaBuff(0);
     setDtAdd(0);
     setDtBuff(0);
+    setBonusInitiative(0);
     setEditingId(null);
   };
 
@@ -126,6 +128,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setManaBuff(ability.manaBuff || 0);
     setDtAdd(ability.dtAdd || 0);
     setDtBuff(ability.dtBuff || 0);
+    setBonusInitiative(ability.bonusInitiative || 0);
     setMode("edit");
   };
 
@@ -172,6 +175,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
       manaBuff,
       dtAdd,
       dtBuff,
+      bonusInitiative,
       level: editingId ? (abilities.find(a => a.id === editingId)?.level || 1) : 1,
       active: editingId ? !!(abilities.find(a => a.id === editingId)?.active) : false,
     };
@@ -343,6 +347,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                   className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">None</option>
+                  <option value="Passive">Passive (Innate)</option>
                   <option value="Attack">Attack</option>
                   <option value="Buff">Buff</option>
                   <option value="Debuff">Debuff</option>
@@ -415,7 +420,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
             </div>
 
             {/* Vitals Modifiers Grid */}
-            <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-3">
+            <div className="grid grid-cols-4 gap-3 border-t border-border/20 pt-3">
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
                 <div className="grid grid-cols-2 gap-1">
@@ -453,6 +458,13 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
                     <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
+                  <Input type="number" value={bonusInitiative} onChange={e => setBonusInitiative(Number(e.target.value))} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
               </div>
             </div>

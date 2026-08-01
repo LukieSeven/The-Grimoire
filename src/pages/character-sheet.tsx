@@ -12,7 +12,7 @@ import {
   Shield, ArrowLeft, Loader2, Trash2, Heart, Dice5,
   RotateCcw, Swords, Sparkles, Plus, Edit2, Upload, Download,
   Coins, Package, Hammer, Layers, Flame, BookText, UserCheck, X,
-  Palette, Clock, ExternalLink, ChevronDown, ChevronRight
+  Palette, Clock, ExternalLink, ChevronDown, ChevronRight, Lock
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -30,7 +30,7 @@ import {
   getGetCharacterQueryKey, getListCharacterRollsQueryKey, getListNotesQueryKey
 } from "@/hooks/useStorage";
 import { 
-  getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, 
+  getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
   Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula 
 } from "@/lib/storage";
 
@@ -176,6 +176,36 @@ function compressImage(file: File, maxW: number, maxH: number): Promise<string> 
   });
 }
 
+const RANKS_ORDER = ["Iron", "Bronze", "Silver", "Gold", "Diamond"];
+
+function getRankStyle(rank?: string): string {
+  const r = (rank || "Iron").trim().toLowerCase();
+  if (r === "bronze") return "bg-amber-950/80 border-amber-700/80 text-amber-400 shadow-[0_0_8px_rgba(217,119,6,0.2)]";
+  if (r === "silver") return "bg-slate-900/80 border-slate-400/80 text-slate-200 shadow-[0_0_8px_rgba(226,232,240,0.2)]";
+  if (r === "gold") return "bg-yellow-950/80 border-yellow-500/80 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.25)]";
+  if (r === "diamond") return "bg-cyan-950/80 border-cyan-400/90 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.3)]";
+  // Default Iron (dull grey)
+  return "bg-stone-900/80 border-stone-600/70 text-stone-300";
+}
+
+function getNextRank(currentRank?: string): string | null {
+  const cur = (currentRank || "Iron").trim();
+  const idx = RANKS_ORDER.findIndex(r => r.toLowerCase() === cur.toLowerCase());
+  if (idx !== -1 && idx < RANKS_ORDER.length - 1) {
+    return RANKS_ORDER[idx + 1];
+  }
+  return null;
+}
+
+function getPassiveCapacity(rank?: string): number {
+  const r = (rank || "Iron").trim().toLowerCase();
+  if (r === "bronze") return 1;
+  if (r === "silver") return 2;
+  if (r === "gold") return 3;
+  if (r === "diamond") return 4;
+  return 0;
+}
+
 export default function CharacterSheet() {
   const params = useParams();
   const id = parseInt(params.id || "0", 10);
@@ -226,6 +256,18 @@ export default function CharacterSheet() {
 
   // Collapsible skill category state
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [expandedEssences, setExpandedEssences] = useState<Record<number, boolean>>({});
+
+  const hasAllFourEssences = [1, 2, 3, 4].every(s => essences.some(e => e.slot === s));
+
+  const handlePromoteRank = () => {
+    const nextRank = getNextRank(character?.rank);
+    if (nextRank && character) {
+      updateChar.mutate({ id, data: { rank: nextRank } }, {
+        onSuccess: () => toast.success(`Hero Rank promoted to ${nextRank}! Stat & skill modifiers updated!`)
+      });
+    }
+  };
 
   // ── Tab State ─────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "essences" | "abilities" | "notes" | "familiar" | "combat">("stats");
@@ -1153,7 +1195,7 @@ export default function CharacterSheet() {
   const handleSkillRoll = (skill: Skill) => {
     const val = Number(skill.value) || 0;
     const train = Number(skill.training) || 0;
-    const modifier = Math.floor(val / 3) + train;
+    const modifier = getModifierForStat(val, character?.rank) + train;
     handleRoll(getDiceLabel(val), `${skill.name} Skill Roll`, val, modifier);
   };
 
@@ -2197,9 +2239,40 @@ export default function CharacterSheet() {
                     <h1 className="text-3xl font-serif text-primary font-bold leading-tight truncate">
                       {character.name}
                     </h1>
-                    <p className="text-xs text-muted-foreground uppercase tracking-widest mt-1">
-                      {character.race} · {character.rank}
-                    </p>
+                    {/* Metallic Rank & Race Badges with Rank Up Control */}
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <Badge variant="outline" className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shadow-sm ${getRankStyle(character.rank)}`}>
+                        {character.rank || "Iron"} Rank
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] font-mono border-border/60 text-muted-foreground bg-background/50 rounded px-2 py-0.5">
+                        {character.race}
+                      </Badge>
+
+                      {hasAllFourEssences ? (
+                        canRankUp(character.rank) ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handlePromoteRank}
+                            className="h-6 text-[9px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 px-2 rounded cursor-pointer font-bold animate-pulse"
+                            title={`Promote Rank to ${getNextRank(character.rank)}`}
+                          >
+                            ▲ Rank Up to {getNextRank(character.rank)}
+                          </Button>
+                        ) : (
+                          <span className="text-[9px] font-mono text-emerald-400/80 font-semibold px-1 py-0.5 border border-emerald-500/20 bg-emerald-950/20 rounded">
+                            ★ Pinnacle Rank
+                          </span>
+                        )
+                      ) : (
+                        <span
+                          className="text-[9px] font-mono text-muted-foreground/60 flex items-center gap-1 px-2 py-0.5 border border-border/30 bg-background/40 rounded cursor-not-allowed"
+                          title="Requires an essence bound in all 4 slots (1st, 2nd, 3rd, and Confluence) to increase Rank."
+                        >
+                          <Lock className="w-2.5 h-2.5 text-stone-500" /> Rank Up Locked (4 Essences Req.)
+                        </span>
+                      )}
+                    </div>
                   {(hasAnyRes || hasAnyImm) && (
                     <div className="flex flex-col gap-2 mt-3 font-sans">
                       {hasAnyRes && (
@@ -2237,9 +2310,10 @@ export default function CharacterSheet() {
                   </div>
                 </div>
 
-                {/* ── Pulsing Red Damage Area ── */}
-                <div className="flex justify-center flex-1 min-w-[155px] z-10">
-                  <div className="flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse overflow-hidden h-8">
+                {/* ── Damage Input Area & Standalone High-Visibility Roll Initiative Button ── */}
+                <div className="flex items-center gap-2 flex-wrap flex-shrink-0 z-10">
+                  {/* Pulsing Red Damage Box */}
+                  <div className="flex items-center border border-red-500/50 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-8">
                     <Input
                       type="number"
                       min="0"
@@ -2258,6 +2332,21 @@ export default function CharacterSheet() {
                       Hit
                     </Button>
                   </div>
+
+                  {/* High Visibility Cyan Roll Initiative Button (Right beside Damage Box) */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
+                    className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-1.5 shadow-[0_0_14px_rgba(34,211,238,0.4)] transition-all flex-shrink-0"
+                    title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
+                  >
+                    <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span>Roll Initiative</span>
+                    <Badge className="bg-cyan-500/20 border border-cyan-400/60 text-cyan-300 font-mono text-[10px] px-1 py-0 rounded h-4 font-bold">
+                      +{adjustedStats.maxInitiative}
+                    </Badge>
+                  </Button>
                 </div>
 
                 {/* Long Rest Confirmation Trigger */}
@@ -2289,9 +2378,27 @@ export default function CharacterSheet() {
                   </Dialog>
                 </div>
 
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
-                  <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
+                {/* Initiative Readout & Speed Header Display */}
+                <div className="flex items-center gap-4 text-right">
+                  <button
+                    onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
+                    className="group flex flex-col items-end cursor-pointer"
+                    title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
+                  >
+                    <div className="text-xs text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 flex items-center gap-1">
+                      <Dice5 className="w-3 h-3 text-cyan-400" /> Initiative
+                    </div>
+                    <div className="text-2xl font-serif text-cyan-300 font-bold group-hover:underline">
+                      +{adjustedStats.maxInitiative}
+                    </div>
+                  </button>
+
+                  <div className="h-8 w-[1px] bg-border/40" />
+
+                  <div>
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
+                    <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
+                  </div>
                 </div>
               </div>
 
@@ -2661,30 +2768,42 @@ export default function CharacterSheet() {
 
                 {/* Stats tab */}
                 {rollTab === "stats" && (
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {STATS.map(stat => {
-                      const value = finalStats[stat.key];
-                      const mod = autoModifiers[stat.key];
-                      const dice = diceLabels[stat.key];
-                      const isRolling = rollingDice === `${stat.label} Roll`;
-                      return (
-                        <button
-                          key={stat.key}
-                          onClick={() => handleStatRoll(stat.key, stat.label)}
-                          disabled={!!rollingDice}
-                          title={`${stat.desc} — ${dice}`}
-                          className={`rounded-none p-1 text-center border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                            isRolling ? "border-primary bg-primary/10 animate-pulse"
-                            : "border-border/40 hover:border-primary/60 hover:bg-primary/5 cursor-pointer"
-                          }`}
-                        >
-                          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">{stat.label}</div>
-                          <div className="text-xl font-serif text-foreground leading-tight">{value}</div>
-                          <div className="text-[10px] font-mono text-primary">+{mod}</div>
-                          <div className="text-[8px] font-mono text-muted-foreground/60">{dice}</div>
-                        </button>
-                      );
-                    })}
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {STATS.map(stat => {
+                        const value = finalStats[stat.key];
+                        const mod = autoModifiers[stat.key];
+                        const dice = diceLabels[stat.key];
+                        const isRolling = rollingDice === `${stat.label} Roll`;
+                        return (
+                          <button
+                            key={stat.key}
+                            onClick={() => handleStatRoll(stat.key, stat.label)}
+                            disabled={!!rollingDice}
+                            title={`${stat.desc} — ${dice}`}
+                            className={`rounded-none p-1 text-center border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                              isRolling ? "border-primary bg-primary/10 animate-pulse"
+                              : "border-border/40 hover:border-primary/60 hover:bg-primary/5 cursor-pointer"
+                            }`}
+                          >
+                            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">{stat.label}</div>
+                            <div className="text-xl font-serif text-foreground leading-tight">{value}</div>
+                            <div className="text-[10px] font-mono text-primary">+{mod}</div>
+                            <div className="text-[8px] font-mono text-muted-foreground/60">{dice}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Quick Roll Initiative button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
+                      className="w-full h-8 border-cyan-500/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400 font-bold font-serif text-xs rounded-none cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_8px_rgba(34,211,238,0.2)]"
+                    >
+                      <Dice5 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                      <span>Roll Initiative (+{adjustedStats.maxInitiative})</span>
+                    </Button>
                   </div>
                 )}
 
@@ -3147,7 +3266,7 @@ export default function CharacterSheet() {
           { key: "stats", label: "Stats & Training", icon: Hammer },
           { key: "skills", label: "Skills", icon: BookText },
           { key: "inventory", label: "Bag / Gear", icon: Coins },
-          { key: "essences", label: "Essence Confluence", icon: Layers },
+          { key: "essences", label: "Essence Imbuement", icon: Layers },
           { key: "abilities", label: "Abilities", icon: Flame },
           { key: "notes", label: "Campaign Notes", icon: BookText },
           { key: "familiar", label: "Familiars", icon: UserCheck },
@@ -3324,7 +3443,7 @@ export default function CharacterSheet() {
 
                                     <div className="flex items-baseline gap-1 py-0.5">
                                       <span className="text-2xl font-serif text-foreground font-bold">{skill.value}</span>
-                                      <span className="text-[10px] font-mono text-primary font-bold">+{Math.floor(skill.value / 3)}</span>
+                                      <span className="text-[10px] font-mono text-primary font-bold">+{getModifierForStat(skill.value, character?.rank)}</span>
                                     </div>
 
                                     {/* Skill training */}
@@ -3741,14 +3860,14 @@ export default function CharacterSheet() {
         </div>
         )}
 
-        {/* TAB 4: ESSENCE CONFLUENCE */}
+        {/* TAB 4: ESSENCE IMBUEMENT */}
         {activeTab === "essences" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
                 <Layers className="w-5 h-5 text-primary" />
                 <div>
-                  <h3 className="font-serif text-lg font-bold text-primary">Essence Confluence</h3>
+                  <h3 className="font-serif text-lg font-bold text-primary">Essence Imbuement</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">Bind and align essence crystals to unlock attributes</p>
                 </div>
               </div>
@@ -3758,6 +3877,7 @@ export default function CharacterSheet() {
               {[1, 2, 3, 4].map(slot => {
                 const essence = essences.find(e => e.slot === slot);
                 const label = slot === 1 ? "First Essence" : slot === 2 ? "Second Essence" : slot === 3 ? "Third Essence" : "Confluence";
+                const isExpanded = essence ? !!expandedEssences[essence.id] : false;
                 
                 return (
                   <Card key={slot} className={`bg-card border-border/50 relative overflow-hidden flex flex-col justify-between rounded-none ${
@@ -3773,16 +3893,25 @@ export default function CharacterSheet() {
                           {label}
                         </span>
                         {essence && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={() => deleteEssence.mutate({ id: essence.id, charId: id })}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={(e) => { e.stopPropagation(); deleteEssence.mutate({ id: essence.id, charId: id }); }}>
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         )}
                       </div>
 
                       {essence ? (
-                        <div className="space-y-1">
-                          <h4 className={`font-serif text-lg font-bold ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
-                          <p className="text-xs text-muted-foreground/80 font-serif leading-relaxed line-clamp-3">{essence.description}</p>
+                        <div 
+                          className="space-y-1.5 cursor-pointer select-none"
+                          onClick={() => setExpandedEssences(prev => ({ ...prev, [essence.id]: !isExpanded }))}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <h4 className={`font-serif text-lg font-bold leading-tight ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
+                            <ChevronDown className={`w-4 h-4 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                          </div>
+                          <div 
+                            className={`text-xs text-muted-foreground/80 font-serif leading-relaxed ${isExpanded ? "whitespace-pre-wrap animate-in slide-in-from-top-1 duration-150" : "line-clamp-3"}`}
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(essence.description || "*No description.*") }}
+                          />
                         </div>
                       ) : slot === 4 ? (
                         <div className="py-4 text-center">
@@ -3869,6 +3998,7 @@ export default function CharacterSheet() {
                 if (ability.manaBuff) bonuses.push(`+${ability.manaBuff} Max Mana`);
                 if (ability.dtAdd) bonuses.push(`+${ability.dtAdd} DT Shield`);
                 if (ability.dtBuff) bonuses.push(`+${ability.dtBuff} Max DT`);
+                if (ability.bonusInitiative) bonuses.push(`+${ability.bonusInitiative} Initiative`);
                 if (ability.resistances) bonuses.push(`Resistances: ${ability.resistances}`);
                 if (ability.immunities) bonuses.push(`Immunities: ${ability.immunities}`);
 
@@ -4022,7 +4152,11 @@ export default function CharacterSheet() {
                 return { slotNum, ess, label, abilities: attachedAbilities };
               });
 
-              const unassignedAbilities = sortAbilities(abilities?.filter(a => (!a.essenceId || !essences?.some(e => e.id === a.essenceId)) && !a.equipmentId) || []);
+              // Innate Passives
+              const passiveAbilities = sortAbilities(abilities?.filter(a => (a.type === "Passive" || (!a.essenceId && a.type?.toLowerCase().includes("passive"))) && !a.equipmentId) || []);
+
+              // Unassigned Abilities (excluding Passives)
+              const unassignedAbilities = sortAbilities(abilities?.filter(a => (!a.essenceId || !essences?.some(e => e.id === a.essenceId)) && !a.equipmentId && a.type !== "Passive" && !a.type?.toLowerCase().includes("passive")) || []);
 
               return (
                 <div className="space-y-6">
@@ -4050,6 +4184,47 @@ export default function CharacterSheet() {
                       </div>
                     );
                   })}
+
+                  {/* Innate Passive Tree Group */}
+                  {hasAllFourEssences ? (
+                    <div className="space-y-3 border-l-2 border-amber-500/40 pl-4 py-1">
+                      <div className="flex justify-between items-baseline border-b border-amber-500/20 pb-1.5 flex-wrap gap-2">
+                        <h4 className="font-serif text-lg font-bold text-amber-400 flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+                          <span>Innate Passive Tree</span>
+                        </h4>
+                        <span className="text-[10px] font-mono text-muted-foreground font-semibold">
+                          Passive Slots: {passiveAbilities.length} / {getPassiveCapacity(character.rank)} ({character.rank || "Iron"} Rank)
+                        </span>
+                      </div>
+
+                      {passiveAbilities.length > 0 ? (
+                        renderAbilityGrid(passiveAbilities)
+                      ) : (
+                        <p className="text-xs text-muted-foreground/60 italic font-serif py-2">
+                          No innate passives registered. (Max {getPassiveCapacity(character.rank)} for {character.rank || "Iron"} Rank)
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 border-l-2 border-stone-700/40 pl-4 py-2 bg-background/20 opacity-75">
+                      <div className="flex justify-between items-baseline border-b border-border/20 pb-1.5">
+                        <h4 className="font-serif text-lg font-bold text-stone-400 flex items-center gap-2">
+                          <Lock className="w-4 h-4 text-stone-500" />
+                          <span>Innate Passive Tree</span>
+                          <Badge variant="outline" className="text-[9px] font-mono border-stone-600/40 text-stone-400 bg-stone-900/40">Locked</Badge>
+                        </h4>
+                      </div>
+                      <div className="p-4 border border-dashed border-stone-700/50 bg-stone-950/30 text-center space-y-1">
+                        <p className="text-xs font-serif text-stone-400 font-semibold">
+                          🔒 Requires an Essence crystal attuned to all 4 slots (1st, 2nd, 3rd, and Confluence) to unlock the Innate Passive Tree.
+                        </p>
+                        <p className="text-[10px] text-muted-foreground font-mono">
+                          Attune all 4 essence slots in the Essence Imbuement tab to awaken passive potential.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Unassigned Group */}
                   {unassignedAbilities.length > 0 && (

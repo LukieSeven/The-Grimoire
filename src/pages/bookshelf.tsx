@@ -616,7 +616,7 @@ export default function Bookshelf() {
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 63
+              Crafted by Lukie Seven · Mark 64
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -643,7 +643,7 @@ export default function Bookshelf() {
                     {currentBook.id === "grimoire" 
                       ? "Consult the codices of active heroes. Track character stats, customize attributes, manage spell inventories, calculate Crit Chains, and roll active campaign D20 checks." 
                       : currentBook.id === "codex"
-                      ? "Chronicle the world map of Cormant. Filter taxonomy directories for cities, settlements, dungeons, monster bestiaries, and push lore items directly to character logs."
+                      ? "Chronicle the world map of Cormant. Filter taxonomy directories for cities, settlements, dungeons, monster bestiaries, and push lore items directly to character lore logs."
                       : "The Dungeon Master's guide to Cormant. Run game sessions using rules directories, combat trackers, NPC/loot generators, sound mixers, and workspace boards."
                     }
                   </p>
@@ -661,7 +661,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 63
+          Lovingly crafted by LukieSeven — Mark 64
         </p>
       </footer>
     </div>

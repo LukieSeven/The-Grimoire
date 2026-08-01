@@ -97,6 +97,7 @@ export interface Character {
   hpFormula: string;
   manaFormula: string;
   dtFormula: string;
+  initiativeFormula?: string;
   // Stat training values
   powerTraining: number;
   vitalityTraining: number;
@@ -123,6 +124,7 @@ export interface Equipment {
   equipped: boolean;
   assignedToQuickRolls: boolean;
   dtBonus: number;
+  bonusInitiative?: number;
   statModifiers: Record<string, number>;
   diceType?: string;
   modifier?: string | number;
@@ -179,6 +181,7 @@ export interface Ability {
   manaBuff?: number;
   dtAdd?: number;
   dtBuff?: number;
+  bonusInitiative?: number;
   essenceId?: number | null;
   resistances?: string;
   immunities?: string;
@@ -368,6 +371,16 @@ const KEYS = {
 
 // ── Computed Character Helper ─────────────────────────────
 
+export function getModifierForStat(val: number, rank: string = "Iron"): number {
+  const r = (rank || "Iron").trim().toLowerCase();
+  if (r === "bronze") return Math.floor(val / 2);
+  if (r === "silver") return val;
+  if (r === "gold") return val * 2;
+  if (r === "diamond") return val * 3;
+  // Default to Iron (3:1 ratio)
+  return Math.floor(val / 3);
+}
+
 export function getAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[] = []): {
   stats: Record<string, number>;
   modifiers: Record<string, number>;
@@ -375,9 +388,11 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   maxHp: number;
   maxMana: number;
   maxDt: number;
+  maxInitiative: number;
   abilityHpBonus: number;
   abilityManaBonus: number;
   abilityDtBonus: number;
+  abilityInitiativeBonus: number;
 } {
   // Sum equipped modifiers
   const equippedList = equipment.filter(e => e.characterId === char.id && e.equipped);
@@ -418,10 +433,10 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     if (ability.bonusCharisma) stats.charisma += ability.bonusCharisma;
   }
 
-  // Calculate auto-modifiers floor(Stat / 3)
+  // Calculate auto-modifiers scaling with Rank (Iron 3:1, Bronze 2:1, Silver 1:1, Gold 1:2, Diamond 1:3)
   const modifiers: Record<string, number> = {};
   for (const [stat, val] of Object.entries(stats)) {
-    modifiers[stat] = Math.floor(val / 3);
+    modifiers[stat] = getModifierForStat(val, char.rank);
   }
 
   // Calculate dice labels
@@ -454,14 +469,18 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     dtbonus: char.dtBonus + armorDtBonus,
   };
 
-  // Sum active ability resource bonuses
+  // Sum active ability & item resource bonuses
   const abilityHpBonus = activeAbilities.reduce((sum, ab) => sum + (ab.hpBuff || 0), 0);
   const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + (ab.manaBuff || 0), 0);
   const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + (ab.dtBuff || 0), 0);
+  const abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + (ab.bonusInitiative || 0), 0);
+  const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + (eq.bonusInitiative || 0), 0);
 
   const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
   const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
   const maxDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
+  const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
+  const maxInitiative = rawInitiative + abilityInitiativeBonus + equipmentInitiativeBonus;
 
   return {
     stats,
@@ -470,9 +489,11 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     maxHp: Math.max(1, maxHp),
     maxMana: Math.max(0, maxMana),
     maxDt: Math.max(0, maxDt),
+    maxInitiative,
     abilityHpBonus,
     abilityManaBonus,
     abilityDtBonus,
+    abilityInitiativeBonus: abilityInitiativeBonus + equipmentInitiativeBonus,
   };
 }
 
