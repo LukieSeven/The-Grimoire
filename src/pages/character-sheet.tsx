@@ -4108,11 +4108,14 @@ export default function CharacterSheet() {
                 return { slotNum, ess, label, abilities: attachedAbilities };
               });
 
-              // Innate Passives
-              const passiveAbilities = sortAbilities(abilities?.filter(a => (a.type === "Passive" || (!a.essenceId && a.type?.toLowerCase().includes("passive"))) && !a.equipmentId) || []);
+              // Innate Passives (selected via Essence Source: Innate Passive)
+              const isPassiveAbility = (a: Ability) => !!(a.isInnatePassive || a.essenceId === -1 || a.type === "Innate Passive");
+              const passiveAbilities = sortAbilities(abilities?.filter(a => isPassiveAbility(a) && !a.equipmentId) || []);
 
-              // Unassigned Abilities (excluding Passives)
-              const unassignedAbilities = sortAbilities(abilities?.filter(a => (!a.essenceId || !essences?.some(e => e.id === a.essenceId)) && !a.equipmentId && a.type !== "Passive" && !a.type?.toLowerCase().includes("passive")) || []);
+              // Unassigned Abilities (excluding Innate Passives)
+              const unassignedAbilities = sortAbilities(abilities?.filter(a => (!a.essenceId || !essences?.some(e => e.id === a.essenceId)) && !isPassiveAbility(a) && !a.equipmentId) || []);
+
+              const passiveCapacity = getPassiveCapacity(character.rank);
 
               return (
                 <div className="space-y-6">
@@ -4141,8 +4144,8 @@ export default function CharacterSheet() {
                     );
                   })}
 
-                  {/* Innate Passive Tree Group */}
-                  {hasAllFourEssences ? (
+                  {/* Innate Passive Tree Group (Unlocked starting at Bronze Rank) */}
+                  {passiveCapacity > 0 && (
                     <div className="space-y-3 border-l-2 border-amber-500/40 pl-4 py-1">
                       <div className="flex justify-between items-baseline border-b border-amber-500/20 pb-1.5 flex-wrap gap-2">
                         <h4 className="font-serif text-lg font-bold text-amber-400 flex items-center gap-2">
@@ -4150,7 +4153,7 @@ export default function CharacterSheet() {
                           <span>Innate Passive Tree</span>
                         </h4>
                         <span className="text-[10px] font-mono text-muted-foreground font-semibold">
-                          Passive Slots: {passiveAbilities.length} / {getPassiveCapacity(character.rank)} ({character.rank || "Iron"} Rank)
+                          Passive Slots: {passiveAbilities.length} / {passiveCapacity} ({character.rank || "Iron"} Rank)
                         </span>
                       </div>
 
@@ -4158,27 +4161,9 @@ export default function CharacterSheet() {
                         renderAbilityGrid(passiveAbilities)
                       ) : (
                         <p className="text-xs text-muted-foreground/60 italic font-serif py-2">
-                          No innate passives registered. (Max {getPassiveCapacity(character.rank)} for {character.rank || "Iron"} Rank)
+                          No innate passives registered. (Max {passiveCapacity} for {character.rank || "Iron"} Rank)
                         </p>
                       )}
-                    </div>
-                  ) : (
-                    <div className="space-y-3 border-l-2 border-stone-700/40 pl-4 py-2 bg-background/20 opacity-75">
-                      <div className="flex justify-between items-baseline border-b border-border/20 pb-1.5">
-                        <h4 className="font-serif text-lg font-bold text-stone-400 flex items-center gap-2">
-                          <Lock className="w-4 h-4 text-stone-500" />
-                          <span>Innate Passive Tree</span>
-                          <Badge variant="outline" className="text-[9px] font-mono border-stone-600/40 text-stone-400 bg-stone-900/40">Locked</Badge>
-                        </h4>
-                      </div>
-                      <div className="p-4 border border-dashed border-stone-700/50 bg-stone-950/30 text-center space-y-1">
-                        <p className="text-xs font-serif text-stone-400 font-semibold">
-                          🔒 Requires an Essence crystal attuned to all 4 slots (1st, 2nd, 3rd, and Confluence) to unlock the Innate Passive Tree.
-                        </p>
-                        <p className="text-[10px] text-muted-foreground font-mono">
-                          Attune all 4 essence slots in the Essence Imbuement tab to awaken passive potential.
-                        </p>
-                      </div>
                     </div>
                   )}
 

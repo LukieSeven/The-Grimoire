@@ -40,6 +40,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const [linkedStats, setLinkedStats] = useState<string[]>([]);
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
   const [essenceId, setEssenceId] = useState<number | null>(null);
+  const [isInnatePassive, setIsInnatePassive] = useState<boolean>(false);
   const [resistances, setResistances] = useState("");
   const [immunities, setImmunities] = useState("");
 
@@ -73,6 +74,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
     setEssenceId(null);
+    setIsInnatePassive(false);
     setResistances("");
     setImmunities("");
     setBonusPower(0);
@@ -111,7 +113,9 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setType(ability.type || "");
     setLinkedStats(ability.linkedStats || (ability.linkedStat ? [ability.linkedStat] : []));
     setAssignedToQuickRolls(ability.assignedToQuickRolls);
-    setEssenceId(ability.essenceId || null);
+    const isIp = !!(ability.isInnatePassive || ability.essenceId === -1 || ability.type === "Innate Passive");
+    setIsInnatePassive(isIp);
+    setEssenceId(isIp ? null : (ability.essenceId || null));
     setResistances(ability.resistances || "");
     setImmunities(ability.immunities || "");
     setBonusPower(ability.bonusPower || 0);
@@ -137,7 +141,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     if (!name.trim()) return;
 
     // Validate 5-ability cap per Essence
-    if (essenceId !== null) {
+    if (essenceId !== null && !isInnatePassive) {
       const activeEssenceAbilities = abilities?.filter(a => a.essenceId === essenceId && a.id !== editingId) || [];
       if (activeEssenceAbilities.length >= 5) {
         toast.error("This Essence already has the maximum of 5 shaped abilities. Reassign or delete one first.");
@@ -158,7 +162,8 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
       type,
       linkedStats,
       assignedToQuickRolls,
-      essenceId,
+      essenceId: isInnatePassive ? null : essenceId,
+      isInnatePassive,
       resistances,
       immunities,
       bonusPower,
@@ -280,11 +285,24 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Essence Source</label>
                 <select 
-                  value={essenceId === null ? "" : essenceId} 
-                  onChange={e => setEssenceId(e.target.value === "" ? null : Number(e.target.value))} 
+                  value={isInnatePassive ? "innate" : (essenceId === null ? "" : String(essenceId))} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (val === "innate") {
+                      setIsInnatePassive(true);
+                      setEssenceId(null);
+                    } else if (val === "") {
+                      setIsInnatePassive(false);
+                      setEssenceId(null);
+                    } else {
+                      setIsInnatePassive(false);
+                      setEssenceId(Number(val));
+                    }
+                  }} 
                   className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">None (Unassigned)</option>
+                  <option value="innate">✨ Innate Passive</option>
                   {essences?.map(ess => (
                     <option key={ess.id} value={ess.id}>
                       Slot {ess.slot}: {ess.name || "Unnamed Essence"}
@@ -347,13 +365,15 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                   className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                 >
                   <option value="">None</option>
-                  <option value="Passive">Passive (Innate)</option>
+                  <option value="Passive">Passive</option>
                   <option value="Attack">Attack</option>
                   <option value="Buff">Buff</option>
                   <option value="Debuff">Debuff</option>
                   <option value="Defense">Defense</option>
                   <option value="Movement">Movement</option>
                   <option value="Utility">Utility</option>
+                  <option value="Stance">Stance</option>
+                  <option value="Reaction">Reaction</option>
                 </select>
               </div>
             </div>

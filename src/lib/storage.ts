@@ -183,6 +183,7 @@ export interface Ability {
   dtBuff?: number;
   bonusInitiative?: number;
   essenceId?: number | null;
+  isInnatePassive?: boolean;
   resistances?: string;
   immunities?: string;
   equipmentId?: number | null;
