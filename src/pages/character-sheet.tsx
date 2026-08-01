@@ -2760,16 +2760,6 @@ export default function CharacterSheet() {
                         );
                       })}
                     </div>
-                    {/* Quick Roll Initiative button */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
-                      className="w-full h-8 border-cyan-500/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 hover:border-cyan-400 font-bold font-serif text-xs rounded-none cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_8px_rgba(34,211,238,0.2)]"
-                    >
-                      <Dice5 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                      <span>Roll Initiative (+{adjustedStats.maxInitiative})</span>
-                    </Button>
                   </div>
                 )}
 
