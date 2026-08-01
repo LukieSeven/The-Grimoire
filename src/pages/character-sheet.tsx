@@ -2203,6 +2203,7 @@ export default function CharacterSheet() {
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10" />
             
             <CardContent className="p-5 space-y-5">
+              {/* Profile HUD Header */}
               <div className="space-y-4 border-b border-border/30 pb-4">
                 {/* Top Row: Hero Identity & Initiative / Speed Readout */}
                 <div className="flex justify-between items-center flex-wrap gap-4">
@@ -2375,11 +2376,11 @@ export default function CharacterSheet() {
                       +{adjustedStats.maxInitiative}
                     </Badge>
                   </Button>
-                {/* Long Rest Confirmation Trigger */}
-                <div className="flex items-center gap-3">
+
+                  {/* Long Rest Confirmation Trigger */}
                   <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-8 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
+                      <Button variant="outline" size="sm" className="h-9 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs ml-auto">
                         Long Rest
                       </Button>
                     </DialogTrigger>
@@ -2402,29 +2403,6 @@ export default function CharacterSheet() {
                       </div>
                     </DialogContent>
                   </Dialog>
-                </div>
-
-                {/* Initiative Readout & Speed Header Display */}
-                <div className="flex items-center gap-4 text-right">
-                  <button
-                    onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
-                    className="group flex flex-col items-end cursor-pointer"
-                    title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
-                  >
-                    <div className="text-xs text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 flex items-center gap-1">
-                      <Dice5 className="w-3 h-3 text-cyan-400" /> Initiative
-                    </div>
-                    <div className="text-2xl font-serif text-cyan-300 font-bold group-hover:underline">
-                      +{adjustedStats.maxInitiative}
-                    </div>
-                  </button>
-
-                  <div className="h-8 w-[1px] bg-border/40" />
-
-                  <div>
-                    <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
-                    <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
-                  </div>
                 </div>
               </div>
 
