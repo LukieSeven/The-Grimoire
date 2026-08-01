@@ -562,6 +562,7 @@ export default function CharacterSheet() {
   if (!character) return <div className="p-8 text-center text-muted-foreground">Character not found</div>;
 
   // ── Recalculate adjusted stats from equipment ─────────────
+  const adjustedStats = getAdjustedStats(character, equipment, abilities);
   const { 
     stats: finalStats, 
     modifiers: autoModifiers, 
@@ -572,7 +573,7 @@ export default function CharacterSheet() {
     abilityHpBonus, 
     abilityManaBonus, 
     abilityDtBonus 
-  } = getAdjustedStats(character, equipment, abilities);
+  } = adjustedStats;
 
   // Compute base maximums (without active ability bonuses) to identify temporary boosts
   const baseMaxes = getAdjustedStats(character, equipment, []);
