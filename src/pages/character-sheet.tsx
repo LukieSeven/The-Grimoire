@@ -2203,117 +2203,145 @@ export default function CharacterSheet() {
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10" />
             
             <CardContent className="p-5 space-y-5">
-              {/* Profile HUD Row */}
-              <div className="flex justify-between items-center flex-wrap gap-4 border-b border-border/30 pb-3">
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                  {/* Portrait Avatar File Upload */}
-                  <div className="relative group w-16 h-16 rounded-full overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
-                    {character.avatar ? (
-                      <img src={character.avatar} alt={character.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-muted-foreground text-sm font-bold uppercase">{character.name.substring(0, 2)}</span>
-                    )}
-                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold cursor-pointer">
-                      Change
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        className="hidden" 
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const dataUrl = await compressImage(file, 200, 200);
-                              updateChar.mutate({ id, data: { avatar: dataUrl } }, {
-                                onSuccess: () => toast.success("Character portrait updated!")
-                              });
-                            } catch (err) {
-                              toast.error("Failed to upload/compress image.");
-                            }
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="text-3xl font-serif text-primary font-bold leading-tight truncate">
-                      {character.name}
-                    </h1>
-                    {/* Metallic Rank & Race Badges with Rank Up Control */}
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <Badge variant="outline" className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shadow-sm ${getRankStyle(character.rank)}`}>
-                        {character.rank || "Iron"} Rank
-                      </Badge>
-                      <Badge variant="outline" className="text-[10px] font-mono border-border/60 text-muted-foreground bg-background/50 rounded px-2 py-0.5">
-                        {character.race}
-                      </Badge>
-
-                      {hasAllFourEssences ? (
-                        canRankUp(character.rank) ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={handlePromoteRank}
-                            className="h-6 text-[9px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 px-2 rounded cursor-pointer font-bold animate-pulse"
-                            title={`Promote Rank to ${getNextRank(character.rank)}`}
-                          >
-                            ▲ Rank Up to {getNextRank(character.rank)}
-                          </Button>
-                        ) : (
-                          <span className="text-[9px] font-mono text-emerald-400/80 font-semibold px-1 py-0.5 border border-emerald-500/20 bg-emerald-950/20 rounded">
-                            ★ Pinnacle Rank
-                          </span>
-                        )
+              <div className="space-y-4 border-b border-border/30 pb-4">
+                {/* Top Row: Hero Identity & Initiative / Speed Readout */}
+                <div className="flex justify-between items-center flex-wrap gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    {/* Portrait Avatar File Upload */}
+                    <div className="relative group w-16 h-16 rounded-full overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
+                      {character.avatar ? (
+                        <img src={character.avatar} alt={character.name} className="w-full h-full object-cover" />
                       ) : (
-                        <span
-                          className="text-[9px] font-mono text-muted-foreground/60 flex items-center gap-1 px-2 py-0.5 border border-border/30 bg-background/40 rounded cursor-not-allowed"
-                          title="Requires an essence bound in all 4 slots (1st, 2nd, 3rd, and Confluence) to increase Rank."
-                        >
-                          <Lock className="w-2.5 h-2.5 text-stone-500" /> Rank Up Locked (4 Essences Req.)
-                        </span>
+                        <span className="text-muted-foreground text-sm font-bold uppercase">{character.name.substring(0, 2)}</span>
                       )}
+                      <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-[10px] text-white font-bold cursor-pointer">
+                        Change
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const dataUrl = await compressImage(file, 200, 200);
+                                updateChar.mutate({ id, data: { avatar: dataUrl } }, {
+                                  onSuccess: () => toast.success("Character portrait updated!")
+                                });
+                              } catch (err) {
+                                toast.error("Failed to upload/compress image.");
+                              }
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
-                  {(hasAnyRes || hasAnyImm) && (
-                    <div className="flex flex-col gap-2 mt-3 font-sans">
-                      {hasAnyRes && (
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Resistances:</strong>
-                          {baseResistances.map((res, idx) => (
-                            <Badge key={`base-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
-                              {res}
-                            </Badge>
-                          ))}
-                          {tempResistances.map((res, idx) => (
-                            <Badge key={`temp-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-cyan-500/40 text-cyan-400 bg-cyan-950/20 shadow-[0_0_8px_rgba(34,211,238,0.35)] animate-pulse h-5 px-2">
-                              {res}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      {hasAnyImm && (
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Immunities:</strong>
-                          {baseImmunities.map((imm, idx) => (
-                            <Badge key={`base-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
-                              {imm}
-                            </Badge>
-                          ))}
-                          {tempImmunities.map((imm, idx) => (
-                            <Badge key={`temp-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-emerald-500/40 text-emerald-400 bg-emerald-950/20 shadow-[0_0_8px_rgba(52,211,153,0.35)] animate-pulse h-5 px-2">
-                              {imm}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+
+                    <div className="min-w-0">
+                      <h1 className="text-3xl font-serif text-primary font-bold leading-tight truncate">
+                        {character.name}
+                      </h1>
+                      {/* Metallic Rank & Race Badges with Rank Up Control */}
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <Badge variant="outline" className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shadow-sm ${getRankStyle(character.rank)}`}>
+                          {character.rank || "Iron"} Rank
+                        </Badge>
+                        <Badge variant="outline" className="text-[10px] font-mono border-border/60 text-muted-foreground bg-background/50 rounded px-2 py-0.5">
+                          {character.race}
+                        </Badge>
+
+                        {hasAllFourEssences ? (
+                          canRankUp(character.rank) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={handlePromoteRank}
+                              className="h-6 text-[9px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 px-2 rounded cursor-pointer font-bold animate-pulse"
+                              title={`Promote Rank to ${getNextRank(character.rank)}`}
+                            >
+                              ▲ Rank Up to {getNextRank(character.rank)}
+                            </Button>
+                          ) : (
+                            <span className="text-[9px] font-mono text-emerald-400/80 font-semibold px-1 py-0.5 border border-emerald-500/20 bg-emerald-950/20 rounded">
+                              ★ Pinnacle Rank
+                            </span>
+                          )
+                        ) : (
+                          <span
+                            className="text-[9px] font-mono text-muted-foreground/60 flex items-center gap-1 px-2 py-0.5 border border-border/30 bg-background/40 rounded cursor-not-allowed"
+                            title="Requires an essence bound in all 4 slots (1st, 2nd, 3rd, and Confluence) to increase Rank."
+                          >
+                            <Lock className="w-2.5 h-2.5 text-stone-500" /> Rank Up Locked (4 Essences Req.)
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
+
+                  {/* Initiative & Speed Header Display */}
+                  <div className="flex items-center gap-4 text-right">
+                    <button
+                      onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
+                      className="group flex flex-col items-end cursor-pointer"
+                      title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
+                    >
+                      <div className="text-xs text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 flex items-center gap-1">
+                        <Dice5 className="w-3.5 h-3.5 text-cyan-400" /> Initiative
+                      </div>
+                      <div className="text-2xl font-serif text-cyan-300 font-bold group-hover:underline">
+                        +{adjustedStats.maxInitiative}
+                      </div>
+                    </button>
+
+                    <div className="h-8 w-[1px] bg-border/40" />
+
+                    <div>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
+                      <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Damage Input Area & Standalone High-Visibility Roll Initiative Button ── */}
-                <div className="flex items-center gap-2 flex-wrap flex-shrink-0 z-10">
+                {/* Resistances & Immunities */}
+                {(hasAnyRes || hasAnyImm) && (
+                  <div className="flex flex-col gap-2 font-sans pt-1">
+                    {hasAnyRes && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Resistances:</strong>
+                        {baseResistances.map((res, idx) => (
+                          <Badge key={`base-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
+                            {res}
+                          </Badge>
+                        ))}
+                        {tempResistances.map((res, idx) => (
+                          <Badge key={`temp-res-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-cyan-500/40 text-cyan-400 bg-cyan-950/20 shadow-[0_0_8px_rgba(34,211,238,0.35)] animate-pulse h-5 px-2">
+                            {res}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {hasAnyImm && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <strong className="text-[10px] font-bold text-foreground uppercase tracking-wider select-none mr-1">Immunities:</strong>
+                        {baseImmunities.map((imm, idx) => (
+                          <Badge key={`base-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-semibold border-border/60 text-muted-foreground bg-background/50 h-5 px-2">
+                            {imm}
+                          </Badge>
+                        ))}
+                        {tempImmunities.map((imm, idx) => (
+                          <Badge key={`temp-imm-${idx}`} variant="outline" className="text-[9px] uppercase tracking-wider rounded-none font-bold border-emerald-500/40 text-emerald-400 bg-emerald-950/20 shadow-[0_0_8px_rgba(52,211,153,0.35)] animate-pulse h-5 px-2">
+                            {imm}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Dedicated Action Bar: Damage Input Box + Standalone Roll Initiative Button + Long Rest */}
+                <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-border/20">
                   {/* Pulsing Red Damage Box */}
-                  <div className="flex items-center border border-red-500/50 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-8">
+                  <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-9">
                     <Input
                       type="number"
                       min="0"
@@ -2325,7 +2353,7 @@ export default function CharacterSheet() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      className="h-full px-3 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
+                      className="h-full px-4 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
                       onClick={handleApplyDamage}
                       disabled={!damageAmount || applyDamageMut.isPending}
                     >
@@ -2333,22 +2361,20 @@ export default function CharacterSheet() {
                     </Button>
                   </div>
 
-                  {/* High Visibility Cyan Roll Initiative Button (Right beside Damage Box) */}
+                  {/* Standalone Highly Prominent Cyan Roll Initiative Button */}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
-                    className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-1.5 shadow-[0_0_14px_rgba(34,211,238,0.4)] transition-all flex-shrink-0"
+                    className="h-9 px-4 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
                     title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
                   >
                     <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
                     <span>Roll Initiative</span>
-                    <Badge className="bg-cyan-500/20 border border-cyan-400/60 text-cyan-300 font-mono text-[10px] px-1 py-0 rounded h-4 font-bold">
+                    <Badge className="bg-cyan-500/30 border border-cyan-400 text-cyan-200 font-mono text-xs px-1.5 py-0.5 rounded font-bold">
                       +{adjustedStats.maxInitiative}
                     </Badge>
                   </Button>
-                </div>
-
                 {/* Long Rest Confirmation Trigger */}
                 <div className="flex items-center gap-3">
                   <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
