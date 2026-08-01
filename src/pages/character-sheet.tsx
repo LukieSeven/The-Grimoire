@@ -188,6 +188,12 @@ function getRankStyle(rank?: string): string {
   return "bg-stone-900/80 border-stone-600/70 text-stone-300";
 }
 
+function canRankUp(currentRank?: string): boolean {
+  const cur = (currentRank || "Iron").trim();
+  const idx = RANKS_ORDER.findIndex(r => r.toLowerCase() === cur.toLowerCase());
+  return idx !== -1 && idx < RANKS_ORDER.length - 1;
+}
+
 function getNextRank(currentRank?: string): string | null {
   const cur = (currentRank || "Iron").trim();
   const idx = RANKS_ORDER.findIndex(r => r.toLowerCase() === cur.toLowerCase());

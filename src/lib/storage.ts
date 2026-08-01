@@ -450,23 +450,23 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
 
   // Compute derived maximums using variables
   const variables: Record<string, number> = {
-    power: stats.power,
-    pow: stats.power,
-    vitality: stats.vitality,
-    vit: stats.vitality,
-    spirit: stats.spirit,
-    spi: stats.spirit,
-    agility: stats.agility,
-    agi: stats.agility,
-    endurance: stats.endurance,
-    end: stats.endurance,
-    precision: stats.precision,
-    pre: stats.precision,
-    willpower: stats.willpower,
-    wil: stats.willpower,
-    charisma: stats.charisma,
-    cha: stats.charisma,
-    dtbonus: char.dtBonus + armorDtBonus,
+    power: stats.power || 0,
+    pow: stats.power || 0,
+    vitality: stats.vitality || 0,
+    vit: stats.vitality || 0,
+    spirit: stats.spirit || 0,
+    spi: stats.spirit || 0,
+    agility: stats.agility || 0,
+    agi: stats.agility || 0,
+    endurance: stats.endurance || 0,
+    end: stats.endurance || 0,
+    precision: stats.precision || 0,
+    pre: stats.precision || 0,
+    willpower: stats.willpower || 0,
+    wil: stats.willpower || 0,
+    charisma: stats.charisma || 0,
+    cha: stats.charisma || 0,
+    dtbonus: (char.dtBonus || 0) + armorDtBonus,
   };
 
   // Sum active ability & item resource bonuses
@@ -480,16 +480,16 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
   const maxDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
-  const maxInitiative = rawInitiative + abilityInitiativeBonus + equipmentInitiativeBonus;
+  const maxInitiative = (rawInitiative || 0) + (abilityInitiativeBonus || 0) + (equipmentInitiativeBonus || 0);
 
   return {
     stats,
     modifiers,
     diceLabels,
-    maxHp: Math.max(1, maxHp),
-    maxMana: Math.max(0, maxMana),
-    maxDt: Math.max(0, maxDt),
-    maxInitiative,
+    maxHp: Math.max(1, maxHp || 1),
+    maxMana: Math.max(0, maxMana || 0),
+    maxDt: Math.max(0, maxDt || 0),
+    maxInitiative: isNaN(maxInitiative) ? 0 : maxInitiative,
     abilityHpBonus,
     abilityManaBonus,
     abilityDtBonus,
