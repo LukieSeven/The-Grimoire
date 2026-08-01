@@ -2212,10 +2212,10 @@ export default function CharacterSheet() {
             <CardContent className="p-5 space-y-5">
               {/* Profile HUD Header */}
               <div className="space-y-4 border-b border-border/30 pb-4">
-                {/* Top Row: Hero Identity & Initiative / Speed Readout */}
+                {/* Single Row Layout: Identity (Left) | Controls (Center) | Speed (Right) */}
                 <div className="flex justify-between items-center flex-wrap gap-4">
+                  {/* Left: Portrait, Name, Rank & Race Badges */}
                   <div className="flex items-center gap-4 min-w-0">
-                    {/* Portrait Avatar File Upload */}
                     <div className="relative group w-16 h-16 rounded-full overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
                       {character.avatar ? (
                         <img src={character.avatar} alt={character.name} className="w-full h-full object-cover" />
@@ -2249,7 +2249,7 @@ export default function CharacterSheet() {
                       <h1 className="text-3xl font-serif text-primary font-bold leading-tight truncate">
                         {character.name}
                       </h1>
-                      {/* Metallic Rank & Race Badges with Rank Up Control */}
+                      {/* Metallic Rank & Race Badges */}
                       <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                         <Badge variant="outline" className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shadow-sm ${getRankStyle(character.rank)}`}>
                           {character.rank || "Iron"} Rank
@@ -2257,56 +2257,77 @@ export default function CharacterSheet() {
                         <Badge variant="outline" className="text-[10px] font-mono border-border/60 text-muted-foreground bg-background/50 rounded px-2 py-0.5">
                           {character.race}
                         </Badge>
-
-                        {hasAllFourEssences ? (
-                          canRankUp(character.rank) ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={handlePromoteRank}
-                              className="h-6 text-[9px] font-mono border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 px-2 rounded cursor-pointer font-bold animate-pulse"
-                              title={`Promote Rank to ${getNextRank(character.rank)}`}
-                            >
-                              ▲ Rank Up to {getNextRank(character.rank)}
-                            </Button>
-                          ) : (
-                            <span className="text-[9px] font-mono text-emerald-400/80 font-semibold px-1 py-0.5 border border-emerald-500/20 bg-emerald-950/20 rounded">
-                              ★ Pinnacle Rank
-                            </span>
-                          )
-                        ) : (
-                          <span
-                            className="text-[9px] font-mono text-muted-foreground/60 flex items-center gap-1 px-2 py-0.5 border border-border/30 bg-background/40 rounded cursor-not-allowed"
-                            title="Requires an essence bound in all 4 slots (1st, 2nd, 3rd, and Confluence) to increase Rank."
-                          >
-                            <Lock className="w-2.5 h-2.5 text-stone-500" /> Rank Up Locked (4 Essences Req.)
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>
 
-                  {/* Initiative & Speed Header Display */}
-                  <div className="flex items-center gap-4 text-right">
-                    <button
-                      onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
-                      className="group flex flex-col items-end cursor-pointer"
-                      title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
-                    >
-                      <div className="text-xs text-cyan-400 font-bold uppercase tracking-wider group-hover:text-cyan-300 flex items-center gap-1">
-                        <Dice5 className="w-3.5 h-3.5 text-cyan-400" /> Initiative
-                      </div>
-                      <div className="text-2xl font-serif text-cyan-300 font-bold group-hover:underline">
-                        +{adjustedStats.maxInitiative}
-                      </div>
-                    </button>
-
-                    <div className="h-8 w-[1px] bg-border/40" />
-
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wider">Speed</div>
-                      <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
+                  {/* Center: Centered Damage Input Box + Roll Initiative Button + Long Rest */}
+                  <div className="flex items-center gap-3 flex-wrap justify-center my-auto">
+                    {/* Pulsing Red Damage Box */}
+                    <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-9">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={damageAmount}
+                        onChange={e => setDamageAmount(e.target.value)}
+                        placeholder="Damage"
+                        className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-mono text-center w-24 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-full px-4 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
+                        onClick={handleApplyDamage}
+                        disabled={!damageAmount || applyDamageMut.isPending}
+                      >
+                        Hit
+                      </Button>
                     </div>
+
+                    {/* Standalone Roll Initiative Button (NO numbers on button or anywhere else) */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatRoll("agility", "Initiative")}
+                      className="h-9 px-4 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
+                      title="Roll Initiative (Agility Check)"
+                    >
+                      <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                      <span>Roll Initiative</span>
+                    </Button>
+
+                    {/* Long Rest Confirmation Trigger */}
+                    <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
+                          Long Rest
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px] bg-card border border-border shadow-2xl rounded-md p-6">
+                        <DialogHeader>
+                          <DialogTitle className="font-serif text-xl text-amber-500 font-bold flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5" /> Confirm Long Rest?
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-3 text-xs text-muted-foreground leading-relaxed font-sans">
+                          Are you sure you want to take a Long Rest? This will fully restore your HP, DT, and Mana pools to their maximum values and record the logs.
+                        </div>
+                        <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
+                          <Button variant="ghost" size="sm" onClick={() => setIsLongRestConfirmOpen(false)} className="rounded-md font-bold text-xs">
+                            Cancel
+                          </Button>
+                          <Button variant="default" size="sm" onClick={handleLongRest} className="bg-amber-500 hover:bg-amber-600 text-black rounded-md font-bold text-xs">
+                            Confirm Rest
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+
+                  {/* Right: Speed Readout */}
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Speed</div>
+                    <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
                   </div>
                 </div>
 
@@ -2345,72 +2366,6 @@ export default function CharacterSheet() {
                     )}
                   </div>
                 )}
-
-                {/* Dedicated Action Bar: Damage Input Box + Standalone Roll Initiative Button + Long Rest */}
-                <div className="flex items-center gap-3 flex-wrap pt-2 border-t border-border/20">
-                  {/* Pulsing Red Damage Box */}
-                  <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-9">
-                    <Input
-                      type="number"
-                      min="0"
-                      value={damageAmount}
-                      onChange={e => setDamageAmount(e.target.value)}
-                      placeholder="Damage"
-                      className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-mono text-center w-24 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
-                    />
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="h-full px-4 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
-                      onClick={handleApplyDamage}
-                      disabled={!damageAmount || applyDamageMut.isPending}
-                    >
-                      Hit
-                    </Button>
-                  </div>
-
-                  {/* Standalone Highly Prominent Cyan Roll Initiative Button */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleRoll("d20", "Initiative Roll", undefined, adjustedStats.maxInitiative)}
-                    className="h-9 px-4 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
-                    title={`Roll Initiative (1d20 + ${adjustedStats.maxInitiative})`}
-                  >
-                    <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
-                    <span>Roll Initiative</span>
-                    <Badge className="bg-cyan-500/30 border border-cyan-400 text-cyan-200 font-mono text-xs px-1.5 py-0.5 rounded font-bold">
-                      +{adjustedStats.maxInitiative}
-                    </Badge>
-                  </Button>
-
-                  {/* Long Rest Confirmation Trigger */}
-                  <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs ml-auto">
-                        Long Rest
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px] bg-card border border-border shadow-2xl rounded-md p-6">
-                      <DialogHeader>
-                        <DialogTitle className="font-serif text-xl text-amber-500 font-bold flex items-center gap-2">
-                          <RotateCcw className="w-5 h-5" /> Confirm Long Rest?
-                        </DialogTitle>
-                      </DialogHeader>
-                      <div className="py-3 text-xs text-muted-foreground leading-relaxed font-sans">
-                        Are you sure you want to take a Long Rest? This will fully restore your HP, DT, and Mana pools to their maximum values and record the logs.
-                      </div>
-                      <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
-                        <Button variant="ghost" size="sm" onClick={() => setIsLongRestConfirmOpen(false)} className="rounded-md font-bold text-xs">
-                          Cancel
-                        </Button>
-                        <Button variant="default" size="sm" onClick={handleLongRest} className="bg-amber-500 hover:bg-amber-600 text-black rounded-md font-bold text-xs">
-                          Confirm Rest
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
               </div>
 
               {/* Resource Management HUD grids */}
