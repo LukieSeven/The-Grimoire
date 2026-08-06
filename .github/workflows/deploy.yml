@@ -16,11 +16,20 @@ jobs:
       - name: Checkout 🛎️
         uses: actions/checkout@v4
 
-      - name: Install and Build 🔧
-        run: |
-          set -o pipefail
-          npm install
-          npm run build 2>&1 | tee build.log || (git config --global user.name "Actions Bot" && git config --global user.email "bot@github.com" && git checkout -b debug-build-failure && git add build.log && git commit -m "debug build failure logs" && git push origin debug-build-failure --force && exit 1)
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck, test, and build
+        run: npm run check
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4

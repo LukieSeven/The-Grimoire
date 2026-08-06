@@ -404,9 +404,9 @@ export default function CharacterSheet() {
       }
     }, {
       onSuccess: () => {
-        const curHp = hp ?? character.currentHp;
-        const curDt = currentDt ?? character.currentDt;
-        const curMana = mana ?? character.currentMana;
+        const curHp = hp ?? character?.currentHp ?? targetHp;
+        const curDt = currentDt ?? character?.currentDt ?? targetDt;
+        const curMana = mana ?? character?.currentMana ?? targetMana;
 
         setHp(targetHp);
         setCurrentDt(targetDt);
@@ -471,6 +471,7 @@ export default function CharacterSheet() {
     manaAdd?: string;
     manaRemove?: string;
     manaBuff?: string;
+    damageAmount?: string;
   }>>({});
 
   const updateFamInput = (famId: string | number, field: string, value: string) => {
@@ -915,7 +916,7 @@ export default function CharacterSheet() {
     
     setFamDtFlashes(prev => ({
       ...prev,
-      [fam.id]: "hit"
+      [fam.id]: "hit" as const
     }));
 
     updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
@@ -972,7 +973,7 @@ export default function CharacterSheet() {
     
     setFamDtFlashes(prev => ({
       ...prev,
-      [fam.id]: "hit"
+      [fam.id]: "hit" as const
     }));
 
     updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
@@ -1004,7 +1005,7 @@ export default function CharacterSheet() {
     const fMax = getFamiliarMaxValues(fam);
     setFamDtFlashes(prev => ({
       ...prev,
-      [fam.id]: "restore"
+      [fam.id]: "restore" as const
     }));
     setFamDamageResults(prev => {
       const copy = { ...prev };
@@ -1303,9 +1304,9 @@ export default function CharacterSheet() {
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `${ability.name} Restore` } });
     }
     if (ability.dtAdd) {
-      const curDt = dt ?? character.currentDt;
+      const curDt = currentDt ?? character.currentDt;
       const nextDt = Math.min(maxDt, curDt + ability.dtAdd);
-      setDt(nextDt);
+      setCurrentDt(nextDt);
       updates.currentDt = nextDt;
       changes.push(`+${ability.dtAdd} DT`);
       createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - curDt, label: `${ability.name} Shield` } });
@@ -2012,7 +2013,7 @@ export default function CharacterSheet() {
     const fMax = getFamiliarMaxValues(fam);
     setFamDtFlashes(prev => ({
       ...prev,
-      [fam.id]: "restore"
+      [fam.id]: "restore" as const
     }));
     setFamDamageResults(prev => {
       const copy = { ...prev };
@@ -2067,7 +2068,7 @@ export default function CharacterSheet() {
 
     // Update sortOrder for all items in this group
     reordered.forEach((ab, idx) => {
-      updateAbility.mutate({
+      updateAbilityMut.mutate({
         id: ab.id,
         data: { sortOrder: idx }
       });
@@ -2160,6 +2161,9 @@ export default function CharacterSheet() {
   const latestHpLog = rolls?.filter(r => r.diceType === "hp-log").sort((a,b) => b.id - a.id)[0];
   const latestManaLog = rolls?.filter(r => r.diceType === "mana-log").sort((a,b) => b.id - a.id)[0];
   const latestDtLog = rolls?.filter(r => r.diceType === "dt-log").sort((a,b) => b.id - a.id)[0];
+  const latestHpModifier = latestHpLog?.modifier ?? 0;
+  const latestManaModifier = latestManaLog?.modifier ?? 0;
+  const latestDtModifier = latestDtLog?.modifier ?? 0;
 
   const tier = critChain ? CRIT_TIERS[Math.min(critChain.chainCount, CRIT_TIERS.length - 1)] : null;
   const finalTier = lastRoll?.hadCrit ? CRIT_TIERS[Math.min(lastRoll.maxChainCount, CRIT_TIERS.length - 1)] : null;
@@ -2441,8 +2445,8 @@ export default function CharacterSheet() {
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
                       {latestDtLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestDtLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestDtLog.modifier >= 0 ? `+${latestDtLog.modifier}` : latestDtLog.modifier} DT ({latestDtLog.label})
+                        <p className={`text-[10px] font-mono text-center ${latestDtModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestDtModifier >= 0 ? `+${latestDtModifier}` : latestDtModifier} DT ({latestDtLog.label})
                         </p>
                       )}
                     </div>
@@ -2545,8 +2549,8 @@ export default function CharacterSheet() {
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
                       {latestHpLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestHpLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestHpLog.modifier >= 0 ? `+${latestHpLog.modifier}` : latestHpLog.modifier} HP ({latestHpLog.label})
+                        <p className={`text-[10px] font-mono text-center ${latestHpModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestHpModifier >= 0 ? `+${latestHpModifier}` : latestHpModifier} HP ({latestHpLog.label})
                         </p>
                       )}
                     </div>
@@ -2649,8 +2653,8 @@ export default function CharacterSheet() {
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
                       {latestManaLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestManaLog.modifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestManaLog.modifier >= 0 ? `+${latestManaLog.modifier}` : latestManaLog.modifier} MP ({latestManaLog.label})
+                        <p className={`text-[10px] font-mono text-center ${latestManaModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                          {latestManaModifier >= 0 ? `+${latestManaModifier}` : latestManaModifier} MP ({latestManaLog.label})
                         </p>
                       )}
                     </div>
@@ -3593,14 +3597,14 @@ export default function CharacterSheet() {
                                               <div className="flex-1 bg-accent/40 h-1 rounded-none overflow-hidden">
                                                 <div
                                                   className="bg-amber-400 h-full rounded-none transition-all"
-                                                  style={{ width: `${Math.min(100, (((ab.currentCharges ?? ab.maxCharges)) / ab.maxCharges) * 100)}%` }}
+                                                  style={{ width: `${Math.min(100, ((ab.currentCharges ?? ab.maxCharges ?? 0) / Math.max(1, ab.maxCharges ?? 0)) * 100)}%` }}
                                                 />
                                               </div>
                                               <div className="flex border border-border/50 bg-background/50">
                                                 <button
                                                   className="h-4 w-4 text-[9px] font-bold hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                                                   onClick={() => {
-                                                    const cur = ab.currentCharges ?? ab.maxCharges;
+                                                    const cur = ab.currentCharges ?? ab.maxCharges ?? 0;
                                                     updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.max(0, cur - 1) } });
                                                   }}
                                                   disabled={(ab.currentCharges ?? ab.maxCharges) === 0}
@@ -3611,8 +3615,8 @@ export default function CharacterSheet() {
                                                 <button
                                                   className="h-4 w-4 text-[9px] font-bold hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
                                                   onClick={() => {
-                                                    const cur = ab.currentCharges ?? ab.maxCharges;
-                                                    updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.min(ab.maxCharges, cur + 1) } });
+                                                    const cur = ab.currentCharges ?? ab.maxCharges ?? 0;
+                                                    updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.min(ab.maxCharges ?? 0, cur + 1) } });
                                                   }}
                                                   disabled={(ab.currentCharges ?? ab.maxCharges) === ab.maxCharges}
                                                 >
@@ -3749,14 +3753,14 @@ export default function CharacterSheet() {
                                           <div className="flex-1 bg-accent/40 h-1 rounded-none overflow-hidden">
                                             <div
                                               className="bg-amber-400 h-full rounded-none transition-all"
-                                              style={{ width: `${Math.min(100, (((ab.currentCharges ?? ab.maxCharges)) / ab.maxCharges) * 100)}%` }}
+                                              style={{ width: `${Math.min(100, ((ab.currentCharges ?? ab.maxCharges ?? 0) / Math.max(1, ab.maxCharges ?? 0)) * 100)}%` }}
                                             />
                                           </div>
                                           <div className="flex border border-border/50 bg-background/50">
                                             <button
                                               className="h-4 w-4 text-[9px] font-bold hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                                               onClick={() => {
-                                                const cur = ab.currentCharges ?? ab.maxCharges;
+                                                const cur = ab.currentCharges ?? ab.maxCharges ?? 0;
                                                 updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.max(0, cur - 1) } });
                                               }}
                                               disabled={(ab.currentCharges ?? ab.maxCharges) === 0}
@@ -3767,8 +3771,8 @@ export default function CharacterSheet() {
                                             <button
                                               className="h-4 w-4 text-[9px] font-bold hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
                                               onClick={() => {
-                                                const cur = ab.currentCharges ?? ab.maxCharges;
-                                                updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.min(ab.maxCharges, cur + 1) } });
+                                                const cur = ab.currentCharges ?? ab.maxCharges ?? 0;
+                                                updateAbilityMut.mutate({ id: ab.id, data: { currentCharges: Math.min(ab.maxCharges ?? 0, cur + 1) } });
                                               }}
                                               disabled={(ab.currentCharges ?? ab.maxCharges) === ab.maxCharges}
                                             >

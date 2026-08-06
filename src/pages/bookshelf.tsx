@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { Book, Compass, Lock, MessageSquare, Sparkles, Upload, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useListCodexNotes, useUnlockPassword, useListUnlockedPasswords, useLockPassword } from "@/hooks/useStorage";
@@ -9,7 +9,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 export default function Bookshelf() {
-  const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const [hoveredBook, setHoveredBook] = useState<string | null>(null);
 
@@ -448,9 +447,10 @@ export default function Bookshelf() {
 
               if (!isCodexUnlocked) {
                 return (
-                  <div 
+                  <button
+                    type="button"
                     key={book.id}
-                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55"
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55 bg-transparent border-0"
                     onClick={() => {
                       toast.info("The Codex is sealed. Speak the passphrase to unlock its secrets.");
                       setIsShaking(true);
@@ -468,7 +468,7 @@ export default function Bookshelf() {
                         ᚛ᚦᚨᚱᚠ᚜
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               }
             }
@@ -515,9 +515,10 @@ export default function Bookshelf() {
 
               if (!isChronicleUnlocked) {
                 return (
-                  <div 
+                  <button
+                    type="button"
                     key={book.id}
-                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55"
+                    className="col-span-1 flex flex-col items-center gap-2 h-[300px] justify-end cursor-not-allowed group opacity-55 bg-transparent border-0"
                     onClick={() => {
                       toast.info("The Chronicle is sealed. Speak the passphrase to unlock its secrets.");
                       setIsShaking(true);
@@ -535,18 +536,19 @@ export default function Bookshelf() {
                         ᚛ᚢᚦᚨᚱᚦ᚜
                       </span>
                     </div>
-                  </div>
+                  </button>
                 );
               }
             }
 
             return (
-              <div 
+              <Link
                 key={book.id}
+                href={book.path}
+                aria-label={`${book.title}: ${book.subtitle}`}
                 className="col-span-1 flex flex-col items-center gap-2 cursor-pointer group h-[300px] justify-end"
                 onMouseEnter={() => setHoveredBook(book.id)}
                 onMouseLeave={() => setHoveredBook(null)}
-                onClick={() => setLocation(book.path)}
               >
                 {/* 3D Book Container */}
                 <div className="book-container h-[260px] flex items-end">
@@ -579,7 +581,7 @@ export default function Bookshelf() {
                     {book.id === "grimoire" ? "Grimoire" : book.id === "codex" ? "Codex" : "Chronicle"}
                   </span>
                 </div>
-              </div>
+              </Link>
             );
           })}
 
@@ -616,7 +618,7 @@ export default function Bookshelf() {
 
             {/* Faint engraving watermark signature on the right of the wooden ledge */}
             <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 64
+              Crafted by Lukie Seven · Mark 65
             </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
@@ -661,7 +663,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 64
+          Lovingly crafted by LukieSeven — Mark 65
         </p>
       </footer>
     </div>

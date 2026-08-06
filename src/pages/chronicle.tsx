@@ -272,13 +272,21 @@ export default function Chronicle() {
 
     // Create roll history log & toast notification
     const modStr = agiMod >= 0 ? `+${agiMod}` : `${agiMod}`;
-    createRoll.mutate({
-      data: {
-        diceType: "agility-init",
-        modifier: totalInit,
-        label: `Agility Initiative: ${foundName} [d20:${d20}${modStr}=${totalInit}]`
-      }
+    const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
+    rolls.unshift({
+      id: Date.now(),
+      characterId: charId ?? 0,
+      diceType: "agility-init",
+      result: d20,
+      modifier: agiMod,
+      total: totalInit,
+      label: `Agility Initiative: ${foundName} [d20:${d20}${modStr}=${totalInit}]`,
+      isCrit: d20 === 20,
+      critBonus: null,
+      rolledAt: new Date().toISOString(),
     });
+    localStorage.setItem("aetherborne_rolls", JSON.stringify(rolls.slice(0, 100)));
+    refreshRecentRolls();
 
     toast.success(`${foundName} rolled Agility Initiative: ${totalInit} (d20: ${d20}${modStr})`);
   };

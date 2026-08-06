@@ -13,6 +13,8 @@ import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
 import { exportGrimoireBackup, importGrimoireBackup } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { importChronicleBundles, type CharacterBundle, type GrimoireCollections } from "@/lib/character-import";
+import { commitStorageUpdates } from "@/lib/persistence";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -57,70 +59,30 @@ export default function Dashboard() {
   const handleImportFromChronicle = () => {
     if (selectedChronicleChars.length === 0) return;
     try {
-      const grimoireChars = JSON.parse(localStorage.getItem("aetherborne_characters") || "[]");
-      const grimoireEquip = JSON.parse(localStorage.getItem("aetherborne_equipment") || "[]");
-      const grimoireCurr = JSON.parse(localStorage.getItem("aetherborne_currencies") || "[]");
-      const grimoireInv = JSON.parse(localStorage.getItem("aetherborne_inventory") || "[]");
-      const grimoireEss = JSON.parse(localStorage.getItem("aetherborne_essences") || "[]");
-      const grimoireAbils = JSON.parse(localStorage.getItem("aetherborne_abilities") || "[]");
-      const grimoireSkills = JSON.parse(localStorage.getItem("aetherborne_skills") || "[]");
+      const collections: GrimoireCollections = {
+        characters: JSON.parse(localStorage.getItem("aetherborne_characters") || "[]"),
+        equipment: JSON.parse(localStorage.getItem("aetherborne_equipment") || "[]"),
+        currencies: JSON.parse(localStorage.getItem("aetherborne_currencies") || "[]"),
+        inventory: JSON.parse(localStorage.getItem("aetherborne_inventory") || "[]"),
+        essences: JSON.parse(localStorage.getItem("aetherborne_essences") || "[]"),
+        abilities: JSON.parse(localStorage.getItem("aetherborne_abilities") || "[]"),
+        skills: JSON.parse(localStorage.getItem("aetherborne_skills") || "[]"),
+      };
+      const chronicleBundles = getChronicleCharacters() as CharacterBundle[];
+      const selectedBundles = chronicleBundles.filter(bundle =>
+        selectedChronicleChars.includes(Number(bundle.character.id)),
+      );
+      const imported = importChronicleBundles(collections, selectedBundles);
 
-      const chronicleBundles = getChronicleCharacters();
-
-      selectedChronicleChars.forEach(id => {
-        const bundle = chronicleBundles.find((b: any) => b.character.id === id);
-        if (!bundle) return;
-
-        const newCharId = grimoireChars.length > 0 ? Math.max(...grimoireChars.map((c: any) => c.id)) + 1 : 1;
-
-        const clonedChar = { ...bundle.character, id: newCharId };
-        grimoireChars.push(clonedChar);
-
-        if (Array.isArray(bundle.equipment)) {
-          bundle.equipment.forEach((eq: any) => {
-            const newEqId = grimoireEquip.length > 0 ? Math.max(...grimoireEquip.map((e: any) => e.id)) + 1 : 1;
-            grimoireEquip.push({ ...eq, id: newEqId, characterId: newCharId });
-          });
-        }
-        if (Array.isArray(bundle.currencies)) {
-          bundle.currencies.forEach((curr: any) => {
-            const newCurrId = grimoireCurr.length > 0 ? Math.max(...grimoireCurr.map((c: any) => c.id)) + 1 : 1;
-            grimoireCurr.push({ ...curr, id: newCurrId, characterId: newCharId });
-          });
-        }
-        if (Array.isArray(bundle.inventory)) {
-          bundle.inventory.forEach((inv: any) => {
-            const newInvId = grimoireInv.length > 0 ? Math.max(...grimoireInv.map((i: any) => i.id)) + 1 : 1;
-            grimoireInv.push({ ...inv, id: newInvId, characterId: newCharId });
-          });
-        }
-        if (Array.isArray(bundle.essences)) {
-          bundle.essences.forEach((ess: any) => {
-            const newEssId = grimoireEss.length > 0 ? Math.max(...grimoireEss.map((e: any) => e.id)) + 1 : 1;
-            grimoireEss.push({ ...ess, id: newEssId, characterId: newCharId });
-          });
-        }
-        if (Array.isArray(bundle.abilities)) {
-          bundle.abilities.forEach((ab: any) => {
-            const newAbId = grimoireAbils.length > 0 ? Math.max(...grimoireAbils.map((a: any) => a.id)) + 1 : 1;
-            grimoireAbils.push({ ...ab, id: newAbId, characterId: newCharId });
-          });
-        }
-        if (Array.isArray(bundle.skills)) {
-          bundle.skills.forEach((sk: any) => {
-            const newSkId = grimoireSkills.length > 0 ? Math.max(...grimoireSkills.map((s: any) => s.id)) + 1 : 1;
-            grimoireSkills.push({ ...sk, id: newSkId, characterId: newCharId });
-          });
-        }
+      commitStorageUpdates(localStorage, {
+        aetherborne_characters: JSON.stringify(imported.characters),
+        aetherborne_equipment: JSON.stringify(imported.equipment),
+        aetherborne_currencies: JSON.stringify(imported.currencies),
+        aetherborne_inventory: JSON.stringify(imported.inventory),
+        aetherborne_essences: JSON.stringify(imported.essences),
+        aetherborne_abilities: JSON.stringify(imported.abilities),
+        aetherborne_skills: JSON.stringify(imported.skills),
       });
-
-      localStorage.setItem("aetherborne_characters", JSON.stringify(grimoireChars));
-      localStorage.setItem("aetherborne_equipment", JSON.stringify(grimoireEquip));
-      localStorage.setItem("aetherborne_currencies", JSON.stringify(grimoireCurr));
-      localStorage.setItem("aetherborne_inventory", JSON.stringify(grimoireInv));
-      localStorage.setItem("aetherborne_essences", JSON.stringify(grimoireEss));
-      localStorage.setItem("aetherborne_abilities", JSON.stringify(grimoireAbils));
-      localStorage.setItem("aetherborne_skills", JSON.stringify(grimoireSkills));
 
       queryClient.invalidateQueries();
       toast.success(`Successfully imported ${selectedChronicleChars.length} characters into the Grimoire roster!`);
@@ -128,7 +90,7 @@ export default function Dashboard() {
       setSelectedChronicleChars([]);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to import selected characters.");
+      toast.error(err instanceof Error ? err.message : "Failed to import selected characters.");
     }
   };
 

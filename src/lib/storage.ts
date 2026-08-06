@@ -1,5 +1,15 @@
 // AEtherborne Standalone Browser Storage Engine
 import initialCodex from "../data/initial_codex.json";
+import {
+  ARCHIVE_SCHEMA_VERSION,
+  assertSupportedVersion,
+  codexBackupSchema,
+  fullArchiveSchema,
+  grimoireBackupSchema,
+  parseImportJson,
+  validateArchiveRelationships,
+} from "./archive-schema";
+import { commitStorageUpdates } from "./persistence";
 
 export interface FavoriteSlot {
   type: "weapon" | "item" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
@@ -19,6 +29,7 @@ export interface FamiliarAbility {
   speed: string;
   rollFormula: string;
   linkedStats: string[];
+  linkedStat?: string;
   assignedToQuickRolls: boolean;
   level?: number;
   active?: boolean;
@@ -164,6 +175,7 @@ export interface Ability {
   speed: string;
   rollFormula: string;
   linkedStats: string[];
+  linkedStat?: string;
   assignedToQuickRolls: boolean;
   level?: number;
   active?: boolean;
@@ -215,6 +227,7 @@ export interface Roll {
   isCrit: boolean | null;
   critBonus: number | null;
   rolledAt: string;
+  familiarId?: string | number;
 }
 
 export interface Note {
@@ -327,6 +340,7 @@ class MemoryStorage {
 let safeStorage: {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem(key: string): void;
 };
 
 try {
@@ -351,7 +365,7 @@ function getList<T>(key: string): T[] {
 }
 
 function setList<T>(key: string, list: T[]): void {
-  safeStorage.setItem(key, JSON.stringify(list));
+  commitStorageUpdates(safeStorage, { [key]: JSON.stringify(list) });
 }
 
 // Keys
@@ -1420,6 +1434,7 @@ export function importBackupJSON(jsonString: string): { type: "backup" | "charac
 export function exportFullBackup(): void {
   const data = {
     fullArchive: true,
+    schemaVersion: ARCHIVE_SCHEMA_VERSION,
     characters: getList<Character>(KEYS.characters),
     equipment: getList<Equipment>(KEYS.equipment),
     currencies: getList<Currency>(KEYS.currencies),
@@ -1446,31 +1461,32 @@ export function exportFullBackup(): void {
 }
 
 export function importFullBackup(jsonString: string): { count: number } {
-  const data = JSON.parse(jsonString);
-  if (data.fullArchive === true || data.backup === true) {
-    if (Array.isArray(data.characters)) setList(KEYS.characters, data.characters);
-    if (Array.isArray(data.equipment)) setList(KEYS.equipment, data.equipment);
-    if (Array.isArray(data.currencies)) setList(KEYS.currencies, data.currencies);
-    if (Array.isArray(data.inventory)) setList(KEYS.inventory, data.inventory);
-    if (Array.isArray(data.essences)) setList(KEYS.essences, data.essences);
-    if (Array.isArray(data.abilities)) setList(KEYS.abilities, data.abilities);
-    if (Array.isArray(data.skills)) setList(KEYS.skills, data.skills);
-    if (Array.isArray(data.notes)) setList(KEYS.notes, data.notes);
-    if (Array.isArray(data.rolls)) setList(KEYS.rolls, data.rolls);
-    if (Array.isArray(data.codex)) setList(KEYS.codex, data.codex);
-    if (Array.isArray(data.unlockedPasswords)) {
-      safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(data.unlockedPasswords));
-    }
-    safeStorage.setItem("aetherborne_initialized", "true");
-    return { count: data.characters?.length || 0 };
-  }
-  throw new Error("Invalid full archive file format");
+  const raw = parseImportJson(jsonString) as Record<string, unknown>;
+  const data = fullArchiveSchema.parse({ ...raw, fullArchive: raw.fullArchive === true || raw.backup === true });
+  assertSupportedVersion(data.schemaVersion);
+  validateArchiveRelationships(data);
+  commitStorageUpdates(safeStorage, {
+    [KEYS.characters]: JSON.stringify(data.characters),
+    [KEYS.equipment]: JSON.stringify(data.equipment),
+    [KEYS.currencies]: JSON.stringify(data.currencies),
+    [KEYS.inventory]: JSON.stringify(data.inventory),
+    [KEYS.essences]: JSON.stringify(data.essences),
+    [KEYS.abilities]: JSON.stringify(data.abilities),
+    [KEYS.skills]: JSON.stringify(data.skills),
+    [KEYS.notes]: JSON.stringify(data.notes),
+    [KEYS.rolls]: JSON.stringify(data.rolls),
+    [KEYS.codex]: JSON.stringify(data.codex),
+    [KEYS.unlocked_passwords]: JSON.stringify(data.unlockedPasswords),
+    aetherborne_initialized: "true",
+  });
+  return { count: data.characters.length };
 }
 
 // 2. Codex Registry Backup (.codex) - Exports/imports ONLY codex + passwords
 export function exportCodexBackup(): void {
   const data = {
     codexBackup: true,
+    schemaVersion: ARCHIVE_SCHEMA_VERSION,
     codex: getList<CodexNote>(KEYS.codex),
     unlockedPasswords: storage.getUnlockedPasswords()
   };
@@ -1488,21 +1504,24 @@ export function exportCodexBackup(): void {
 }
 
 export function importCodexBackup(jsonString: string): { count: number } {
-  const data = JSON.parse(jsonString);
-  if (data.codexBackup === true || data.backup === true || data.fullArchive === true) {
-    if (Array.isArray(data.codex)) setList(KEYS.codex, data.codex);
-    if (Array.isArray(data.unlockedPasswords)) {
-      safeStorage.setItem(KEYS.unlocked_passwords, JSON.stringify(data.unlockedPasswords));
-    }
-    return { count: data.codex?.length || 0 };
-  }
-  throw new Error("Invalid codex file format");
+  const raw = parseImportJson(jsonString) as Record<string, unknown>;
+  const data = codexBackupSchema.parse({
+    ...raw,
+    codexBackup: raw.codexBackup === true || raw.backup === true || raw.fullArchive === true,
+  });
+  assertSupportedVersion(data.schemaVersion);
+  commitStorageUpdates(safeStorage, {
+    [KEYS.codex]: JSON.stringify(data.codex),
+    [KEYS.unlocked_passwords]: JSON.stringify(data.unlockedPasswords),
+  });
+  return { count: data.codex.length };
 }
 
 // 3. Grimoire Roster Backup (.grimoire) - Exports/imports ONLY characters & sheets
 export function exportGrimoireBackup(): void {
   const data = {
     grimoireBackup: true,
+    schemaVersion: ARCHIVE_SCHEMA_VERSION,
     characters: getList<Character>(KEYS.characters),
     equipment: getList<Equipment>(KEYS.equipment),
     currencies: getList<Currency>(KEYS.currencies),
@@ -1527,21 +1546,26 @@ export function exportGrimoireBackup(): void {
 }
 
 export function importGrimoireBackup(jsonString: string): { count: number } {
-  const data = JSON.parse(jsonString);
-  if (data.grimoireBackup === true || data.backup === true || data.fullArchive === true) {
-    if (Array.isArray(data.characters)) setList(KEYS.characters, data.characters);
-    if (Array.isArray(data.equipment)) setList(KEYS.equipment, data.equipment);
-    if (Array.isArray(data.currencies)) setList(KEYS.currencies, data.currencies);
-    if (Array.isArray(data.inventory)) setList(KEYS.inventory, data.inventory);
-    if (Array.isArray(data.essences)) setList(KEYS.essences, data.essences);
-    if (Array.isArray(data.abilities)) setList(KEYS.abilities, data.abilities);
-    if (Array.isArray(data.skills)) setList(KEYS.skills, data.skills);
-    if (Array.isArray(data.notes)) setList(KEYS.notes, data.notes);
-    if (Array.isArray(data.rolls)) setList(KEYS.rolls, data.rolls);
-    safeStorage.setItem("aetherborne_initialized", "true");
-    return { count: data.characters?.length || 0 };
-  }
-  throw new Error("Invalid grimoire file format");
+  const raw = parseImportJson(jsonString) as Record<string, unknown>;
+  const data = grimoireBackupSchema.parse({
+    ...raw,
+    grimoireBackup: raw.grimoireBackup === true || raw.backup === true || raw.fullArchive === true,
+  });
+  assertSupportedVersion(data.schemaVersion);
+  validateArchiveRelationships(data);
+  commitStorageUpdates(safeStorage, {
+    [KEYS.characters]: JSON.stringify(data.characters),
+    [KEYS.equipment]: JSON.stringify(data.equipment),
+    [KEYS.currencies]: JSON.stringify(data.currencies),
+    [KEYS.inventory]: JSON.stringify(data.inventory),
+    [KEYS.essences]: JSON.stringify(data.essences),
+    [KEYS.abilities]: JSON.stringify(data.abilities),
+    [KEYS.skills]: JSON.stringify(data.skills),
+    [KEYS.notes]: JSON.stringify(data.notes),
+    [KEYS.rolls]: JSON.stringify(data.rolls),
+    aetherborne_initialized: "true",
+  });
+  return { count: data.characters.length };
 }
 
 // ── Default Mock Database Initialization ──────────────────
@@ -1656,6 +1680,7 @@ function initializeDefaultSample(): void {
       speed: "Instant",
       rollFormula: "d6",
       linkedStat: "willpower",
+      linkedStats: ["willpower"],
       assignedToQuickRolls: true,
       level: 1,
     },
@@ -1670,6 +1695,7 @@ function initializeDefaultSample(): void {
       speed: "Standard",
       rollFormula: "2d6",
       linkedStat: "power",
+      linkedStats: ["power"],
       assignedToQuickRolls: true,
       level: 1,
     },

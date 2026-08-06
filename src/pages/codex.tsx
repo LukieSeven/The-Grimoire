@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { exportCodexBackup, importCodexBackup } from "@/lib/storage";
+import { exportCodexBackup, importCodexBackup, type CodexNote } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { 
   Search, BookOpen, MapPin, Sparkles, Trash2, 
@@ -285,7 +285,7 @@ export default function Codex() {
   const isNoteVisible = (note: any) => {
     if ((note.title || "").toLowerCase().includes("random encounter")) return false;
     if (note.secretPassword) {
-      const sanitize = (str: string) => 
+      const sanitize = (str?: string | null) =>
         (str || "")
           .trim()
           .toLowerCase()
@@ -300,7 +300,7 @@ export default function Codex() {
   const filteredNotes = codexNotes.filter(n => {
     if ((n.title || "").toLowerCase().includes("random encounter")) return false;
     if (n.secretPassword) {
-      const sanitize = (str: string) => 
+      const sanitize = (str?: string | null) =>
         (str || "")
           .trim()
           .toLowerCase()
@@ -315,7 +315,7 @@ export default function Codex() {
   });
 
   // Wildlands Virtual Region overview note
-  const wildlandsVirtualNote = {
+  const wildlandsVirtualNote: CodexNote = {
     id: -99,
     title: "Wildlands (Neutral Territories)",
     content: "Unclaimed lands, wild borderlands, and neutral ruins across Cormant governed by no crown.\n\nHistorically, these territories serve as buffer zones between warring kingdoms, populated by nomadic tribes, free companies, monster nests, and independent settlements that reject royal sovereignty. Dangerous but rich in unexplored mysteries.",
@@ -329,7 +329,7 @@ export default function Codex() {
   };
 
   // Veridia Virtual Region overview note
-  const veridiaVirtualNote = {
+  const veridiaVirtualNote: CodexNote = {
     id: -100,
     title: "Veridia",
     content: "The mortal realm and primary continent of Cormant. Veridia is a land of diverse kingdoms, rolling valleys, ancient forests, and high peaks.\n\nFrom the Grand Duchy of Rorenia to the Wildlands border zones, this land holds the history of mortal crowns, magic confluences, and age-old conflicts.",
@@ -343,7 +343,7 @@ export default function Codex() {
   };
 
   // Planes & Other Worlds Virtual Region overview note
-  const planesVirtualNote = {
+  const planesVirtualNote: CodexNote = {
     id: -101,
     title: "Planes & Other Worlds",
     content: "Cosmic clusters and realms outside of the mortal continent of Veridia.\n\nThese foreign dimensions consist of planes governed by unique elemental forces, spiritual laws, or eldritch entities. Traversable only via dimensional gates, ley line confluences, or powerful conjuration spells.",
@@ -1160,7 +1160,7 @@ export default function Codex() {
                     <h2 className="text-xl sm:text-2xl font-extrabold text-primary tracking-wide leading-tight flex items-center gap-2">
                       {selectedNote.title}
                       {selectedNote.secretPassword && (
-                        <Lock className="w-4 h-4 text-primary" title="Decrypted secret entry" />
+                        <span title="Decrypted secret entry"><Lock className="w-4 h-4 text-primary" aria-hidden="true" /></span>
                       )}
                     </h2>
                     

@@ -3,13 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
-import { useEffect } from "react";
-import NotFound from "@/pages/not-found";
-import Dashboard from "@/pages/dashboard";
-import CharacterSheet from "@/pages/character-sheet";
-import Bookshelf from "@/pages/bookshelf";
-import Codex from "@/pages/codex";
-import Chronicle from "@/pages/chronicle";
+import { lazy, Suspense, useEffect } from "react";
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const CharacterSheet = lazy(() => import("@/pages/character-sheet"));
+const Bookshelf = lazy(() => import("@/pages/bookshelf"));
+const Codex = lazy(() => import("@/pages/codex"));
+const Chronicle = lazy(() => import("@/pages/chronicle"));
 
 const queryClient = new QueryClient();
 
@@ -35,14 +36,16 @@ function Router() {
 
   return (
     <Layout>
-      <Switch>
-        <Route path="/" component={Bookshelf} />
-        <Route path="/grimoire" component={Dashboard} />
-        <Route path="/codex" component={Codex} />
-        <Route path="/chronicle" component={Chronicle} />
-        <Route path="/characters/:id" component={CharacterSheet} />
-        <Route component={NotFound} />
-      </Switch>
+      <Suspense fallback={<div className="min-h-[40vh] grid place-items-center text-muted-foreground">Opening the archive…</div>}>
+        <Switch>
+          <Route path="/" component={Bookshelf} />
+          <Route path="/grimoire" component={Dashboard} />
+          <Route path="/codex" component={Codex} />
+          <Route path="/chronicle" component={Chronicle} />
+          <Route path="/characters/:id" component={CharacterSheet} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
     </Layout>
   );
 }
