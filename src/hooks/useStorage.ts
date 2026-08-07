@@ -101,21 +101,19 @@ export function useApplyDamage() {
       const { amount } = data;
       const dt = char.currentDt;
       
-      let newDt = dt;
+      const newDt = Math.max(0, dt - 1);
       let hpLost = 0;
-      let dtDropped = false;
+      let dtDropped = true;
       let absorbed = false;
       
-      if (amount >= dt) {
-        newDt = Math.max(0, dt - 1);
-        dtDropped = true;
-        const overflow = amount - dt;
-        hpLost = overflow;
+      if (amount > dt) {
+        hpLost = amount - dt;
+        absorbed = false;
       } else {
         absorbed = true;
       }
       
-      // Calculate current HP (depletes temp/buff HP pool first naturally)
+      // Calculate current HP
       const newHp = Math.max(0, char.currentHp - hpLost);
       
       const updated = storage.updateCharacter(id, {
@@ -127,10 +125,10 @@ export function useApplyDamage() {
       storage.addRoll({
         characterId: id,
         diceType: "dt-log",
-        result: absorbed ? 0 : -1,
+        result: -1,
         modifier: 0,
-        total: absorbed ? 0 : -1,
-        label: absorbed ? "DT: Damage Absorbed" : "DT Lost (Hit)",
+        total: -1,
+        label: absorbed ? `DT: -1 (Damage ${amount} Absorbed)` : `DT: -1 (Damage ${amount} Exceeded DT)`,
         isCrit: false,
         critBonus: null,
       });

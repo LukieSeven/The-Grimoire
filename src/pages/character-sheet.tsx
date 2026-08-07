@@ -900,13 +900,15 @@ export default function CharacterSheet() {
     let hpLost = 0;
     let absorbed = true;
 
+    const newDtVal = Math.max(0, dtVal - 1);
     if (amount > dtVal) {
       hpLost = amount - dtVal;
       hpVal = Math.max(0, hpVal - hpLost);
-      dtVal = 0;
+      dtVal = newDtVal;
       absorbed = false;
     } else {
-      dtVal -= amount;
+      dtVal = newDtVal;
+      absorbed = true;
     }
 
     setFamDamageResults(prev => ({
@@ -957,13 +959,15 @@ export default function CharacterSheet() {
     let hpLost = 0;
     let absorbed = true;
 
+    const newDtVal = Math.max(0, dtVal - 1);
     if (amount > dtVal) {
       hpLost = amount - dtVal;
       hpVal = Math.max(0, hpVal - hpLost);
-      dtVal = 0;
+      dtVal = newDtVal;
       absorbed = false;
     } else {
-      dtVal -= amount;
+      dtVal = newDtVal;
+      absorbed = true;
     }
 
     setFamDamageResults(prev => ({
