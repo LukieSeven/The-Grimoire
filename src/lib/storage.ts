@@ -1,5 +1,5 @@
 // AEtherborne Standalone Browser Storage Engine
-import initialCodex from "../data/initial_codex.json";
+import initialCodex from "../data/initial_codex.json" with { type: "json" };
 import {
   ARCHIVE_SCHEMA_VERSION,
   assertSupportedVersion,
@@ -8,8 +8,8 @@ import {
   grimoireBackupSchema,
   parseImportJson,
   validateArchiveRelationships,
-} from "./archive-schema";
-import { commitStorageUpdates } from "./persistence";
+} from "./archive-schema.ts";
+import { commitStorageUpdates } from "./persistence.ts";
 
 export interface FavoriteSlot {
   type: "weapon" | "item" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
@@ -164,6 +164,14 @@ export interface Essence {
   slot: number; // 1-4
 }
 
+export interface EvolutionModifier {
+  id: string;
+  name: string;
+  rankLabel: string;
+  requiredStat: number;
+  effect: string;
+}
+
 export interface Ability {
   id: number;
   characterId: number;
@@ -179,6 +187,8 @@ export interface Ability {
   assignedToQuickRolls: boolean;
   level?: number;
   active?: boolean;
+  primaryStat?: string;
+  evolutionModifiers?: EvolutionModifier[];
   bonusPower?: number;
   bonusVitality?: number;
   bonusSpirit?: number;
@@ -1738,3 +1748,213 @@ function initializeDefaultSample(): void {
 
   safeStorage.setItem("aetherborne_initialized", "true");
 }
+
+// ── Ability Evolution Constants & Helpers ──────────────────────────
+
+export const EVOLUTION_THRESHOLDS_TABLE = [
+  { index: 0, rankLabel: "Iron 2", requiredStat: 4 },
+  { index: 1, rankLabel: "Iron 3", requiredStat: 6 },
+  { index: 2, rankLabel: "Iron 4", requiredStat: 8 },
+  { index: 3, rankLabel: "Iron 5", requiredStat: 10 },
+  { index: 4, rankLabel: "Bronze 1", requiredStat: 12 },
+  { index: 5, rankLabel: "Bronze 2", requiredStat: 13 },
+  { index: 6, rankLabel: "Bronze 3", requiredStat: 14 },
+  { index: 7, rankLabel: "Bronze 4", requiredStat: 15 },
+  { index: 8, rankLabel: "Bronze 5", requiredStat: 16 },
+  { index: 9, rankLabel: "Silver 1", requiredStat: 17 },
+  { index: 10, rankLabel: "Silver 2", requiredStat: 18 },
+  { index: 11, rankLabel: "Silver 3", requiredStat: 19 },
+  { index: 12, rankLabel: "Silver 4", requiredStat: 20 },
+  { index: 13, rankLabel: "Silver 5", requiredStat: 21 },
+  { index: 14, rankLabel: "Gold 1", requiredStat: 22 },
+  { index: 15, rankLabel: "Gold 2", requiredStat: 23 },
+  { index: 16, rankLabel: "Gold 3", requiredStat: 24 },
+  { index: 17, rankLabel: "Gold 4", requiredStat: 25 },
+  { index: 18, rankLabel: "Gold 5", requiredStat: 26 },
+  { index: 19, rankLabel: "Diamond 1", requiredStat: 27 },
+  { index: 20, rankLabel: "Diamond 2", requiredStat: 28 },
+  { index: 21, rankLabel: "Diamond 3", requiredStat: 29 },
+  { index: 22, rankLabel: "Diamond 4", requiredStat: 30 },
+  { index: 23, rankLabel: "Diamond 5", requiredStat: 31 },
+];
+
+export function getRankForStatValue(val: number): { rank: string; subLevel: number; label: string; index: number } {
+  if (val >= 31) return { rank: "Diamond", subLevel: 5, label: "Diamond 5", index: 24 };
+  if (val >= 30) return { rank: "Diamond", subLevel: 4, label: "Diamond 4", index: 23 };
+  if (val >= 29) return { rank: "Diamond", subLevel: 3, label: "Diamond 3", index: 22 };
+  if (val >= 28) return { rank: "Diamond", subLevel: 2, label: "Diamond 2", index: 21 };
+  if (val >= 27) return { rank: "Diamond", subLevel: 1, label: "Diamond 1", index: 20 };
+  if (val >= 26) return { rank: "Gold", subLevel: 5, label: "Gold 5", index: 19 };
+  if (val >= 25) return { rank: "Gold", subLevel: 4, label: "Gold 4", index: 18 };
+  if (val >= 24) return { rank: "Gold", subLevel: 3, label: "Gold 3", index: 17 };
+  if (val >= 23) return { rank: "Gold", subLevel: 2, label: "Gold 2", index: 16 };
+  if (val >= 22) return { rank: "Gold", subLevel: 1, label: "Gold 1", index: 15 };
+  if (val >= 21) return { rank: "Silver", subLevel: 5, label: "Silver 5", index: 14 };
+  if (val >= 20) return { rank: "Silver", subLevel: 4, label: "Silver 4", index: 13 };
+  if (val >= 19) return { rank: "Silver", subLevel: 3, label: "Silver 3", index: 12 };
+  if (val >= 18) return { rank: "Silver", subLevel: 2, label: "Silver 2", index: 11 };
+  if (val >= 17) return { rank: "Silver", subLevel: 1, label: "Silver 1", index: 10 };
+  if (val >= 16) return { rank: "Bronze", subLevel: 5, label: "Bronze 5", index: 9 };
+  if (val >= 15) return { rank: "Bronze", subLevel: 4, label: "Bronze 4", index: 8 };
+  if (val >= 14) return { rank: "Bronze", subLevel: 3, label: "Bronze 3", index: 7 };
+  if (val >= 13) return { rank: "Bronze", subLevel: 2, label: "Bronze 2", index: 6 };
+  if (val >= 12) return { rank: "Bronze", subLevel: 1, label: "Bronze 1", index: 5 };
+  if (val >= 10) return { rank: "Iron", subLevel: 5, label: "Iron 5", index: 4 };
+  if (val >= 8) return { rank: "Iron", subLevel: 4, label: "Iron 4", index: 3 };
+  if (val >= 6) return { rank: "Iron", subLevel: 3, label: "Iron 3", index: 2 };
+  if (val >= 4) return { rank: "Iron", subLevel: 2, label: "Iron 2", index: 1 };
+  return { rank: "Iron", subLevel: 1, label: "Iron 1", index: 0 };
+}
+
+export function getAbilityHighestRank(ability: Ability, finalStats: Record<string, number>): { rank: string; subLevel: number; label: string; index: number } {
+  const statsToCheck: string[] = [];
+  if (ability.primaryStat && ability.primaryStat.trim()) {
+    statsToCheck.push(ability.primaryStat.trim());
+  }
+  if (ability.linkedStats && Array.isArray(ability.linkedStats)) {
+    statsToCheck.push(...ability.linkedStats);
+  } else if (ability.linkedStat) {
+    statsToCheck.push(ability.linkedStat);
+  }
+
+  if (statsToCheck.length === 0) {
+    return { rank: "Iron", subLevel: 1, label: "Iron 1", index: 0 };
+  }
+
+  let highest = { rank: "Iron", subLevel: 1, label: "Iron 1", index: 0 };
+
+  for (const s of statsToCheck) {
+    const normKey = s.toLowerCase();
+    let fullKey = normKey;
+    if (normKey === "pow") fullKey = "power";
+    if (normKey === "vit") fullKey = "vitality";
+    if (normKey === "spi") fullKey = "spirit";
+    if (normKey === "agi") fullKey = "agility";
+    if (normKey === "end") fullKey = "endurance";
+    if (normKey === "pre") fullKey = "precision";
+    if (normKey === "wil") fullKey = "willpower";
+    if (normKey === "cha") fullKey = "charisma";
+
+    const statVal = finalStats[fullKey] ?? finalStats[normKey] ?? 0;
+    const currentRankObj = getRankForStatValue(statVal);
+    if (currentRankObj.index > highest.index) {
+      highest = currentRankObj;
+    }
+  }
+
+  return highest;
+}
+
+export interface EvolutionCalculationResult {
+  primaryStatKey: string;
+  primaryStatVal: number;
+  maxRankSlots: number;
+  isDormant: boolean;
+  activeModifiers: EvolutionModifier[];
+  earnedDormantModifiers: EvolutionModifier[];
+  lockedModifiers: EvolutionModifier[];
+  nextLockedModifier: EvolutionModifier | null;
+}
+
+export function calculateAbilityEvolutions(
+  ability: Ability,
+  rank?: string,
+  finalStats?: Record<string, number>
+): EvolutionCalculationResult {
+  const r = (rank || "Iron").trim().toLowerCase();
+  const primaryStatKey = (ability.primaryStat || "power").toLowerCase();
+  let fullKey = primaryStatKey;
+  if (primaryStatKey === "pow") fullKey = "power";
+  if (primaryStatKey === "vit") fullKey = "vitality";
+  if (primaryStatKey === "spi") fullKey = "spirit";
+  if (primaryStatKey === "agi") fullKey = "agility";
+  if (primaryStatKey === "end") fullKey = "endurance";
+  if (primaryStatKey === "pre") fullKey = "precision";
+  if (primaryStatKey === "wil") fullKey = "willpower";
+  if (primaryStatKey === "cha") fullKey = "charisma";
+
+  const statVal = finalStats ? (finalStats[fullKey] ?? finalStats[primaryStatKey] ?? 0) : 0;
+  const mods = ability.evolutionModifiers || [];
+
+  let maxRankSlots = 0;
+  if (r === "bronze") maxRankSlots = 9;
+  else if (r === "silver") maxRankSlots = 14;
+  else if (r === "gold") maxRankSlots = 19;
+  else if (r === "diamond") maxRankSlots = 24;
+  else maxRankSlots = 0; // Iron = 0 active modifiers
+
+  const isDormant = r === "iron";
+
+  const activeModifiers: EvolutionModifier[] = [];
+  const earnedDormantModifiers: EvolutionModifier[] = [];
+  const lockedModifiers: EvolutionModifier[] = [];
+
+  mods.forEach((mod, idx) => {
+    const meetsStat = statVal >= mod.requiredStat;
+
+    if (isDormant) {
+      if (meetsStat && idx < 4) {
+        earnedDormantModifiers.push(mod);
+      } else {
+        lockedModifiers.push(mod);
+      }
+    } else {
+      if (meetsStat && idx < maxRankSlots) {
+        activeModifiers.push(mod);
+      } else {
+        lockedModifiers.push(mod);
+      }
+    }
+  });
+
+  const nextLockedModifier = lockedModifiers.length > 0 ? lockedModifiers[0] : null;
+
+  return {
+    primaryStatKey,
+    primaryStatVal: statVal,
+    maxRankSlots,
+    isDormant,
+    activeModifiers,
+    earnedDormantModifiers,
+    lockedModifiers,
+    nextLockedModifier,
+  };
+}
+
+export const TITANS_STRIKE_PRESET: Omit<Ability, "id" | "characterId"> = {
+  name: "Titan's Strike",
+  nickname: "TStrike",
+  description: "Target rolls END against Lucas's POW. On failure: Target is Stunned. If the Stun succeeds: Attack gains WIL ÷ 2 additional damage.",
+  cost: 4,
+  cooldown: 240,
+  range: "Melee",
+  speed: "Standard",
+  rollFormula: "POWr * 2",
+  primaryStat: "power",
+  linkedStats: ["power", "willpower"],
+  assignedToQuickRolls: true,
+  type: "Attack",
+  evolutionModifiers: [
+    {
+      id: "mod-1",
+      name: "Driving Impact",
+      rankLabel: "Iron 2",
+      requiredStat: 4,
+      effect: "Whether or not the Stun succeeds, target is driven 5 ft backward. If target cannot move because of a wall, creature, or other solid obstruction: Target instead takes +POW damage."
+    },
+    {
+      id: "mod-2",
+      name: "Break Their Ground",
+      rankLabel: "Iron 3",
+      requiredStat: 6,
+      effect: "A creature that fails the END resistance becomes: Stunned + Prone. Lucas may also strike the ground instead of a creature. Creatures within 5 ft of the impact must resist with END or become Prone. No direct damage to secondary targets."
+    },
+    {
+      id: "mod-3",
+      name: "Unstoppable Force",
+      rankLabel: "Iron 4",
+      requiredStat: 8,
+      effect: "Titan's Strike can no longer be completely negated by successful END resistance. On successful resistance: Target avoids Stun and Prone but still suffers the 5-ft knockback. On failed resistance: Lucas may follow the target through the knockback at 0-second movement cost, remaining adjacent."
+    }
+  ]
+};

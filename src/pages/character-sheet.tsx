@@ -12,7 +12,7 @@ import {
   Shield, ArrowLeft, Loader2, Trash2, Heart, Dice5,
   RotateCcw, Swords, Sparkles, Plus, Edit2, Upload, Download,
   Coins, Package, Hammer, Layers, Flame, BookText, UserCheck, X,
-  Palette, Clock, ExternalLink, ChevronDown, ChevronRight, Lock
+  Palette, Clock, ExternalLink, ChevronDown, ChevronRight, Lock, Zap
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -31,7 +31,8 @@ import {
 } from "@/hooks/useStorage";
 import { 
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
-  Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula 
+  Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
+  getAbilityHighestRank, calculateAbilityEvolutions
 } from "@/lib/storage";
 
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
@@ -3942,11 +3943,7 @@ export default function CharacterSheet() {
             </div>
 
             {(() => {
-              // Helper to render ability card
-              const renderAbilityCard = (ability: Ability, currentGroupList: Ability[], forceExpand?: boolean) => {
-                const isExpanded = forceExpand !== undefined ? forceExpand : !!expandedAbilities[ability.id];
-                
-                // Collect and format flat bonuses to display
+              const getAbilityBonusList = (ability: Ability): string[] => {
                 const bonuses: string[] = [];
                 if (ability.bonusPower) bonuses.push(`+${ability.bonusPower} POW`);
                 if (ability.bonusVitality) bonuses.push(`+${ability.bonusVitality} VIT`);
@@ -3965,15 +3962,23 @@ export default function CharacterSheet() {
                 if (ability.bonusInitiative) bonuses.push(`+${ability.bonusInitiative} Initiative`);
                 if (ability.resistances) bonuses.push(`Resistances: ${ability.resistances}`);
                 if (ability.immunities) bonuses.push(`Immunities: ${ability.immunities}`);
+                return bonuses;
+              };
+
+              // Helper to render ability card
+              const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean) => {
+                const isExpanded = expandedAbilities[ability.id];
+                const bonuses = getAbilityBonusList(ability);
+                const rankInfo = getAbilityHighestRank(ability, finalStats);
+                const evolData = calculateAbilityEvolutions(ability, character.rank, finalStats);
 
                 return (
                   <Card 
-                    id={`ability-card-${ability.id}`}
-                    key={ability.id} 
-                    draggable={true}
-                    onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
+                    key={ability.id}
+                    draggable
+                    onDragStart={(e) => handleAbilityDragStart(e, ability.id, allList)}
                     onDragOver={handleAbilityDragOver}
-                    onDrop={(e) => handleAbilityDrop(e, ability.id, currentGroupList)}
+                    onDrop={(e) => handleAbilityDrop(e, ability.id, allList)}
                     className="bg-card border border-border/40 hover:border-primary/20 transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative"
                   >
                     <CardContent className="p-3.5 space-y-2">
@@ -3984,23 +3989,10 @@ export default function CharacterSheet() {
                       >
                         <div className="space-y-1.5 flex-1 pr-4">
                           <div className="flex items-center gap-2 flex-wrap">
-                            {/* Level Incrementer moved here (top left) */}
-                            <div className="flex items-center gap-1 border border-border/40 px-1.5 py-0.5 rounded-none bg-background/50 text-[10px] font-semibold text-muted-foreground font-mono" onClick={e => e.stopPropagation()}>
-                              <span>Lvl: {ability.level || 1}</span>
-                              <button 
-                                type="button"
-                                onClick={() => handleAbilityLevelChange(ability.id, "down")} 
-                                className="w-3.5 h-3.5 flex items-center justify-center bg-accent hover:bg-accent/80 text-foreground rounded-none text-[9px] font-bold cursor-pointer"
-                              >
-                                -
-                              </button>
-                              <button 
-                                type="button"
-                                onClick={() => handleAbilityLevelChange(ability.id, "up")} 
-                                className="w-3.5 h-3.5 flex items-center justify-center bg-accent hover:bg-accent/80 text-foreground rounded-none text-[9px] font-bold cursor-pointer"
-                              >
-                                +
-                              </button>
+                            {/* Read-Only Rank Marker Badge */}
+                            <div className="flex items-center gap-1 border border-amber-700/50 px-2 py-0.5 rounded-none bg-amber-950/40 text-[10px] font-bold text-amber-300 font-mono shadow-sm">
+                              <Zap className="w-3 h-3 text-amber-400" />
+                              <span>Rank: {rankInfo.label}</span>
                             </div>
 
                             <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
@@ -4061,7 +4053,7 @@ export default function CharacterSheet() {
                         </div>
                       </div>
 
-                      {/* Expandable Content (Markdown + Stats + Formulas) */}
+                      {/* Expandable Content (Markdown + Stats + Formulas + Evolution Modifiers) */}
                       {isExpanded && (
                         <div className="border-t border-border/20 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
                           {ability.rollFormula && (

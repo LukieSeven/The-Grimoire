@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Edit2, Trash2 } from "lucide-react";
-import { Ability } from "@/lib/storage";
+import { Edit2, Trash2, Zap, Plus } from "lucide-react";
+import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, TITANS_STRIKE_PRESET } from "@/lib/storage";
 
 interface Props {
   characterId: number;
@@ -37,6 +38,8 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const [speed, setSpeed] = useState("");
   const [rollFormula, setRollFormula] = useState("");
   const [type, setType] = useState("");
+  const [primaryStat, setPrimaryStat] = useState("power");
+  const [evolutionModifiers, setEvolutionModifiers] = useState<EvolutionModifier[]>([]);
   const [linkedStats, setLinkedStats] = useState<string[]>([]);
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
   const [essenceId, setEssenceId] = useState<number | null>(null);
@@ -71,6 +74,8 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setSpeed("");
     setRollFormula("");
     setType("");
+    setPrimaryStat("power");
+    setEvolutionModifiers([]);
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
     setEssenceId(null);
@@ -111,6 +116,8 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setSpeed(ability.speed);
     setRollFormula(ability.rollFormula);
     setType(ability.type || "");
+    setPrimaryStat(ability.primaryStat || "power");
+    setEvolutionModifiers(ability.evolutionModifiers ? [...ability.evolutionModifiers] : []);
     setLinkedStats(ability.linkedStats || (ability.linkedStat ? [ability.linkedStat] : []));
     setAssignedToQuickRolls(ability.assignedToQuickRolls);
     const isIp = !!(ability.isInnatePassive || ability.essenceId === -1 || ability.type === "Innate Passive");
@@ -134,6 +141,53 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setDtBuff(ability.dtBuff || 0);
     setBonusInitiative(ability.bonusInitiative || 0);
     setMode("edit");
+  };
+
+  const handleLoadTitansStrikePreset = () => {
+    setName(TITANS_STRIKE_PRESET.name);
+    setNickname(TITANS_STRIKE_PRESET.nickname || "");
+    setDescription(TITANS_STRIKE_PRESET.description);
+    setCost(TITANS_STRIKE_PRESET.cost);
+    setCooldown(TITANS_STRIKE_PRESET.cooldown);
+    setRange(TITANS_STRIKE_PRESET.range);
+    setSpeed(TITANS_STRIKE_PRESET.speed);
+    setRollFormula(TITANS_STRIKE_PRESET.rollFormula);
+    setType(TITANS_STRIKE_PRESET.type || "Attack");
+    setPrimaryStat("power");
+    setLinkedStats(["power", "willpower"]);
+    setEvolutionModifiers(TITANS_STRIKE_PRESET.evolutionModifiers ? [...TITANS_STRIKE_PRESET.evolutionModifiers] : []);
+    toast.success("Loaded Titan's Strike preset!");
+  };
+
+  const handleAddEvolutionModifier = () => {
+    const nextIdx = evolutionModifiers.length;
+    if (nextIdx >= EVOLUTION_THRESHOLDS_TABLE.length) {
+      toast.error("Maximum of 24 Evolution Modifier slots reached.");
+      return;
+    }
+    const info = EVOLUTION_THRESHOLDS_TABLE[nextIdx];
+    const newMod: EvolutionModifier = {
+      id: `mod-${Date.now()}-${nextIdx}`,
+      name: `Modifier ${nextIdx + 1}`,
+      rankLabel: info.rankLabel,
+      requiredStat: info.requiredStat,
+      effect: "",
+    };
+    setEvolutionModifiers(prev => [...prev, newMod]);
+  };
+
+  const handleUpdateEvolutionModifier = (idx: number, field: keyof EvolutionModifier, val: any) => {
+    setEvolutionModifiers(prev => {
+      const copy = [...prev];
+      if (copy[idx]) {
+        copy[idx] = { ...copy[idx], [field]: val };
+      }
+      return copy;
+    });
+  };
+
+  const handleRemoveEvolutionModifier = (idx: number) => {
+    setEvolutionModifiers(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -160,6 +214,8 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
       speed,
       rollFormula,
       type,
+      primaryStat,
+      evolutionModifiers,
       linkedStats,
       assignedToQuickRolls,
       essenceId: isInnatePassive ? null : essenceId,
@@ -396,8 +452,109 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
 
             {/* Description textarea */}
             <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Effects</label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the effects of this ability..." className="bg-background min-h-[60px] rounded-none font-serif text-sm" />
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
+              <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the base effects of this ability..." className="bg-background min-h-[60px] rounded-none font-serif text-sm" />
+            </div>
+
+            {/* Primary Stat & Evolution Modifiers Section */}
+            <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
+                </div>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleLoadTitansStrikePreset}
+                  className="h-7 text-[10px] bg-amber-950/40 border-amber-800/40 text-amber-300 hover:bg-amber-900/50 rounded-none gap-1 font-mono"
+                >
+                  ⚡ Load Titan's Strike Preset
+                </Button>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Primary Stat (Drives Evolution Modifiers)</label>
+                <select 
+                  value={primaryStat} 
+                  onChange={e => setPrimaryStat(e.target.value)} 
+                  className="w-full h-8 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono uppercase"
+                >
+                  {STAT_OPTIONS.map(st => (
+                    <option key={st} value={st}>
+                      {st.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Evolution Modifier Slots ({evolutionModifiers.length}/24)</label>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleAddEvolutionModifier}
+                    disabled={evolutionModifiers.length >= 24}
+                    className="h-6 text-[9px] bg-background border-border/60 rounded-none gap-1 font-bold"
+                  >
+                    <Plus className="w-3 h-3" /> Add Slot
+                  </Button>
+                </div>
+
+                {evolutionModifiers.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground italic font-serif py-1">
+                    No evolution modifiers defined. Tap "Add Slot" or load a preset to add evolution upgrades.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {evolutionModifiers.map((mod, idx) => (
+                      <div key={mod.id || idx} className="bg-background/80 border border-border/60 p-2 space-y-1.5 relative">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none">
+                              {mod.rankLabel} (Stat {mod.requiredStat})
+                            </Badge>
+                            <span className="text-[10px] font-mono text-muted-foreground">Slot #{idx + 1}</span>
+                          </div>
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => handleRemoveEvolutionModifier(idx)}
+                            className="h-5 w-5 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-1">
+                            <label className="text-[8px] font-bold uppercase text-muted-foreground block">Modifier Name</label>
+                            <Input 
+                              value={mod.name} 
+                              onChange={e => handleUpdateEvolutionModifier(idx, "name", e.target.value)} 
+                              placeholder="e.g. Driving Impact" 
+                              className="h-7 text-xs bg-background rounded-none font-bold" 
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[8px] font-bold uppercase text-muted-foreground block">Evolution Effect</label>
+                            <Input 
+                              value={mod.effect} 
+                              onChange={e => handleUpdateEvolutionModifier(idx, "effect", e.target.value)} 
+                              placeholder="Effect unlocked at threshold..." 
+                              className="h-7 text-xs bg-background rounded-none font-serif" 
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Stat & Resource Bonuses */}
