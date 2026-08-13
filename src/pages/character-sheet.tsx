@@ -3976,7 +3976,7 @@ export default function CharacterSheet() {
                   <Card 
                     key={ability.id}
                     draggable
-                    onDragStart={(e) => handleAbilityDragStart(e, ability.id, allList)}
+                    onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
                     onDragOver={handleAbilityDragOver}
                     onDrop={(e) => handleAbilityDrop(e, ability.id, allList)}
                     className="bg-card border border-border/40 hover:border-primary/20 transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative"

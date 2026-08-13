@@ -176,6 +176,7 @@ export interface Ability {
   id: number;
   characterId: number;
   name: string;
+  nickname?: string;
   description: string;
   cost: number;
   cooldown: number;
