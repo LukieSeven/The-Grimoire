@@ -4076,6 +4076,29 @@ export default function CharacterSheet() {
                             className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-1"
                             dangerouslySetInnerHTML={{ __html: parseMarkdown(ability.description || "*No description.*") }}
                           />
+
+                          {/* Active Evolution Modifiers section — ONLY rendered if ability meets requirements and has active modifiers */}
+                          {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (
+                            <div className="border-t border-amber-900/30 pt-2 space-y-1.5 bg-amber-950/10 p-2 border border-amber-900/40 mt-2">
+                              <div className="flex items-center gap-1.5 text-amber-400 font-serif text-[11px] font-bold uppercase">
+                                <Zap className="w-3 h-3" />
+                                <span>Active Evolution Modifiers</span>
+                              </div>
+                              <div className="space-y-1">
+                                {evolData.activeModifiers.map((mod, idx) => (
+                                  <div key={mod.id || idx} className="text-xs bg-background/60 border border-amber-900/30 p-1.5 space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge className="bg-amber-950 text-amber-400 border border-amber-800/40 text-[8px] font-mono px-1 py-0 rounded-none">
+                                        {mod.rankLabel}
+                                      </Badge>
+                                      {mod.name && <span className="font-bold text-amber-200">{mod.name}</span>}
+                                    </div>
+                                    {mod.effect && <p className="text-[11px] text-muted-foreground font-serif leading-tight">{mod.effect}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </CardContent>
