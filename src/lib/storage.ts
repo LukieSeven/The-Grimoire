@@ -1846,10 +1846,51 @@ export function getAbilityHighestRank(ability: Ability, finalStats: Record<strin
   return highest;
 }
 
+export function getHighestStatValueForAbility(ability: Ability, finalStats: Record<string, number>): { statKey: string; statVal: number } {
+  const statsToCheck: string[] = [];
+  if (ability.primaryStat && ability.primaryStat.trim()) {
+    statsToCheck.push(ability.primaryStat.trim());
+  }
+  if (ability.linkedStats && Array.isArray(ability.linkedStats)) {
+    statsToCheck.push(...ability.linkedStats);
+  } else if (ability.linkedStat) {
+    statsToCheck.push(ability.linkedStat);
+  }
+
+  if (statsToCheck.length === 0) {
+    return { statKey: "power", statVal: 0 };
+  }
+
+  let maxStatKey = statsToCheck[0];
+  let maxVal = -1;
+
+  for (const s of statsToCheck) {
+    const normKey = s.toLowerCase();
+    let fullKey = normKey;
+    if (normKey === "pow") fullKey = "power";
+    if (normKey === "vit") fullKey = "vitality";
+    if (normKey === "spi") fullKey = "spirit";
+    if (normKey === "agi") fullKey = "agility";
+    if (normKey === "end") fullKey = "endurance";
+    if (normKey === "pre") fullKey = "precision";
+    if (normKey === "wil") fullKey = "willpower";
+    if (normKey === "cha") fullKey = "charisma";
+
+    const v = finalStats[fullKey] ?? finalStats[normKey] ?? 0;
+    if (v > maxVal) {
+      maxVal = v;
+      maxStatKey = fullKey;
+    }
+  }
+
+  return { statKey: maxStatKey, statVal: Math.max(0, maxVal) };
+}
+
 export interface EvolutionCalculationResult {
   primaryStatKey: string;
   primaryStatVal: number;
   maxRankSlots: number;
+  earnedSlotCount: number;
   isDormant: boolean;
   activeModifiers: EvolutionModifier[];
   earnedDormantModifiers: EvolutionModifier[];
@@ -1863,18 +1904,11 @@ export function calculateAbilityEvolutions(
   finalStats?: Record<string, number>
 ): EvolutionCalculationResult {
   const r = (rank || "Iron").trim().toLowerCase();
-  const primaryStatKey = (ability.primaryStat || "power").toLowerCase();
-  let fullKey = primaryStatKey;
-  if (primaryStatKey === "pow") fullKey = "power";
-  if (primaryStatKey === "vit") fullKey = "vitality";
-  if (primaryStatKey === "spi") fullKey = "spirit";
-  if (primaryStatKey === "agi") fullKey = "agility";
-  if (primaryStatKey === "end") fullKey = "endurance";
-  if (primaryStatKey === "pre") fullKey = "precision";
-  if (primaryStatKey === "wil") fullKey = "willpower";
-  if (primaryStatKey === "cha") fullKey = "charisma";
+  
+  const { statKey: primaryStatKey, statVal } = finalStats 
+    ? getHighestStatValueForAbility(ability, finalStats)
+    : { statKey: (ability.primaryStat || "power").toLowerCase(), statVal: 0 };
 
-  const statVal = finalStats ? (finalStats[fullKey] ?? finalStats[primaryStatKey] ?? 0) : 0;
   const mods = ability.evolutionModifiers || [];
 
   let maxRankSlots = 0;
@@ -1885,6 +1919,8 @@ export function calculateAbilityEvolutions(
   else maxRankSlots = 0; // Iron = 0 active modifiers
 
   const isDormant = r === "iron";
+  const earnedStatIndex = getRankForStatValue(statVal).index;
+  const earnedSlotCount = isDormant ? 0 : Math.min(maxRankSlots, earnedStatIndex);
 
   const activeModifiers: EvolutionModifier[] = [];
   const earnedDormantModifiers: EvolutionModifier[] = [];
@@ -1900,7 +1936,7 @@ export function calculateAbilityEvolutions(
         lockedModifiers.push(mod);
       }
     } else {
-      if (meetsStat && idx < maxRankSlots) {
+      if (meetsStat && idx < earnedSlotCount) {
         activeModifiers.push(mod);
       } else {
         lockedModifiers.push(mod);
@@ -1914,6 +1950,7 @@ export function calculateAbilityEvolutions(
     primaryStatKey,
     primaryStatVal: statVal,
     maxRankSlots,
+    earnedSlotCount,
     isDormant,
     activeModifiers,
     earnedDormantModifiers,

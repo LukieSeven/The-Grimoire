@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useListEssences, useAddAbility, useUpdateAbility, useDeleteAbility } from "@/hooks/useStorage";
+import { useListEssences, useAddAbility, useUpdateAbility, useDeleteAbility, useGetCharacter } from "@/hooks/useStorage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Edit2, Trash2, Zap, Plus } from "lucide-react";
-import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE } from "@/lib/storage";
+import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
 
 interface Props {
   characterId: number;
@@ -19,6 +19,7 @@ const STAT_OPTIONS = ["power", "vitality", "spirit", "agility", "endurance", "pr
 
 export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const { data: essences } = useListEssences(characterId);
+  const { data: character } = useGetCharacter(characterId);
   const addAbility = useAddAbility();
   const updateAbility = useUpdateAbility();
   const deleteAbility = useDeleteAbility();
@@ -440,95 +441,158 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
               <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the base effects of this ability..." className="bg-background min-h-[60px] rounded-none font-serif text-sm" />
             </div>
 
-            {/* Primary Stat & Evolution Modifiers Section */}
-            <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" />
-                <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
-              </div>
+            {/* Ability Evolution System Section */}
+            {(() => {
+              const currentDraftAbility: Ability = {
+                id: editingId || 0,
+                characterId,
+                name: name || "Draft Ability",
+                description,
+                cost,
+                cooldown,
+                range,
+                speed,
+                rollFormula,
+                linkedStats,
+                assignedToQuickRolls,
+                evolutionModifiers,
+              };
 
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Primary Stat (Drives Evolution Modifiers)</label>
-                <select 
-                  value={primaryStat} 
-                  onChange={e => setPrimaryStat(e.target.value)} 
-                  className="w-full h-8 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono uppercase"
-                >
-                  {STAT_OPTIONS.map(st => (
-                    <option key={st} value={st}>
-                      {st.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              const charStats: Record<string, number> = {
+                power: character?.power || 0,
+                vitality: character?.vitality || 0,
+                spirit: character?.spirit || 0,
+                agility: character?.agility || 0,
+                endurance: character?.endurance || 0,
+                precision: character?.precision || 0,
+                willpower: character?.willpower || 0,
+                charisma: character?.charisma || 0,
+              };
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Evolution Modifier Slots ({evolutionModifiers.length}/24)</label>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleAddEvolutionModifier}
-                    disabled={evolutionModifiers.length >= 24}
-                    className="h-6 text-[9px] bg-background border-border/60 rounded-none gap-1 font-bold"
-                  >
-                    <Plus className="w-3 h-3" /> Add Slot
-                  </Button>
-                </div>
+              const evolRes = calculateAbilityEvolutions(
+                currentDraftAbility,
+                character?.rank || "Iron",
+                charStats
+              );
 
-                {evolutionModifiers.length === 0 ? (
-                  <p className="text-[10px] text-muted-foreground italic font-serif py-1">
-                    No evolution modifiers defined. Tap "Add Slot" to add evolution upgrades.
-                  </p>
-                ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {evolutionModifiers.map((mod, idx) => (
-                      <div key={mod.id || idx} className="bg-background/80 border border-border/60 p-2 space-y-1.5 relative">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none">
-                              {mod.rankLabel} (Stat {mod.requiredStat})
-                            </Badge>
-                            <span className="text-[10px] font-mono text-muted-foreground">Slot #{idx + 1}</span>
-                          </div>
-                          <Button 
-                            type="button" 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleRemoveEvolutionModifier(idx)}
-                            className="h-5 w-5 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-2">
-                          <div className="col-span-1">
-                            <label className="text-[8px] font-bold uppercase text-muted-foreground block">Modifier Name</label>
-                            <Input 
-                              value={mod.name} 
-                              onChange={e => handleUpdateEvolutionModifier(idx, "name", e.target.value)} 
-                              placeholder="e.g. Knockback, Empower" 
-                              className="h-7 text-xs bg-background rounded-none font-bold" 
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="text-[8px] font-bold uppercase text-muted-foreground block">Evolution Effect</label>
-                            <Input 
-                              value={mod.effect} 
-                              onChange={e => handleUpdateEvolutionModifier(idx, "effect", e.target.value)} 
-                              placeholder="Effect unlocked at threshold..." 
-                              className="h-7 text-xs bg-background rounded-none font-serif" 
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              return (
+                <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
                   </div>
-                )}
-              </div>
-            </div>
+
+                  {evolRes.isDormant ? (
+                    <p className="text-xs text-muted-foreground font-serif italic py-1">
+                      Iron Rank — Evolution modifiers manifest upon reaching Bronze.
+                    </p>
+                  ) : evolRes.earnedSlotCount === 0 ? (
+                    <p className="text-xs text-muted-foreground font-serif italic py-1">
+                      Stat value too low to earn evolution modifier slots. Increase your linked attribute to unlock slots.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                      {Array.from({ length: evolRes.earnedSlotCount }).map((_, slotIdx) => {
+                        const slotMeta = EVOLUTION_THRESHOLDS_TABLE[slotIdx];
+                        const existingMod = evolutionModifiers[slotIdx];
+
+                        if (!existingMod) {
+                          return (
+                            <Button
+                              key={`empty-slot-${slotIdx}`}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const newMod: EvolutionModifier = {
+                                  id: `mod-${Date.now()}-${slotIdx}`,
+                                  name: "",
+                                  rankLabel: slotMeta.rankLabel,
+                                  requiredStat: slotMeta.requiredStat,
+                                  effect: "",
+                                };
+                                setEvolutionModifiers(prev => {
+                                  const copy = [...prev];
+                                  copy[slotIdx] = newMod;
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-8 bg-amber-950/30 border-amber-800/40 text-amber-300 hover:bg-amber-900/50 rounded-none font-mono text-xs flex items-center justify-start gap-2 cursor-pointer"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-amber-500" />
+                              <span>+ {slotMeta.rankLabel} - Ability Mod</span>
+                            </Button>
+                          );
+                        }
+
+                        return (
+                          <div key={existingMod.id || slotIdx} className="bg-background/80 border border-border/60 p-2 space-y-1.5 relative">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none">
+                                  {slotMeta.rankLabel} (Stat {slotMeta.requiredStat})
+                                </Badge>
+                                <span className="text-[10px] font-mono text-muted-foreground">Slot #{slotIdx + 1}</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setEvolutionModifiers(prev => prev.filter((_, i) => i !== slotIdx));
+                                }}
+                                className="h-5 w-5 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-1">
+                                <label className="text-[8px] font-bold uppercase text-muted-foreground block">Modifier Name</label>
+                                <Input
+                                  value={existingMod.name}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setEvolutionModifiers(prev => {
+                                      const copy = [...prev];
+                                      if (copy[slotIdx]) {
+                                        copy[slotIdx] = { ...copy[slotIdx], name: val };
+                                      }
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="Optional name..."
+                                  className="h-7 text-xs bg-background rounded-none font-bold"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="text-[8px] font-bold uppercase text-muted-foreground block">Evolution Effect / Info</label>
+                                <Input
+                                  value={existingMod.effect}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setEvolutionModifiers(prev => {
+                                      const copy = [...prev];
+                                      if (copy[slotIdx]) {
+                                        copy[slotIdx] = { ...copy[slotIdx], effect: val };
+                                      }
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="Describe the modifier effect..."
+                                  className="h-7 text-xs bg-background rounded-none font-serif"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Stat & Resource Bonuses */}
             <div className="border-t border-border/20 pt-3 space-y-2">
