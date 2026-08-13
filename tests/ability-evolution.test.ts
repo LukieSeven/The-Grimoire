@@ -10,8 +10,8 @@ import type { Ability, EvolutionModifier } from "../src/lib/storage.ts";
 const createTestAbility = (override?: Partial<Ability>): Ability => ({
   id: 101,
   characterId: 1,
-  name: "Titan's Strike",
-  description: "Target rolls END against Lucas's POW. On failure: Target is Stunned.",
+  name: "Ability 1",
+  description: "Target rolls resistance against stat.",
   cost: 4,
   cooldown: 240,
   range: "Melee",
@@ -23,24 +23,24 @@ const createTestAbility = (override?: Partial<Ability>): Ability => ({
   evolutionModifiers: [
     {
       id: "mod-1",
-      name: "Driving Impact",
+      name: "Modifier 1",
       rankLabel: "Iron 2",
       requiredStat: 4,
-      effect: "Whether or not the Stun succeeds, target is driven 5 ft backward."
+      effect: "Modifier 1 effect"
     },
     {
       id: "mod-2",
-      name: "Break Their Ground",
+      name: "Modifier 2",
       rankLabel: "Iron 3",
       requiredStat: 6,
-      effect: "Target becomes Stunned + Prone."
+      effect: "Modifier 2 effect"
     },
     {
       id: "mod-3",
-      name: "Unstoppable Force",
+      name: "Modifier 3",
       rankLabel: "Iron 4",
       requiredStat: 8,
-      effect: "Cannot be completely negated."
+      effect: "Modifier 3 effect"
     },
     {
       id: "mod-4",
@@ -102,9 +102,9 @@ test("CASE 1: Rank = Iron, POW = 8 -> 0 active evolution modifiers (Dormant)", (
   assert.equal(res.isDormant, true);
   assert.equal(res.activeModifiers.length, 0);
   assert.equal(res.earnedDormantModifiers.length, 3); // Modifiers 1..3 earned but dormant
-  assert.equal(res.earnedDormantModifiers[0].name, "Driving Impact");
-  assert.equal(res.earnedDormantModifiers[1].name, "Break Their Ground");
-  assert.equal(res.earnedDormantModifiers[2].name, "Unstoppable Force");
+  assert.equal(res.earnedDormantModifiers[0].name, "Modifier 1");
+  assert.equal(res.earnedDormantModifiers[1].name, "Modifier 2");
+  assert.equal(res.earnedDormantModifiers[2].name, "Modifier 3");
 });
 
 test("CASE 2: Rank = Bronze, POW = 8 -> Modifiers 1–3 active", () => {
@@ -115,7 +115,7 @@ test("CASE 2: Rank = Bronze, POW = 8 -> Modifiers 1–3 active", () => {
   assert.equal(res.activeModifiers.length, 3);
   assert.deepEqual(
     res.activeModifiers.map(m => m.name),
-    ["Driving Impact", "Break Their Ground", "Unstoppable Force"]
+    ["Modifier 1", "Modifier 2", "Modifier 3"]
   );
   assert.equal(res.nextLockedModifier?.name, "Modifier 4");
 });

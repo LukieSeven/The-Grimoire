@@ -479,7 +479,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
 
                 {evolutionModifiers.length === 0 ? (
                   <p className="text-[10px] text-muted-foreground italic font-serif py-1">
-                    No evolution modifiers defined. Tap "Add Slot" or load a preset to add evolution upgrades.
+                    No evolution modifiers defined. Tap "Add Slot" to add evolution upgrades.
                   </p>
                 ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
@@ -509,7 +509,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             <Input 
                               value={mod.name} 
                               onChange={e => handleUpdateEvolutionModifier(idx, "name", e.target.value)} 
-                              placeholder="e.g. Driving Impact" 
+                              placeholder="e.g. Knockback, Empower" 
                               className="h-7 text-xs bg-background rounded-none font-bold" 
                             />
                           </div>
