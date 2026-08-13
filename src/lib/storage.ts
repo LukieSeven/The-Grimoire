@@ -1848,10 +1848,7 @@ export function getAbilityHighestRank(ability: Ability, finalStats: Record<strin
 
 export function getHighestStatValueForAbility(ability: Ability, finalStats: Record<string, number>): { statKey: string; statVal: number } {
   const statsToCheck: string[] = [];
-  if (ability.primaryStat && ability.primaryStat.trim()) {
-    statsToCheck.push(ability.primaryStat.trim());
-  }
-  if (ability.linkedStats && Array.isArray(ability.linkedStats)) {
+  if (ability.linkedStats && Array.isArray(ability.linkedStats) && ability.linkedStats.length > 0) {
     statsToCheck.push(...ability.linkedStats);
   } else if (ability.linkedStat) {
     statsToCheck.push(ability.linkedStat);

@@ -469,23 +469,19 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                 charisma: character?.charisma || 0,
               };
 
-              const evolRes = calculateAbilityEvolutions(
+                  const evolRes = calculateAbilityEvolutions(
                 currentDraftAbility,
                 character?.rank || "Iron",
                 charStats
               );
 
-              // Completely remove the entire evolution box if ability doesn't meet requirements (Iron or 0 earned slots)
-              if (evolRes.isDormant || evolRes.earnedSlotCount === 0) {
+              // Completely remove the entire evolution box if ability doesn't meet requirements (Iron, 0 linkedStats, or 0 earned slots)
+              if (evolRes.isDormant || evolRes.earnedSlotCount === 0 || !linkedStats || linkedStats.length === 0) {
                 return null;
               }
 
               return (
                 <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
-                  <div className="flex items-center gap-2">
-                    <Zap className="w-4 h-4 text-amber-500" />
-                    <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
-                  </div>
                     <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                       {Array.from({ length: evolRes.earnedSlotCount }).map((_, slotIdx) => {
                         const slotMeta = EVOLUTION_THRESHOLDS_TABLE[slotIdx];
