@@ -1,7 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { 
-  TITANS_STRIKE_PRESET, 
   calculateAbilityEvolutions, 
   getRankForStatValue, 
   getAbilityHighestRank 
@@ -11,13 +10,13 @@ import type { Ability, EvolutionModifier } from "../src/lib/storage.ts";
 const createTestAbility = (override?: Partial<Ability>): Ability => ({
   id: 101,
   characterId: 1,
-  name: TITANS_STRIKE_PRESET.name,
-  description: TITANS_STRIKE_PRESET.description,
-  cost: TITANS_STRIKE_PRESET.cost,
-  cooldown: TITANS_STRIKE_PRESET.cooldown,
-  range: TITANS_STRIKE_PRESET.range,
-  speed: TITANS_STRIKE_PRESET.speed,
-  rollFormula: TITANS_STRIKE_PRESET.rollFormula,
+  name: "Titan's Strike",
+  description: "Target rolls END against Lucas's POW. On failure: Target is Stunned.",
+  cost: 4,
+  cooldown: 240,
+  range: "Melee",
+  speed: "Standard",
+  rollFormula: "POWr * 2",
   primaryStat: "power",
   linkedStats: ["power", "willpower"],
   assignedToQuickRolls: true,

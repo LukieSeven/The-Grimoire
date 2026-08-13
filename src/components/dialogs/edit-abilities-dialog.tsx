@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Edit2, Trash2, Zap, Plus } from "lucide-react";
-import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, TITANS_STRIKE_PRESET } from "@/lib/storage";
+import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE } from "@/lib/storage";
 
 interface Props {
   characterId: number;
@@ -141,22 +141,6 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setDtBuff(ability.dtBuff || 0);
     setBonusInitiative(ability.bonusInitiative || 0);
     setMode("edit");
-  };
-
-  const handleLoadTitansStrikePreset = () => {
-    setName(TITANS_STRIKE_PRESET.name);
-    setNickname(TITANS_STRIKE_PRESET.nickname || "");
-    setDescription(TITANS_STRIKE_PRESET.description);
-    setCost(TITANS_STRIKE_PRESET.cost);
-    setCooldown(TITANS_STRIKE_PRESET.cooldown);
-    setRange(TITANS_STRIKE_PRESET.range);
-    setSpeed(TITANS_STRIKE_PRESET.speed);
-    setRollFormula(TITANS_STRIKE_PRESET.rollFormula);
-    setType(TITANS_STRIKE_PRESET.type || "Attack");
-    setPrimaryStat("power");
-    setLinkedStats(["power", "willpower"]);
-    setEvolutionModifiers(TITANS_STRIKE_PRESET.evolutionModifiers ? [...TITANS_STRIKE_PRESET.evolutionModifiers] : []);
-    toast.success("Loaded Titan's Strike preset!");
   };
 
   const handleAddEvolutionModifier = () => {
@@ -458,20 +442,9 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
 
             {/* Primary Stat & Evolution Modifiers Section */}
             <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-500" />
-                  <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
-                </div>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleLoadTitansStrikePreset}
-                  className="h-7 text-[10px] bg-amber-950/40 border-amber-800/40 text-amber-300 hover:bg-amber-900/50 rounded-none gap-1 font-mono"
-                >
-                  ⚡ Load Titan's Strike Preset
-                </Button>
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <h5 className="font-serif font-bold text-amber-400 text-sm uppercase tracking-wider">Ability Evolution System</h5>
               </div>
 
               <div>
