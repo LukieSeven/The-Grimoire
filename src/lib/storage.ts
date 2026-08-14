@@ -199,13 +199,67 @@ export interface SubAbility {
   immunities?: string;
 }
 
-export function parseFormulaOrNum(val: number | string | undefined | null, vars: Record<string, number>): number {
+export function buildFormulaVars(vars: Record<string, any> = {}): Record<string, number> {
+  const getVal = (fullKey: string, shortKey: string) => {
+    if (typeof vars[fullKey] === "number") return vars[fullKey] as number;
+    if (typeof vars[shortKey] === "number") return vars[shortKey] as number;
+    if (typeof vars[fullKey] === "string" && !isNaN(Number(vars[fullKey]))) return Number(vars[fullKey]);
+    if (typeof vars[shortKey] === "string" && !isNaN(Number(vars[shortKey]))) return Number(vars[shortKey]);
+    return 0;
+  };
+
+  const power = getVal("power", "pow");
+  const vitality = getVal("vitality", "vit");
+  const spirit = getVal("spirit", "spi");
+  const agility = getVal("agility", "agi");
+  const endurance = getVal("endurance", "end");
+  const precision = getVal("precision", "pre");
+  const willpower = getVal("willpower", "wil");
+  const charisma = getVal("charisma", "cha");
+
+  const rankStr = typeof vars.rank === "string" ? vars.rank : "Iron";
+
+  const numVars: Record<string, number> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    if (typeof v === "number") numVars[k] = v;
+  }
+
+  return {
+    ...numVars,
+    power,
+    pow: power,
+    vitality,
+    vit: vitality,
+    spirit,
+    spi: spirit,
+    agility,
+    agi: agility,
+    endurance,
+    end: endurance,
+    precision,
+    pre: precision,
+    willpower,
+    wil: willpower,
+    charisma,
+    cha: charisma,
+    powr: getModifierForStat(power, rankStr),
+    vitr: getModifierForStat(vitality, rankStr),
+    spir: getModifierForStat(spirit, rankStr),
+    agir: getModifierForStat(agility, rankStr),
+    endr: getModifierForStat(endurance, rankStr),
+    prer: getModifierForStat(precision, rankStr),
+    wilr: getModifierForStat(willpower, rankStr),
+    char: getModifierForStat(charisma, rankStr),
+  };
+}
+
+export function parseFormulaOrNum(val: number | string | undefined | null, vars: Record<string, any> = {}): number {
   if (val === undefined || val === null || val === "") return 0;
   if (typeof val === "number") return val;
   const str = String(val).trim();
   if (!str) return 0;
   if (/^-?\d+$/.test(str)) return parseInt(str, 10);
-  return evaluateFormula(str, vars);
+  return evaluateFormula(str, buildFormulaVars(vars));
 }
 
 export function hasStatModifiers(ability: Partial<Ability> | Partial<SubAbility>): boolean {

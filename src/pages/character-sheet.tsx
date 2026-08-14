@@ -718,6 +718,15 @@ export default function CharacterSheet() {
     return { name, costStr, statStr };
   };
 
+  const cleanLogReadoutLabel = (label?: string | null) => {
+    if (!label) return "";
+    let str = label.trim();
+    if (/long rest/i.test(str)) return "Long Rest";
+    str = str.replace(/\s+(Restore|Heal|Shield|Cost|Update)$/i, "");
+    str = str.replace(/\s*\((DT|HP|Mana|MP)\)/gi, "");
+    return str.trim();
+  };
+
   // famMax is calculated dynamically per-familiar
 
   // ── HP Adjustments ────────────────────────────────────────
@@ -736,10 +745,11 @@ export default function CharacterSheet() {
     const amount = parseInt(hpRemove) || 1;
     const cur = hp ?? character.currentHp;
     const next = Math.max(0, cur - amount);
+    const diff = next - cur !== 0 ? next - cur : -amount;
     setHp(next);
     setHpRemove("");
     updateChar.mutate({ id, data: { currentHp: next } });
-    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - cur, label: "Direct DMG (HP)" } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: diff, label: "Direct DMG" } });
   };
 
   const handleHpBuff = () => {
@@ -839,10 +849,11 @@ export default function CharacterSheet() {
     const amount = parseInt(manaRemove) || 1;
     const cur = mana ?? character.currentMana;
     const next = Math.max(0, cur - amount);
+    const diff = next - cur !== 0 ? next - cur : -amount;
     setMana(next);
     setManaRemove("");
     updateChar.mutate({ id, data: { currentMana: next } });
-    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - cur, label: "Spent Mana" } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: diff, label: "Spent Mana" } });
   };
 
   const handleManaBuff = () => {
@@ -2568,21 +2579,33 @@ export default function CharacterSheet() {
                   <div className="text-center py-1">
                     <span className={`text-4xl font-mono font-bold ${
                       dtFlash === "hit" ? "text-destructive" 
-                      : (currentDt ?? character.currentDt) > maxDt ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" 
+                      : (currentDt ?? character.currentDt) > baseMaxDt ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" 
                       : "text-foreground"
                     }`}>
                       {currentDt ?? character.currentDt}
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
-                      <span className={maxDt > baseMaxDt ? "text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.4)]" : ""}>
-                        {maxDt}
-                      </span>
-                      {maxDt > baseMaxDt && <span className="text-[9px] text-cyan-400/80 ml-0.5" title={`Stat Boosted Max: +${maxDt - baseMaxDt}`}>(+{maxDt - baseMaxDt})</span>}
-                      {abilityDtBonus > 0 && <span className="text-[9px] text-amber-400/80 ml-0.5" title={`Flat Buff: +${abilityDtBonus}`}>[+{abilityDtBonus} Buff]</span>}
+                      <span>{baseMaxDt}</span>
+                      {(() => {
+                        const statBoost = maxDt - baseMaxDt;
+                        const totalBonus = statBoost + abilityDtBonus;
+                        if (totalBonus <= 0) return null;
+                        const breakdownParts: string[] = [];
+                        if (statBoost > 0) breakdownParts.push(`Armor / Stat Boost: +${statBoost}`);
+                        if (abilityDtBonus > 0) breakdownParts.push(`Active Buff: +${abilityDtBonus}`);
+                        return (
+                          <span 
+                            className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
+                            title={breakdownParts.join(" | ")}
+                          >
+                            [+{totalBonus}]
+                          </span>
+                        );
+                      })()}
                     </span>
                   </div>
-                  <ResourceBar current={currentDt ?? character.currentDt} max={maxDt + abilityDtBonus} color="#eab308" />
+                  <ResourceBar current={currentDt ?? character.currentDt} max={baseMaxDt + (maxDt - baseMaxDt) + abilityDtBonus} color="#eab308" />
                   
                   {/* dt quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
@@ -2625,11 +2648,16 @@ export default function CharacterSheet() {
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
-                      {latestDtLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestDtModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestDtModifier >= 0 ? `+${latestDtModifier}` : latestDtModifier} DT ({latestDtLog.label})
-                        </p>
-                      )}
+                      {latestDtLog && (() => {
+                        const isPos = latestDtModifier >= 0;
+                        const cleanLabel = cleanLogReadoutLabel(latestDtLog.label);
+                        const text = isPos ? `+${latestDtModifier} DT${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestDtModifier} DT${cleanLabel ? ` (${cleanLabel})` : ""}`;
+                        return (
+                          <p key={latestDtLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-yellow-500 font-bold drop-shadow-[0_0_5px_rgba(234,179,8,0.3)]" : "text-destructive font-bold"}`}>
+                            {text}
+                          </p>
+                        );
+                      })()}
                     </div>
                     {/* DT History Dialog */}
                     <Dialog>
@@ -2650,7 +2678,7 @@ export default function CharacterSheet() {
                               <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
                                 <span className="text-muted-foreground">{r.label || "DT Update"}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
+                                  <span className={r.result >= 0 ? "text-yellow-500 font-bold" : "text-destructive font-bold"}>
                                     {r.result >= 0 ? `+${r.result}` : r.result}
                                   </span>
                                   <span className="text-[9px] text-muted-foreground/50">
@@ -2674,19 +2702,31 @@ export default function CharacterSheet() {
                     <Heart className="w-4 h-4 text-destructive" /> Health (HP)
                   </div>
                   <div className="text-center py-1">
-                    <span className={`text-4xl font-mono font-bold ${hp && hp > maxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
+                    <span className={`text-4xl font-mono font-bold ${hp && hp > baseMaxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
                       {hp ?? character.currentHp}
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
-                      <span className={maxHp > baseMaxHp ? "text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.4)]" : ""}>
-                        {maxHp}
-                      </span>
-                      {maxHp > baseMaxHp && <span className="text-[9px] text-cyan-400/80 ml-0.5" title={`Stat Boosted Max: +${maxHp - baseMaxHp}`}>(+{maxHp - baseMaxHp})</span>}
-                      {abilityHpBonus > 0 && <span className="text-[9px] text-amber-400/80 ml-0.5" title={`Flat Buff: +${abilityHpBonus}`}>[+{abilityHpBonus} Buff]</span>}
+                      <span>{baseMaxHp}</span>
+                      {(() => {
+                        const statBoost = maxHp - baseMaxHp;
+                        const totalBonus = statBoost + abilityHpBonus;
+                        if (totalBonus <= 0) return null;
+                        const breakdownParts: string[] = [];
+                        if (statBoost > 0) breakdownParts.push(`Stat Boost: +${statBoost}`);
+                        if (abilityHpBonus > 0) breakdownParts.push(`Active Buff: +${abilityHpBonus}`);
+                        return (
+                          <span 
+                            className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
+                            title={breakdownParts.join(" | ")}
+                          >
+                            [+{totalBonus}]
+                          </span>
+                        );
+                      })()}
                     </span>
                   </div>
-                  <ResourceBar current={hp ?? character.currentHp} max={maxHp + abilityHpBonus} color={hp && hp > maxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
+                  <ResourceBar current={hp ?? character.currentHp} max={baseMaxHp + (maxHp - baseMaxHp) + abilityHpBonus} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
                   
                   {/* hp quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
@@ -2729,11 +2769,16 @@ export default function CharacterSheet() {
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
-                      {latestHpLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestHpModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestHpModifier >= 0 ? `+${latestHpModifier}` : latestHpModifier} HP ({latestHpLog.label})
-                        </p>
-                      )}
+                      {latestHpLog && (() => {
+                        const isPos = latestHpModifier >= 0;
+                        const cleanLabel = cleanLogReadoutLabel(latestHpLog.label);
+                        const text = isPos ? `+${latestHpModifier} Health${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestHpModifier} Health${cleanLabel ? ` (${cleanLabel})` : ""}`;
+                        return (
+                          <p key={latestHpLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-green-500 font-bold drop-shadow-[0_0_5px_rgba(34,197,94,0.3)]" : "text-destructive font-bold"}`}>
+                            {text}
+                          </p>
+                        );
+                      })()}
                     </div>
                     {/* HP History Dialog */}
                     <Dialog>
@@ -2778,19 +2823,31 @@ export default function CharacterSheet() {
                     <Sparkles className="w-4 h-4 text-blue-400" /> Mana (MP)
                   </div>
                   <div className="text-center py-1">
-                    <span className={`text-4xl font-mono font-bold ${mana && mana > maxMana ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
+                    <span className={`text-4xl font-mono font-bold ${mana && mana > baseMaxMana ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
                       {mana ?? character.currentMana}
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
-                      <span className={maxMana > baseMaxMana ? "text-cyan-400 font-bold drop-shadow-[0_0_5px_rgba(34,211,238,0.4)]" : ""}>
-                        {maxMana}
-                      </span>
-                      {maxMana > baseMaxMana && <span className="text-[9px] text-cyan-400/80 ml-0.5" title={`Stat Boosted Max: +${maxMana - baseMaxMana}`}>(+{maxMana - baseMaxMana})</span>}
-                      {abilityManaBonus > 0 && <span className="text-[9px] text-amber-400/80 ml-0.5" title={`Flat Buff: +${abilityManaBonus}`}>[+{abilityManaBonus} Buff]</span>}
+                      <span>{baseMaxMana}</span>
+                      {(() => {
+                        const statBoost = maxMana - baseMaxMana;
+                        const totalBonus = statBoost + abilityManaBonus;
+                        if (totalBonus <= 0) return null;
+                        const breakdownParts: string[] = [];
+                        if (statBoost > 0) breakdownParts.push(`Stat Boost: +${statBoost}`);
+                        if (abilityManaBonus > 0) breakdownParts.push(`Active Buff: +${abilityManaBonus}`);
+                        return (
+                          <span 
+                            className="text-[10px] text-cyan-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(34,211,238,0.4)] cursor-help" 
+                            title={breakdownParts.join(" | ")}
+                          >
+                            [+{totalBonus}]
+                          </span>
+                        );
+                      })()}
                     </span>
                   </div>
-                  <ResourceBar current={mana ?? character.currentMana} max={maxMana + abilityManaBonus} color={mana && mana > maxMana ? "#f59e0b" : "#3b82f6"} />
+                  <ResourceBar current={mana ?? character.currentMana} max={baseMaxMana + (maxMana - baseMaxMana) + abilityManaBonus} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
                   
                   {/* mana quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
@@ -2833,11 +2890,16 @@ export default function CharacterSheet() {
                     </Button>
                     {/* Fixed Height Container to prevent layout shifts */}
                     <div className="h-4 flex items-center justify-center mt-1">
-                      {latestManaLog && (
-                        <p className={`text-[10px] font-mono text-center ${latestManaModifier >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                          {latestManaModifier >= 0 ? `+${latestManaModifier}` : latestManaModifier} MP ({latestManaLog.label})
-                        </p>
-                      )}
+                      {latestManaLog && (() => {
+                        const isPos = latestManaModifier >= 0;
+                        const cleanLabel = cleanLogReadoutLabel(latestManaLog.label);
+                        const text = isPos ? `+${latestManaModifier} MP${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestManaModifier} MP${cleanLabel ? ` (${cleanLabel})` : ""}`;
+                        return (
+                          <p key={latestManaLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-blue-400 font-bold drop-shadow-[0_0_5px_rgba(96,165,250,0.3)]" : "text-destructive font-bold"}`}>
+                            {text}
+                          </p>
+                        );
+                      })()}
                     </div>
                     {/* Mana History Dialog */}
                     <Dialog>
@@ -2858,7 +2920,7 @@ export default function CharacterSheet() {
                               <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
                                 <span className="text-muted-foreground">{r.label || "Mana Update"}</span>
                                 <div className="flex items-center gap-2">
-                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
+                                  <span className={r.result >= 0 ? "text-blue-400 font-bold" : "text-destructive font-bold"}>
                                     {r.result >= 0 ? `+${r.result}` : r.result}
                                   </span>
                                   <span className="text-[9px] text-muted-foreground/50">
@@ -4337,16 +4399,6 @@ export default function CharacterSheet() {
                             {ability.rollFormula && (
                               <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2.5 py-1.5 rounded-none flex items-center justify-between">
                                 <span>Formula: <code className="text-primary font-bold">{ability.rollFormula}</code></span>
-                              </div>
-                            )}
-
-                            {bonuses.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 text-[9px]">
-                                {bonuses.map((b, idx) => (
-                                  <Badge key={idx} variant="outline" className="border-emerald-500/20 text-emerald-500 rounded bg-emerald-500/[0.03] uppercase tracking-wider font-bold">
-                                    {b}
-                                  </Badge>
-                                ))}
                               </div>
                             )}
 
