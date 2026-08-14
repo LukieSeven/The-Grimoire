@@ -1401,45 +1401,179 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                     </div>
                   </div>
 
-                  {/* Point to Target Selector */}
-                  <div>
-                    <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Point to Existing Target (Optional)</label>
-                    <select
-                      value={trig.linkedTargetId || ""}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setTriggers(prev => {
-                          const copy = [...prev];
-                          if (!val) {
-                            copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: "none", linkedTargetId: "" };
-                          } else {
-                            const subMatch = subAbilities.find(s => s.id === val);
-                            const effMatch = abilityEffects.find(ef => ef.id === val);
-                            const modMatch = evolutionModifiers.find(m => m.id === val);
-                            let tType: any = "none";
-                            if (subMatch) tType = "sub-ability";
-                            else if (effMatch) tType = "effect";
-                            else if (modMatch) tType = "modifier";
+                  {/* Point to Target & Trigger Action Selectors */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Point to Existing Target (Optional)</label>
+                      <select
+                        value={trig.linkedTargetId || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            if (!val) {
+                              copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: "none", linkedTargetId: "" };
+                            } else {
+                              const subMatch = subAbilities.find(s => s.id === val);
+                              const effMatch = abilityEffects.find(ef => ef.id === val);
+                              const modMatch = evolutionModifiers.find(m => m.id === val);
+                              let tType: any = "none";
+                              if (subMatch) tType = "sub-ability";
+                              else if (effMatch) tType = "effect";
+                              else if (modMatch) tType = "modifier";
 
-                            copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: tType, linkedTargetId: val };
-                          }
-                          return copy;
-                        });
-                      }}
-                      className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
-                    >
-                      <option value="">None / Custom</option>
-                      {subAbilities.map((s, idx) => (
-                        <option key={s.id || idx} value={s.id}>Sub-Ability: {s.name || `Sub #${idx + 2}`}</option>
-                      ))}
-                      {abilityEffects.map((ef, idx) => (
-                        <option key={ef.id || idx} value={ef.id}>Ability Effect: {ef.name || `Effect #${idx + 1}`}</option>
-                      ))}
-                      {evolutionModifiers.map((m, idx) => (
-                        <option key={m.id || idx} value={m.id}>Ability Mod: {m.name || `Mod #${idx + 1}`}</option>
-                      ))}
-                    </select>
+                              copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: tType, linkedTargetId: val };
+                            }
+                            return copy;
+                          });
+                        }}
+                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                      >
+                        <option value="">None / Custom</option>
+                        {subAbilities.map((s, idx) => (
+                          <option key={s.id || idx} value={s.id}>Sub-Ability: {s.name || `Sub #${idx + 2}`}</option>
+                        ))}
+                        {abilityEffects.map((ef, idx) => (
+                          <option key={ef.id || idx} value={ef.id}>Ability Effect: {ef.name || `Effect #${idx + 1}`}</option>
+                        ))}
+                        {evolutionModifiers.map((m, idx) => (
+                          <option key={m.id || idx} value={m.id}>Ability Mod: {m.name || `Mod #${idx + 1}`}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-cyan-400 block mb-1">Trigger Effect Action</label>
+                      <select
+                        value={trig.triggerAction || "trigger_attached"}
+                        onChange={e => {
+                          const val = e.target.value as any;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], triggerAction: val };
+                            return copy;
+                          });
+                        }}
+                        className="w-full h-9 rounded-none border border-cyan-500/40 bg-background px-2 text-xs font-serif text-cyan-300 font-bold"
+                      >
+                        <option value="trigger_attached">Trigger attached Ability</option>
+                        <option value="update_attached">Update attached Ability</option>
+                      </select>
+                    </div>
                   </div>
+
+                  {/* Conditional Complete Drop-In Replacement Ability Fields */}
+                  {trig.triggerAction === "update_attached" && (
+                    <div className="bg-purple-950/30 border border-purple-500/40 p-3 space-y-3 rounded-none animate-in fade-in duration-200">
+                      <span className="text-[11px] font-serif font-bold text-purple-300 uppercase tracking-wider block border-b border-purple-500/30 pb-1">
+                        ⚡ Complete Drop-In Replacement Ability (Active When Triggered)
+                      </span>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="col-span-2">
+                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Ability Name</label>
+                          <Input
+                            value={trig.updatedName || ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setTriggers(prev => {
+                                const copy = [...prev];
+                                copy[trigIdx] = { ...copy[trigIdx], updatedName: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="e.g. Flame Stator: Surge Form"
+                            className="bg-background rounded-none font-bold text-xs h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement MP Cost</label>
+                          <Input
+                            type="number"
+                            value={trig.updatedCost ?? ""}
+                            onChange={e => {
+                              const val = e.target.value === "" ? undefined : Number(e.target.value);
+                              setTriggers(prev => {
+                                const copy = [...prev];
+                                copy[trigIdx] = { ...copy[trigIdx], updatedCost: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="e.g. 0"
+                            className="bg-background rounded-none font-mono text-xs h-8"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Formula</label>
+                          <Input
+                            value={trig.updatedRollFormula || ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setTriggers(prev => {
+                                const copy = [...prev];
+                                copy[trigIdx] = { ...copy[trigIdx], updatedRollFormula: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="e.g. 3d12 + SPI"
+                            className="bg-background rounded-none font-mono text-xs h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Range</label>
+                          <Input
+                            value={trig.updatedRange || ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setTriggers(prev => {
+                                const copy = [...prev];
+                                copy[trigIdx] = { ...copy[trigIdx], updatedRange: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="e.g. 30 ft"
+                            className="bg-background rounded-none text-xs h-8"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Speed</label>
+                          <Input
+                            value={trig.updatedSpeed || ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setTriggers(prev => {
+                                const copy = [...prev];
+                                copy[trigIdx] = { ...copy[trigIdx], updatedSpeed: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="e.g. Instant Action"
+                            className="bg-background rounded-none text-xs h-8"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Description / Base Effect</label>
+                        <Textarea
+                          value={trig.updatedDescription || ""}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setTriggers(prev => {
+                              const copy = [...prev];
+                              copy[trigIdx] = { ...copy[trigIdx], updatedDescription: val };
+                              return copy;
+                            });
+                          }}
+                          placeholder="Describe the complete replacement effects of this ability when triggered..."
+                          className="bg-background min-h-[90px] rounded-none font-serif text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* Description textarea */}
                   <div>

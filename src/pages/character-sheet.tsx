@@ -1345,20 +1345,39 @@ export default function CharacterSheet() {
       }
     }
 
+    let effectiveCost = ability.cost;
+    let effectiveRollFormula = ability.rollFormula;
+
+    if (ability.triggers && ability.triggers.length > 0) {
+      for (const trig of ability.triggers) {
+        if (trig && trig.triggerAction === "update_attached" && isAbilityTriggerActive(trig, {
+          hp: character.currentHp,
+          maxHp,
+          mana: character.currentMana,
+          maxMana,
+          dt: character.currentDt,
+          maxDt,
+        })) {
+          if (trig.updatedCost !== undefined) effectiveCost = trig.updatedCost;
+          if (trig.updatedRollFormula) effectiveRollFormula = trig.updatedRollFormula;
+        }
+      }
+    }
+
     const curMana = mana ?? character.currentMana;
-    if (curMana < ability.cost) {
-      toast.error(`Not enough Mana! Requires ${ability.cost} MP (Have ${curMana} MP)`);
+    if (curMana < effectiveCost) {
+      toast.error(`Not enough Mana! Requires ${effectiveCost} MP (Have ${curMana} MP)`);
       return;
     }
 
-    const nextMana = curMana - ability.cost;
+    const nextMana = curMana - effectiveCost;
     setMana(nextMana);
 
     const updates: Record<string, number> = { currentMana: nextMana };
     const changes: string[] = [];
 
-    if (ability.cost > 0) {
-      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `${ability.name} Cost` } });
+    if (effectiveCost > 0) {
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -effectiveCost, label: `${ability.name} Cost` } });
     }
 
     const evalVars = {
@@ -1435,8 +1454,8 @@ export default function CharacterSheet() {
       toast.success(`${ability.name} activated! Restored ${changes.join(", ")}.`);
     }
 
-    if (ability.rollFormula) {
-      let rollFormulaToUse = ability.rollFormula;
+    if (effectiveRollFormula) {
+      let rollFormulaToUse = effectiveRollFormula;
       let statMod = 0;
 
       if (chosenStat) {
@@ -4310,50 +4329,77 @@ export default function CharacterSheet() {
               };
 
               // Helper to render ability card
-              const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean) => {
-                const isExpanded = isRowExpanded;
-                const bonuses = getAbilityBonusList(ability);
-                const rankInfo = getAbilityHighestRank(ability, finalStats);
-                const evolData = calculateAbilityEvolutions(ability, character.rank, finalStats);
+                const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean) => {
+                  const isExpanded = isRowExpanded;
+                  const bonuses = getAbilityBonusList(ability);
+                  const rankInfo = getAbilityHighestRank(ability, finalStats);
+                  const evolData = calculateAbilityEvolutions(ability, character.rank, finalStats);
 
-                return (
-                  <Card 
-                    key={ability.id}
-                    draggable
-                    onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
-                    onDragOver={handleAbilityDragOver}
-                    onDrop={(e) => handleAbilityDrop(e, ability.id, allList)}
-                    className="bg-card border border-border/40 hover:border-primary/20 transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative h-full flex flex-col justify-between"
-                  >
-                    <CardContent className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
-                      <div>
-                        {/* Header row (Clickable card body toggles expansion except buttons) */}
-                        <div 
-                          className="flex justify-between items-start cursor-pointer select-none"
-                          onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !expandedAbilities[ability.id] }))}
-                        >
-                          <div className="space-y-1.5 flex-1 pr-4">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              {/* Read-Only Rank Marker Badge */}
-                              <div className="flex items-center gap-1 border border-primary/30 px-2 py-0.5 rounded-none bg-primary/10 text-[10px] font-bold text-primary font-mono shadow-sm">
-                                <span>Rank: {rankInfo.label}</span>
+                  const activeUpdateTrigger = ability.triggers?.find(trig =>
+                    trig &&
+                    trig.triggerAction === "update_attached" &&
+                    isAbilityTriggerActive(trig, {
+                      hp: character ? character.currentHp : 0,
+                      maxHp,
+                      mana: character ? character.currentMana : 0,
+                      maxMana,
+                      dt: character ? character.currentDt : 0,
+                      maxDt,
+                    })
+                  );
+
+                  const displayName = activeUpdateTrigger?.updatedName || ability.name;
+                  const displayCost = activeUpdateTrigger?.updatedCost !== undefined ? activeUpdateTrigger.updatedCost : ability.cost;
+                  const displayRange = activeUpdateTrigger?.updatedRange || ability.range;
+                  const displaySpeed = activeUpdateTrigger?.updatedSpeed || ability.speed;
+                  const displayRollFormula = activeUpdateTrigger?.updatedRollFormula || ability.rollFormula;
+                  const displayDescription = activeUpdateTrigger?.updatedDescription || ability.description;
+
+                  return (
+                    <Card 
+                      key={ability.id}
+                      draggable
+                      onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
+                      onDragOver={handleAbilityDragOver}
+                      onDrop={(e) => handleAbilityDrop(e, ability.id, allList)}
+                      className={`bg-card border transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative h-full flex flex-col justify-between ${
+                        activeUpdateTrigger ? "border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.25)]" : "border-border/40 hover:border-primary/20"
+                      }`}
+                    >
+                      <CardContent className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                        <div>
+                          {/* Header row (Clickable card body toggles expansion except buttons) */}
+                          <div 
+                            className="flex justify-between items-start cursor-pointer select-none"
+                            onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !expandedAbilities[ability.id] }))}
+                          >
+                            <div className="space-y-1.5 flex-1 pr-4">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {/* Read-Only Rank Marker Badge */}
+                                <div className="flex items-center gap-1 border border-primary/30 px-2 py-0.5 rounded-none bg-primary/10 text-[10px] font-bold text-primary font-mono shadow-sm">
+                                  <span>Rank: {rankInfo.label}</span>
+                                </div>
+
+                                <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
+                                  {displayName}
+                                  {activeUpdateTrigger && (
+                                    <Badge className="bg-purple-500/20 border border-purple-400 text-purple-300 text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5 animate-pulse">
+                                      Trigger Replaced
+                                    </Badge>
+                                  )}
+                                  {ability.type && (
+                                    <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5">
+                                      {ability.type}
+                                    </Badge>
+                                  )}
+                                </h4>
+                                <svg className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
                               </div>
-
-                              <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
-                                {ability.name}
-                                {ability.type && (
-                                  <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5">
-                                    {ability.type}
-                                  </Badge>
-                                )}
-                              </h4>
-                              <svg className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
-                            </div>
-                            
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ability.cost} MP</Badge>
-                              <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.range}</Badge>
-                              <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.speed}</Badge>
+                              
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{displayCost} MP</Badge>
+                                <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{displayRange}</Badge>
+                                <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{displaySpeed}</Badge>
                               
                               {/* Active Toggle Switch */}
                               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
@@ -4428,6 +4474,7 @@ export default function CharacterSheet() {
 
                                 if (!isActive) return null;
 
+                                const isUpdate = trig.triggerAction === "update_attached";
                                 const resName = trig.resource ? String(trig.resource).toUpperCase() : "HP";
                                 const opSymbol = trig.operator === "below_percent" ? `< ${trig.threshold ?? 50}%`
                                   : trig.operator === "below_value" ? `<= ${trig.threshold ?? 0}`
@@ -4435,14 +4482,25 @@ export default function CharacterSheet() {
                                   : trig.operator === "above_percent" ? `>= ${trig.threshold ?? 50}%`
                                   : `= Max`;
 
-                                const label = `${resName} ${opSymbol}`;
-                                const tooltipText = `Trigger: ${trig.name || "Active Trigger"}${trig.description ? ` — ${trig.description}` : ""}`;
+                                const label = `${resName} ${opSymbol}${isUpdate ? " [Updated]" : ""}`;
+                                const tooltipText = [
+                                  `Trigger: ${trig.name || "Active Trigger"}`,
+                                  isUpdate ? "Action: Update Attached Ability" : "Action: Trigger Attached Ability",
+                                  trig.description ? `Rules: ${trig.description}` : null,
+                                  isUpdate && trig.updatedRollFormula ? `Updated Formula: ${trig.updatedRollFormula}` : null,
+                                  isUpdate && trig.updatedCost !== undefined ? `Updated Cost: ${trig.updatedCost} MP` : null,
+                                  isUpdate && trig.updatedDescription ? `Changes: ${trig.updatedDescription}` : null,
+                                ].filter(Boolean).join(" | ");
 
                                 return (
                                   <span
                                     key={trig.id || trigIdx}
                                     title={tooltipText}
-                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded-none border bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold shadow-[0_0_6px_rgba(6,182,212,0.3)] transition-all cursor-help animate-pulse"
+                                    className={`text-[9px] font-mono px-1.5 py-0.5 rounded-none border font-bold transition-all cursor-help animate-pulse ${
+                                      isUpdate
+                                        ? "bg-purple-500/20 border-purple-400 text-purple-300 shadow-[0_0_6px_rgba(168,85,247,0.3)]"
+                                        : "bg-cyan-500/20 border-cyan-400 text-cyan-300 shadow-[0_0_6px_rgba(6,182,212,0.3)]"
+                                    }`}
                                   >
                                     ⚡ {label}
                                   </span>
@@ -4491,15 +4549,15 @@ export default function CharacterSheet() {
                         {/* Expandable Content (Markdown + Stats + Formulas + Evolution Modifiers) */}
                         {isExpanded && (
                           <div className="border-t border-border/20 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200 mt-2">
-                            {ability.rollFormula && (
+                            {displayRollFormula && (
                               <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2.5 py-1.5 rounded-none flex items-center justify-between">
-                                <span>Formula: <code className="text-primary font-bold">{ability.rollFormula}</code></span>
+                                <span>Formula: <code className="text-primary font-bold">{displayRollFormula}</code></span>
                               </div>
                             )}
 
                             <div
                               className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-1"
-                              dangerouslySetInnerHTML={{ __html: parseMarkdown(ability.description || "*No description.*") }}
+                              dangerouslySetInnerHTML={{ __html: parseMarkdown(displayDescription || "*No description.*") }}
                             />
 
                             {/* Sub-Abilities / Additional Base Effects (Only rendered if present) */}

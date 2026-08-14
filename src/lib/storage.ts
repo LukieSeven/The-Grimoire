@@ -243,6 +243,13 @@ export interface AbilityTrigger {
   resource: "hp" | "mana" | "dt";
   operator: "below_percent" | "below_value" | "depleted" | "above_percent" | "full";
   threshold: number;
+  triggerAction?: "trigger_attached" | "update_attached";
+  updatedName?: string;
+  updatedRollFormula?: string;
+  updatedCost?: number;
+  updatedRange?: string;
+  updatedSpeed?: string;
+  updatedDescription?: string;
   description?: string;
   cost?: number;
   cooldown?: number;
