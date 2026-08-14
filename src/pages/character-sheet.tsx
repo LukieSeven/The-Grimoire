@@ -508,6 +508,7 @@ export default function CharacterSheet() {
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [noteImages, setNoteImages] = useState<string[]>([]);
+  const [expandedSubAbilities, setExpandedSubAbilities] = useState<Record<string, boolean>>({});
 
   // ── Inventory Dialog Trigger State ────────────────────────
   const [isInvOpen, setIsInvOpen] = useState(false);
@@ -648,6 +649,17 @@ export default function CharacterSheet() {
           statStr = ability.rollFormula;
         } else {
           statStr = "SPI";
+        }
+      }
+    } else if (slot.type === "sub-ability") {
+      const ability = abilities.find(a => a.id === Number(slot.targetId));
+      if (ability && ability.subAbilities) {
+        const subIndex = ability.subAbilities.findIndex(s => s.id === slot.subId);
+        const sub = subIndex !== -1 ? ability.subAbilities[subIndex] : null;
+        if (sub) {
+          name = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIndex + 2})`;
+          costStr = sub.cost ? `${sub.cost} MP` : "0 MP";
+          statStr = sub.rollFormula || "Sub-Effect";
         }
       }
     } else if (slot.type === "skill") {
@@ -4070,6 +4082,69 @@ export default function CharacterSheet() {
                               className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-1"
                               dangerouslySetInnerHTML={{ __html: parseMarkdown(ability.description || "*No description.*") }}
                             />
+
+                            {/* Sub-Abilities / Additional Base Effects (Only rendered if present) */}
+                            {ability.subAbilities && ability.subAbilities.length > 0 && (
+                              <div className="space-y-1.5 mt-2 pt-2 border-t border-border/30">
+                                {ability.subAbilities.map((sub, subIdx) => {
+                                  const subTitle = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIdx + 2})`;
+                                  const subKey = `${ability.id}-${sub.id || subIdx}`;
+                                  const isSubOpen = !!expandedSubAbilities[subKey];
+
+                                  return (
+                                    <div key={subKey} className="bg-primary/5 border border-primary/25 rounded-none overflow-hidden text-xs">
+                                      {/* Sub-Ability Collapsible Header Bar */}
+                                      <div
+                                        onClick={() => setExpandedSubAbilities(prev => ({ ...prev, [subKey]: !isSubOpen }))}
+                                        className="flex items-center justify-between p-2 bg-primary/10 hover:bg-primary/20 cursor-pointer select-none border-b border-border/20 flex-wrap gap-1.5"
+                                      >
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-serif font-bold text-primary">{subTitle}</span>
+                                          {sub.type && (
+                                            <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase rounded-none px-1.5 py-0.5">
+                                              {sub.type}
+                                            </Badge>
+                                          )}
+                                          {sub.cost !== undefined && sub.cost > 0 && (
+                                            <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">
+                                              {sub.cost} MP
+                                            </Badge>
+                                          )}
+                                        </div>
+
+                                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                          {sub.rollFormula && (
+                                            <Button
+                                              size="sm"
+                                              onClick={() => handleRoll(sub.rollFormula || "d20", `Sub: ${subTitle}`)}
+                                              className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-6 text-[10px] font-serif rounded-none cursor-pointer px-2"
+                                            >
+                                              <Dice5 className="w-3 h-3 mr-1" /> Activate
+                                            </Button>
+                                          )}
+                                          <svg className={`w-3.5 h-3.5 text-primary/80 transition-transform duration-200 ${isSubOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                                        </div>
+                                      </div>
+
+                                      {/* Sub-Ability Expanded Body */}
+                                      {isSubOpen && (
+                                        <div className="p-2.5 space-y-1.5 bg-background/80 border-t border-border/20">
+                                          {sub.rollFormula && (
+                                            <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2 py-1 rounded-none">
+                                              Formula: <code className="text-primary font-bold">{sub.rollFormula}</code>
+                                            </div>
+                                          )}
+                                          <div
+                                            className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-0.5"
+                                            dangerouslySetInnerHTML={{ __html: parseMarkdown(sub.description || "*No additional effect description.*") }}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
 
                             {/* Active Evolution Modifiers section — Header title & Zap icon COMPLETELY PURGED */}
                             {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (

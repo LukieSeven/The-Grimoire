@@ -218,3 +218,25 @@ test("Canonical Data Immutability: calculateAbilityEvolutions does not mutate or
 
   assert.equal(JSON.stringify(ab), originalJSON);
 });
+
+test("Sub-Abilities Integration: ability supports nested sub-abilities with individual roll formulas", () => {
+  const ab = createTestAbility({
+    subAbilities: [
+      {
+        id: "sub-1",
+        name: "Secondary Strike",
+        type: "Melee",
+        description: "Deals additional physical damage.",
+        cost: 2,
+        rollFormula: "POWr * 1.5",
+        assignedToQuickRolls: true
+      }
+    ]
+  });
+
+  assert.ok(ab.subAbilities);
+  assert.equal(ab.subAbilities.length, 1);
+  assert.equal(ab.subAbilities[0].name, "Secondary Strike");
+  assert.equal(ab.subAbilities[0].cost, 2);
+  assert.equal(ab.subAbilities[0].rollFormula, "POWr * 1.5");
+});

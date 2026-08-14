@@ -12,8 +12,9 @@ import {
 import { commitStorageUpdates } from "./persistence.ts";
 
 export interface FavoriteSlot {
-  type: "weapon" | "item" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
+  type: "weapon" | "item" | "ability" | "sub-ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
   targetId: string | number;
+  subId?: string;
   label: string;
   familiarId?: string | number;
 }
@@ -164,6 +165,17 @@ export interface Essence {
   slot: number; // 1-4
 }
 
+export interface SubAbility {
+  id: string;
+  name: string;
+  type?: string;
+  description?: string;
+  cost?: number;
+  rollFormula?: string;
+  linkedStats?: string[];
+  assignedToQuickRolls?: boolean;
+}
+
 export interface EvolutionModifier {
   id: string;
   name: string;
@@ -190,6 +202,7 @@ export interface Ability {
   active?: boolean;
   primaryStat?: string;
   evolutionModifiers?: EvolutionModifier[];
+  subAbilities?: SubAbility[];
   bonusPower?: number;
   bonusVitality?: number;
   bonusSpirit?: number;

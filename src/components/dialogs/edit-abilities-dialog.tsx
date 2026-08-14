@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Edit2, Trash2, Zap, Plus } from "lucide-react";
-import { Ability, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
+import { Ability, SubAbility, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
 
 interface Props {
   characterId: number;
@@ -41,6 +41,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const [type, setType] = useState("");
   const [primaryStat, setPrimaryStat] = useState("power");
   const [evolutionModifiers, setEvolutionModifiers] = useState<EvolutionModifier[]>([]);
+  const [subAbilities, setSubAbilities] = useState<SubAbility[]>([]);
   const [expandedMods, setExpandedMods] = useState<Record<number, boolean>>({});
   const [linkedStats, setLinkedStats] = useState<string[]>([]);
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
@@ -78,6 +79,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setType("");
     setPrimaryStat("power");
     setEvolutionModifiers([]);
+    setSubAbilities([]);
     setExpandedMods({});
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
@@ -121,6 +123,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setType(ability.type || "");
     setPrimaryStat(ability.primaryStat || "power");
     setEvolutionModifiers(ability.evolutionModifiers ? [...ability.evolutionModifiers] : []);
+    setSubAbilities(ability.subAbilities ? [...ability.subAbilities] : []);
     setLinkedStats(ability.linkedStats || (ability.linkedStat ? [ability.linkedStat] : []));
     setAssignedToQuickRolls(ability.assignedToQuickRolls);
     const isIp = !!(ability.isInnatePassive || ability.essenceId === -1 || ability.type === "Innate Passive");
@@ -203,6 +206,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
       type,
       primaryStat,
       evolutionModifiers,
+      subAbilities,
       linkedStats,
       assignedToQuickRolls,
       essenceId: isInnatePassive ? null : essenceId,
@@ -441,6 +445,157 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
               <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the base effects of this ability..." className="bg-background min-h-[240px] rounded-none font-serif text-sm" />
+            </div>
+
+            {/* Sub-Abilities / Additional Base Effects Section */}
+            <div className="space-y-3 pt-2">
+              {subAbilities.map((sub, subIdx) => (
+                <div key={sub.id || subIdx} className="bg-primary/5 border border-primary/20 p-3 space-y-3 rounded-none">
+                  <div className="flex items-center justify-between">
+                    <span className="font-serif text-xs font-bold text-primary uppercase tracking-wider">
+                      Additional Effect #{subIdx + 2}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSubAbilities(prev => prev.filter((_, i) => i !== subIdx))}
+                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Remove Effect
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Sub-Effect Name</label>
+                      <Input
+                        value={sub.name || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], name: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder={`Sub-effect name (default: ${name || "Ability"} (${subIdx + 2}))...`}
+                        className="h-8 text-xs bg-background rounded-none font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">MP Cost</label>
+                      <Input
+                        type="number"
+                        value={sub.cost ?? 0}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], cost: val };
+                            return copy;
+                          });
+                        }}
+                        className="h-8 text-xs bg-background font-mono rounded-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Type (e.g. Melee, Spell, Buff)</label>
+                      <Input
+                        value={sub.type || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], type: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="e.g. Melee, Spell..."
+                        className="h-8 text-xs bg-background rounded-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Roll Formula / Linked Stat</label>
+                      <Input
+                        value={sub.rollFormula || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], rollFormula: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="e.g. powr*2 or SPI..."
+                        className="h-8 text-xs bg-background font-mono rounded-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Description / Dialogue Text</label>
+                    <Textarea
+                      value={sub.description || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setSubAbilities(prev => {
+                          const copy = [...prev];
+                          copy[subIdx] = { ...copy[subIdx], description: val };
+                          return copy;
+                        });
+                      }}
+                      placeholder="Describe the secondary effect..."
+                      className="min-h-[100px] text-xs bg-background rounded-none font-serif"
+                    />
+                  </div>
+
+                  {/* Assign to Favorites / Quick Rolls Toggle */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <Checkbox
+                      id={`sub-quickroll-${subIdx}`}
+                      checked={!!sub.assignedToQuickRolls}
+                      onCheckedChange={chk => {
+                        setSubAbilities(prev => {
+                          const copy = [...prev];
+                          copy[subIdx] = { ...copy[subIdx], assignedToQuickRolls: !!chk };
+                          return copy;
+                        });
+                      }}
+                    />
+                    <label htmlFor={`sub-quickroll-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer">
+                      Assign Sub-Effect to Quick Rolls / Favorites Hotbar
+                    </label>
+                  </div>
+                </div>
+              ))}
+
+              {/* Multi-Sequential + Add Additional Effect Button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newSub: SubAbility = {
+                    id: `sub-${Date.now()}-${subAbilities.length}`,
+                    name: "",
+                    type: "",
+                    description: "",
+                    cost: 0,
+                    rollFormula: "",
+                    linkedStats: [],
+                    assignedToQuickRolls: false,
+                  };
+                  setSubAbilities(prev => [...prev, newSub]);
+                }}
+                className="w-full h-8 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Add Additional Effect</span>
+              </Button>
             </div>
 
             {/* Ability Evolution Section (Only renders box if there are active earned slots) */}
