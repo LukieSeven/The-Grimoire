@@ -940,14 +940,14 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
 
-  const baseMaxHp = Math.max(1, rawHp || 1);
-  const totalMaxHp = Math.max(1, baseMaxHp + hpAddBonus + hpBuffBonus);
+  const baseMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus);
+  const totalMaxHp = Math.max(1, baseMaxHp + hpBuffBonus);
 
-  const baseMaxMana = Math.max(0, rawMana || 0);
-  const totalMaxMana = Math.max(0, baseMaxMana + manaAddBonus + manaBuffBonus);
+  const baseMaxMana = Math.max(0, (rawMana || 0) + manaAddBonus);
+  const totalMaxMana = Math.max(0, baseMaxMana + manaBuffBonus);
 
-  const baseMaxDt = Math.max(0, rawDt || 0);
-  const totalMaxDt = Math.max(0, baseMaxDt + dtAddBonus + dtBuffBonus);
+  const baseMaxDt = Math.max(0, (rawDt || 0) + dtAddBonus);
+  const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
 
   const maxInitiative = (rawInitiative || 0) + (abilityInitiativeBonus || 0) + (equipmentInitiativeBonus || 0);
 

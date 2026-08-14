@@ -567,7 +567,7 @@ export default function CharacterSheet() {
   if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!character) return <div className="p-8 text-center text-muted-foreground">Character not found</div>;
 
-  // ── Recalculate adjusted stats from equipment ─────────────
+  // ── Recalculate adjusted stats from equipment & active abilities ─────────────
   const adjustedStats = getAdjustedStats(character, equipment, abilities);
   const { 
     stats: finalStats, 
@@ -576,16 +576,16 @@ export default function CharacterSheet() {
     maxHp, 
     maxMana, 
     maxDt, 
+    baseMaxHp,
+    baseMaxMana,
+    baseMaxDt,
+    hpBuffBonus,
+    manaBuffBonus,
+    dtBuffBonus,
     abilityHpBonus, 
     abilityManaBonus, 
     abilityDtBonus 
   } = adjustedStats;
-
-  // Compute base maximums (without active ability bonuses) to identify temporary boosts
-  const baseMaxes = getAdjustedStats(character, equipment, []);
-  const baseMaxHp = baseMaxes.maxHp;
-  const baseMaxMana = baseMaxes.maxMana;
-  const baseMaxDt = baseMaxes.maxDt;
 
   // ── Derived max values for familiar ───────────────────────
   const getFamiliarMaxValues = (fam: Familiar) => {
@@ -2612,18 +2612,14 @@ export default function CharacterSheet() {
                     <span className="text-xs text-muted-foreground font-mono">
                       /
                       <span>{baseMaxDt}</span>
-                      {(() => {
-                        const totalBonus = maxDt - baseMaxDt;
-                        if (totalBonus <= 0) return null;
-                        return (
-                          <span 
-                            className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
-                            title={`Active Bonus: +${totalBonus}`}
-                          >
-                            [+{totalBonus}]
-                          </span>
-                        );
-                      })()}
+                      {dtBuffBonus > 0 && (
+                        <span 
+                          className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
+                          title={`Temporary Buff: +${dtBuffBonus}`}
+                        >
+                          [+{dtBuffBonus}]
+                        </span>
+                      )}
                     </span>
                   </div>
                   <ResourceBar current={currentDt ?? character.currentDt} max={maxDt} color="#eab308" />
@@ -2729,18 +2725,14 @@ export default function CharacterSheet() {
                     <span className="text-xs text-muted-foreground font-mono">
                       /
                       <span>{baseMaxHp}</span>
-                      {(() => {
-                        const totalBonus = maxHp - baseMaxHp;
-                        if (totalBonus <= 0) return null;
-                        return (
-                          <span 
-                            className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
-                            title={`Active Bonus: +${totalBonus}`}
-                          >
-                            [+{totalBonus}]
-                          </span>
-                        );
-                      })()}
+                      {hpBuffBonus > 0 && (
+                        <span 
+                          className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
+                          title={`Temporary Buff: +${hpBuffBonus}`}
+                        >
+                          [+{hpBuffBonus}]
+                        </span>
+                      )}
                     </span>
                   </div>
                   <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
@@ -2846,18 +2838,14 @@ export default function CharacterSheet() {
                     <span className="text-xs text-muted-foreground font-mono">
                       /
                       <span>{baseMaxMana}</span>
-                      {(() => {
-                        const totalBonus = maxMana - baseMaxMana;
-                        if (totalBonus <= 0) return null;
-                        return (
-                          <span 
-                            className="text-[10px] text-cyan-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(34,211,238,0.4)] cursor-help" 
-                            title={`Active Bonus: +${totalBonus}`}
-                          >
-                            [+{totalBonus}]
-                          </span>
-                        );
-                      })()}
+                      {manaBuffBonus > 0 && (
+                        <span 
+                          className="text-[10px] text-cyan-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(34,211,238,0.4)] cursor-help" 
+                          title={`Temporary Buff: +${manaBuffBonus}`}
+                        >
+                          [+{manaBuffBonus}]
+                        </span>
+                      )}
                     </span>
                   </div>
                   <ResourceBar current={mana ?? character.currentMana} max={maxMana} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
