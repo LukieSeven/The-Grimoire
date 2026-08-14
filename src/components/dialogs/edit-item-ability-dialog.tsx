@@ -310,20 +310,9 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
             <Input value={rollFormula} onChange={e => setRollFormula(e.target.value)} placeholder="e.g. d20+powr+6, 2d6+prer" className="bg-background font-mono rounded-none h-9 text-xs" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-3">
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
-              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none h-9 text-xs" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
-              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none h-9 text-xs" />
-            </div>
-          </div>
-
-          {/* Stat Modifiers Grid */}
-          <div className="border-t border-border/20 pt-3 space-y-2">
-            <h5 className="font-serif font-bold text-primary text-sm">Stat Modifiers (Granted while active)</h5>
+          {/* Active Modifiers (Granted While Active) */}
+          <div className="border border-border/60 bg-background/40 p-3 rounded-none space-y-3">
+            <h5 className="font-serif font-bold text-primary text-xs uppercase tracking-wider">Active Modifiers</h5>
             <div className="grid grid-cols-4 gap-2">
               {STAT_OPTIONS.map(stat => {
                 const stateSetter = {
@@ -346,48 +335,59 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
                 );
               })}
             </div>
+
+            {/* Vitals Modifiers Grid */}
+            <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-2">
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input value={hpAdd} onChange={e => setHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input value={hpBuff} onChange={e => setHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input value={manaAdd} onChange={e => setManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input value={manaBuff} onChange={e => setManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+                <div className="grid grid-cols-2 gap-1">
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                    <Input value={dtAdd} onChange={e => setDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                    <Input value={dtBuff} onChange={e => setDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Vitals Modifiers Grid */}
-          <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-3">
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
-              <div className="grid grid-cols-2 gap-1">
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input value={hpAdd} onChange={e => setHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input value={hpBuff} onChange={e => setHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
+              <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none h-9 text-xs" />
             </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
-              <div className="grid grid-cols-2 gap-1">
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input value={manaAdd} onChange={e => setManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input value={manaBuff} onChange={e => setManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
-              <div className="grid grid-cols-2 gap-1">
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input value={dtAdd} onChange={e => setDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input value={dtBuff} onChange={e => setDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-              </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
+              <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none h-9 text-xs" />
             </div>
           </div>
 
