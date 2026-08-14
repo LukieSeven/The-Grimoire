@@ -859,19 +859,50 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const variables = buildVars(stats);
 
   // Sum active ability & item resource bonuses (evaluating formulas like 2+wil)
-  let hpAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpAdd, variables), 0);
-  let hpBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff, variables), 0);
-  let manaAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaAdd, variables), 0);
-  let manaBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff, variables), 0);
-  let dtAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtAdd, variables), 0);
-  let dtBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff, variables), 0);
-  let abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.bonusInitiative, variables), 0);
+  let hpAddBonus = 0;
+  let hpBuffBonus = 0;
+  let manaAddBonus = 0;
+  let manaBuffBonus = 0;
+  let dtAddBonus = 0;
+  let dtBuffBonus = 0;
+  let abilityInitiativeBonus = 0;
   const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + parseFormulaOrNum(eq.bonusInitiative, variables), 0);
 
   const rawHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
   const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
   const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
+
+  // Compute base resource values from active abilities
+  for (const ab of activeAbilities) {
+    let abHpAdd = parseFormulaOrNum(ab.hpAdd, variables);
+    let abHpBuff = parseFormulaOrNum(ab.hpBuff, variables);
+    let abManaAdd = parseFormulaOrNum(ab.manaAdd, variables);
+    let abManaBuff = parseFormulaOrNum(ab.manaBuff, variables);
+    let abDtAdd = parseFormulaOrNum(ab.dtAdd, variables);
+    let abDtBuff = parseFormulaOrNum(ab.dtBuff, variables);
+    let abInit = parseFormulaOrNum(ab.bonusInitiative, variables);
+
+    if (ab.subAbilities && ab.subAbilities.length > 0) {
+      for (const sub of ab.subAbilities) {
+        abHpAdd += parseFormulaOrNum(sub.hpAdd, variables);
+        abHpBuff += parseFormulaOrNum(sub.hpBuff, variables);
+        abManaAdd += parseFormulaOrNum(sub.manaAdd, variables);
+        abManaBuff += parseFormulaOrNum(sub.manaBuff, variables);
+        abDtAdd += parseFormulaOrNum(sub.dtAdd, variables);
+        abDtBuff += parseFormulaOrNum(sub.dtBuff, variables);
+        abInit += parseFormulaOrNum(sub.bonusInitiative, variables);
+      }
+    }
+
+    hpAddBonus += abHpAdd;
+    hpBuffBonus += abHpBuff;
+    manaAddBonus += abManaAdd;
+    manaBuffBonus += abManaBuff;
+    dtAddBonus += abDtAdd;
+    dtBuffBonus += abDtBuff;
+    abilityInitiativeBonus += abInit;
+  }
 
   const initialMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus + hpBuffBonus);
   const initialMaxMana = Math.max(0, (rawMana || 0) + manaAddBonus + manaBuffBonus);
@@ -886,20 +917,67 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     maxDt: initialMaxDt,
   };
 
+  // Re-calculate resource bonuses incorporating active triggers (with replacement logic)
+  hpAddBonus = 0;
+  hpBuffBonus = 0;
+  manaAddBonus = 0;
+  manaBuffBonus = 0;
+  dtAddBonus = 0;
+  dtBuffBonus = 0;
+  abilityInitiativeBonus = 0;
+
   for (const ab of activeAbilities) {
+    let abHpAdd = parseFormulaOrNum(ab.hpAdd, variables);
+    let abHpBuff = parseFormulaOrNum(ab.hpBuff, variables);
+    let abManaAdd = parseFormulaOrNum(ab.manaAdd, variables);
+    let abManaBuff = parseFormulaOrNum(ab.manaBuff, variables);
+    let abDtAdd = parseFormulaOrNum(ab.dtAdd, variables);
+    let abDtBuff = parseFormulaOrNum(ab.dtBuff, variables);
+    let abInit = parseFormulaOrNum(ab.bonusInitiative, variables);
+
+    if (ab.subAbilities && ab.subAbilities.length > 0) {
+      for (const sub of ab.subAbilities) {
+        abHpAdd += parseFormulaOrNum(sub.hpAdd, variables);
+        abHpBuff += parseFormulaOrNum(sub.hpBuff, variables);
+        abManaAdd += parseFormulaOrNum(sub.manaAdd, variables);
+        abManaBuff += parseFormulaOrNum(sub.manaBuff, variables);
+        abDtAdd += parseFormulaOrNum(sub.dtAdd, variables);
+        abDtBuff += parseFormulaOrNum(sub.dtBuff, variables);
+        abInit += parseFormulaOrNum(sub.bonusInitiative, variables);
+      }
+    }
+
     if (ab.triggers && ab.triggers.length > 0) {
       for (const trig of ab.triggers) {
         if (trig && isAbilityTriggerActive(trig, vitalsForTriggers)) {
-          if (trig.hpAdd) hpAddBonus += parseFormulaOrNum(trig.hpAdd, variables);
-          if (trig.hpBuff) hpBuffBonus += parseFormulaOrNum(trig.hpBuff, variables);
-          if (trig.manaAdd) manaAddBonus += parseFormulaOrNum(trig.manaAdd, variables);
-          if (trig.manaBuff) manaBuffBonus += parseFormulaOrNum(trig.manaBuff, variables);
-          if (trig.dtAdd) dtAddBonus += parseFormulaOrNum(trig.dtAdd, variables);
-          if (trig.dtBuff) dtBuffBonus += parseFormulaOrNum(trig.dtBuff, variables);
-          if (trig.bonusInitiative) abilityInitiativeBonus += parseFormulaOrNum(trig.bonusInitiative, variables);
+          if (trig.triggerAction === "update_attached") {
+            if (trig.hpAdd !== undefined && trig.hpAdd !== "") abHpAdd = parseFormulaOrNum(trig.hpAdd, variables);
+            if (trig.hpBuff !== undefined && trig.hpBuff !== "") abHpBuff = parseFormulaOrNum(trig.hpBuff, variables);
+            if (trig.manaAdd !== undefined && trig.manaAdd !== "") abManaAdd = parseFormulaOrNum(trig.manaAdd, variables);
+            if (trig.manaBuff !== undefined && trig.manaBuff !== "") abManaBuff = parseFormulaOrNum(trig.manaBuff, variables);
+            if (trig.dtAdd !== undefined && trig.dtAdd !== "") abDtAdd = parseFormulaOrNum(trig.dtAdd, variables);
+            if (trig.dtBuff !== undefined && trig.dtBuff !== "") abDtBuff = parseFormulaOrNum(trig.dtBuff, variables);
+            if (trig.bonusInitiative !== undefined && trig.bonusInitiative !== "") abInit = parseFormulaOrNum(trig.bonusInitiative, variables);
+          } else {
+            if (trig.hpAdd) abHpAdd += parseFormulaOrNum(trig.hpAdd, variables);
+            if (trig.hpBuff) abHpBuff += parseFormulaOrNum(trig.hpBuff, variables);
+            if (trig.manaAdd) abManaAdd += parseFormulaOrNum(trig.manaAdd, variables);
+            if (trig.manaBuff) abManaBuff += parseFormulaOrNum(trig.manaBuff, variables);
+            if (trig.dtAdd) abDtAdd += parseFormulaOrNum(trig.dtAdd, variables);
+            if (trig.dtBuff) abDtBuff += parseFormulaOrNum(trig.dtBuff, variables);
+            if (trig.bonusInitiative) abInit += parseFormulaOrNum(trig.bonusInitiative, variables);
+          }
         }
       }
     }
+
+    hpAddBonus += abHpAdd;
+    hpBuffBonus += abHpBuff;
+    manaAddBonus += abManaAdd;
+    manaBuffBonus += abManaBuff;
+    dtAddBonus += abDtAdd;
+    dtBuffBonus += abDtBuff;
+    abilityInitiativeBonus += abInit;
   }
 
   const baseMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus);

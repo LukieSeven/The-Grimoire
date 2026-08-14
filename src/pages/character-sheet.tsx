@@ -388,8 +388,19 @@ export default function CharacterSheet() {
 
   const handleLongRest = () => {
     const targetHp = maxHp;
-    const targetDt = maxDt + abilityDtBonus;
+    const targetDt = maxDt;
     const targetMana = maxMana;
+
+    // Reset rechargeable ability charges on Long Rest
+    const rechargeableAbilities = abilities?.filter(a => a.usageType === "rechargeable") || [];
+    rechargeableAbilities.forEach(ab => {
+      if (ab.maxCharges && ab.maxCharges > 0 && ab.currentCharges !== ab.maxCharges) {
+        updateAbilityMut.mutate({
+          id: ab.id,
+          data: { currentCharges: ab.maxCharges ?? 0 }
+        });
+      }
+    });
 
     updateChar.mutate({
       id,
@@ -412,7 +423,7 @@ export default function CharacterSheet() {
         createRoll.mutate({ id, data: { diceType: "dt-log", modifier: targetDt - curDt, label: "Long Rest" } });
         createRoll.mutate({ id, data: { diceType: "mana-log", modifier: targetMana - curMana, label: "Long Rest" } });
         
-        toast.success("Long Rest completed. Vitals restored.");
+        toast.success("Long Rest completed. Vitals and ability charges restored.");
         setIsLongRestConfirmOpen(false);
       }
     });
@@ -4508,7 +4519,32 @@ export default function CharacterSheet() {
                             {ability.subAbilities && ability.subAbilities.length > 0 && (
                               <div className="space-y-1.5 mt-2 pt-2 border-t border-border/30">
                                 {ability.subAbilities.map((sub, subIdx) => {
-                                  const subTitle = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIdx + 2})`;
+                                  let subTitle = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIdx + 2})`;
+                                  let subType = sub.type;
+                                  let subCost = sub.cost;
+                                  let subRollFormula = sub.rollFormula;
+                                  let subDesc = sub.description;
+
+                                  // Check for active replacement triggers affecting sub-abilities
+                                  if (ability.triggers && ability.triggers.length > 0) {
+                                    for (const trig of ability.triggers) {
+                                      if (trig && trig.triggerAction === "update_attached" && isAbilityTriggerActive(trig, {
+                                        hp: character ? character.currentHp : 0,
+                                        maxHp,
+                                        mana: character ? character.currentMana : 0,
+                                        maxMana,
+                                        dt: character ? character.currentDt : 0,
+                                        maxDt,
+                                      })) {
+                                        if (trig.updatedName) subTitle = trig.updatedName;
+                                        if (trig.updatedType) subType = trig.updatedType;
+                                        if (trig.updatedCost !== undefined) subCost = trig.updatedCost;
+                                        if (trig.updatedRollFormula) subRollFormula = trig.updatedRollFormula;
+                                        if (trig.updatedDescription) subDesc = trig.updatedDescription;
+                                      }
+                                    }
+                                  }
+
                                   const subKey = `${ability.id}-${sub.id || subIdx}`;
                                   const isSubOpen = !!expandedSubAbilities[subKey];
 
@@ -4521,14 +4557,14 @@ export default function CharacterSheet() {
                                       >
                                         <div className="flex items-center gap-2 flex-wrap">
                                           <span className="font-serif font-bold text-primary">{subTitle}</span>
-                                          {sub.type && (
+                                          {subType && (
                                             <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase rounded-none px-1.5 py-0.5">
-                                              {sub.type}
+                                              {subType}
                                             </Badge>
                                           )}
-                                          {sub.cost !== undefined && sub.cost > 0 && (
+                                          {subCost !== undefined && subCost > 0 && (
                                             <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">
-                                              {sub.cost} MP
+                                              {subCost} MP
                                             </Badge>
                                           )}
                                           {sub.range && (
@@ -4549,16 +4585,16 @@ export default function CharacterSheet() {
                                               <Button
                                                 key={statKey}
                                                 size="sm"
-                                                onClick={() => handleAbilityRoll({ ...ability, name: subTitle, rollFormula: sub.rollFormula || ability.rollFormula }, statKey)}
+                                                onClick={() => handleAbilityRoll({ ...ability, name: subTitle, rollFormula: subRollFormula || ability.rollFormula }, statKey)}
                                                 className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-6 text-[10px] font-serif rounded-none cursor-pointer px-2"
                                               >
                                                 <Dice5 className="w-3 h-3 mr-1" /> Activate ({statKey.substring(0, 3).toUpperCase()})
                                               </Button>
                                             ))
-                                          ) : sub.rollFormula ? (
+                                          ) : subRollFormula ? (
                                             <Button
                                               size="sm"
-                                              onClick={() => handleRoll(sub.rollFormula || "d20", `Sub: ${subTitle}`)}
+                                              onClick={() => handleRoll(subRollFormula || "d20", `Sub: ${subTitle}`)}
                                               className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-6 text-[10px] font-serif rounded-none cursor-pointer px-2"
                                             >
                                               <Dice5 className="w-3 h-3 mr-1" /> Activate
@@ -4571,14 +4607,14 @@ export default function CharacterSheet() {
                                       {/* Sub-Ability Expanded Body */}
                                       {isSubOpen && (
                                         <div className="p-2.5 space-y-1.5 bg-background/80 border-t border-border/20">
-                                          {sub.rollFormula && (
+                                          {subRollFormula && (
                                             <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2 py-1 rounded-none">
-                                              Formula: <code className="text-primary font-bold">{sub.rollFormula}</code>
+                                              Formula: <code className="text-primary font-bold">{subRollFormula}</code>
                                             </div>
                                           )}
                                           <div
                                             className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-0.5"
-                                            dangerouslySetInnerHTML={{ __html: parseMarkdown(sub.description || "*No additional effect description.*") }}
+                                            dangerouslySetInnerHTML={{ __html: parseMarkdown(subDesc || "*No additional effect description.*") }}
                                           />
                                         </div>
                                       )}
