@@ -47,7 +47,6 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   const [isEditingAbility, setIsEditingAbility] = useState(false);
   const [abilityIndexToEdit, setAbilityIndexToEdit] = useState<number | null>(null);
   const [abilityName, setAbilityName] = useState("");
-  const [abilityName, setAbilityName] = useState("");
   const [abilityNickname, setAbilityNickname] = useState("");
   const [abilityType, setAbilityType] = useState("");
   const [abilityDescription, setAbilityDescription] = useState("");
