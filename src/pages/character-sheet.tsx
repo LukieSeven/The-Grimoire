@@ -33,7 +33,7 @@ import {
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
   Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
   getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum,
-  getAbilityActiveModifierBadges, ActiveModifierBadge
+  getAbilityActiveModifierBadges, ActiveModifierBadge, isAbilityTriggerActive
 } from "@/lib/storage";
 
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
@@ -4392,6 +4392,59 @@ export default function CharacterSheet() {
                                   {b.label}
                                 </span>
                               ))}
+
+                              {/* Ability Effect Badges (Display Effect Name, hover for details) */}
+                              {ability.abilityEffects && ability.abilityEffects.map((eff, effIdx) => {
+                                const tooltipText = [
+                                  `Effect: ${eff.name || "Effect"}`,
+                                  eff.category ? `Category: ${eff.category}` : null,
+                                  eff.duration ? `Duration: ${eff.duration}` : null,
+                                  eff.description ? `Rules: ${eff.description}` : null,
+                                ].filter(Boolean).join(" | ");
+
+                                return (
+                                  <span
+                                    key={eff.id || effIdx}
+                                    title={tooltipText}
+                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded-none border bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold transition-all cursor-help"
+                                  >
+                                    {eff.name || `Effect #${effIdx + 1}`}
+                                  </span>
+                                );
+                              })}
+
+                              {/* Active Trigger Badges (Display Vital Condition, hover for trigger details) */}
+                              {ability.triggers && ability.triggers.map((trig, trigIdx) => {
+                                const isActive = isAbilityTriggerActive(trig, {
+                                  hp: character.currentHp,
+                                  maxHp,
+                                  mana: character.currentMana,
+                                  maxMana,
+                                  dt: character.currentDt,
+                                  maxDt,
+                                });
+
+                                if (!isActive) return null;
+
+                                const opSymbol = trig.operator === "below_percent" ? `< ${trig.threshold}%`
+                                  : trig.operator === "below_value" ? `<= ${trig.threshold}`
+                                  : trig.operator === "depleted" ? `= 0`
+                                  : trig.operator === "above_percent" ? `>= ${trig.threshold}%`
+                                  : `= Max`;
+
+                                const label = `${trig.resource.toUpperCase()} ${opSymbol}`;
+                                const tooltipText = `Trigger: ${trig.name || "Active Trigger"}${trig.description ? ` — ${trig.description}` : ""}`;
+
+                                return (
+                                  <span
+                                    key={trig.id || trigIdx}
+                                    title={tooltipText}
+                                    className="text-[9px] font-mono px-1.5 py-0.5 rounded-none border bg-cyan-500/20 border-cyan-400 text-cyan-300 font-bold shadow-[0_0_6px_rgba(6,182,212,0.3)] transition-all cursor-help animate-pulse"
+                                  >
+                                    ⚡ {label}
+                                  </span>
+                                );
+                              })}
                             </div>
                           </div>
 

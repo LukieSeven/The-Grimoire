@@ -188,6 +188,7 @@ export interface SubAbility {
   rollFormula?: string;
   linkedStats?: string[];
   assignedToQuickRolls?: boolean;
+  assignedToMechanicsTracker?: boolean;
   bonusPower?: number | string;
   bonusVitality?: number | string;
   bonusSpirit?: number | string;
@@ -205,6 +206,108 @@ export interface SubAbility {
   bonusInitiative?: number | string;
   resistances?: string;
   immunities?: string;
+}
+
+export interface AbilityEffect {
+  id: string;
+  name: string;
+  category?: string; // "debuff" | "buff" | "dot" | "status" | "mark" | custom
+  duration?: string; // e.g. "2 rounds", "Until Rest"
+  description?: string;
+  linkedStats?: string[];
+  assignedToQuickRolls?: boolean;
+  assignedToMechanicsTracker?: boolean;
+  bonusPower?: number | string;
+  bonusVitality?: number | string;
+  bonusSpirit?: number | string;
+  bonusAgility?: number | string;
+  bonusEndurance?: number | string;
+  bonusPrecision?: number | string;
+  bonusWillpower?: number | string;
+  bonusCharisma?: number | string;
+  hpAdd?: number | string;
+  hpBuff?: number | string;
+  manaAdd?: number | string;
+  manaBuff?: number | string;
+  dtAdd?: number | string;
+  dtBuff?: number | string;
+  bonusInitiative?: number | string;
+  resistances?: string;
+  immunities?: string;
+}
+
+export interface AbilityTrigger {
+  id: string;
+  name: string;
+  nickname?: string;
+  resource: "hp" | "mana" | "dt";
+  operator: "below_percent" | "below_value" | "depleted" | "above_percent" | "full";
+  threshold: number;
+  description?: string;
+  cost?: number;
+  cooldown?: number;
+  range?: string;
+  speed?: string;
+  rollFormula?: string;
+  linkedStats?: string[];
+  assignedToQuickRolls?: boolean;
+  assignedToMechanicsTracker?: boolean;
+  linkedTargetType?: "none" | "sub-ability" | "effect" | "modifier";
+  linkedTargetId?: string;
+  bonusPower?: number | string;
+  bonusVitality?: number | string;
+  bonusSpirit?: number | string;
+  bonusAgility?: number | string;
+  bonusEndurance?: number | string;
+  bonusPrecision?: number | string;
+  bonusWillpower?: number | string;
+  bonusCharisma?: number | string;
+  hpAdd?: number | string;
+  hpBuff?: number | string;
+  manaAdd?: number | string;
+  manaBuff?: number | string;
+  dtAdd?: number | string;
+  dtBuff?: number | string;
+  bonusInitiative?: number | string;
+  resistances?: string;
+  immunities?: string;
+}
+
+export function isAbilityTriggerActive(
+  trigger: AbilityTrigger,
+  vitals: { hp: number; maxHp: number; mana: number; maxMana: number; dt: number; maxDt: number }
+): boolean {
+  let cur = 0;
+  let max = 1;
+
+  if (trigger.resource === "hp") {
+    cur = vitals.hp;
+    max = vitals.maxHp || 1;
+  } else if (trigger.resource === "mana") {
+    cur = vitals.mana;
+    max = vitals.maxMana || 1;
+  } else if (trigger.resource === "dt") {
+    cur = vitals.dt;
+    max = vitals.maxDt || 1;
+  }
+
+  const percent = (cur / max) * 100;
+  const thresh = Number(trigger.threshold) || 0;
+
+  switch (trigger.operator) {
+    case "below_percent":
+      return percent < thresh;
+    case "below_value":
+      return cur <= thresh;
+    case "depleted":
+      return cur <= 0;
+    case "above_percent":
+      return percent >= thresh;
+    case "full":
+      return cur >= max;
+    default:
+      return false;
+  }
 }
 
 export function buildFormulaVars(vars: Record<string, any> = {}): Record<string, number> {
@@ -398,6 +501,7 @@ export interface EvolutionModifier {
   rankLabel: string;
   requiredStat: number;
   effect: string;
+  assignedToMechanicsTracker?: boolean;
 }
 
 export interface Ability {
@@ -414,11 +518,14 @@ export interface Ability {
   linkedStats: string[];
   linkedStat?: string;
   assignedToQuickRolls: boolean;
+  assignedToMechanicsTracker?: boolean;
   level?: number;
   active?: boolean;
   primaryStat?: string;
   evolutionModifiers?: EvolutionModifier[];
   subAbilities?: SubAbility[];
+  abilityEffects?: AbilityEffect[];
+  triggers?: AbilityTrigger[];
   bonusPower?: number | string;
   bonusVitality?: number | string;
   bonusSpirit?: number | string;

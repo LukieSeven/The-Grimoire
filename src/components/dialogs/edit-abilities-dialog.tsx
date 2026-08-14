@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Edit2, Trash2, Zap, Plus } from "lucide-react";
-import { Ability, SubAbility, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
+import { Ability, SubAbility, EvolutionModifier, AbilityEffect, AbilityTrigger, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
 
 interface Props {
   characterId: number;
@@ -53,9 +53,12 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
   const [primaryStat, setPrimaryStat] = useState("power");
   const [evolutionModifiers, setEvolutionModifiers] = useState<EvolutionModifier[]>([]);
   const [subAbilities, setSubAbilities] = useState<SubAbility[]>([]);
+  const [abilityEffects, setAbilityEffects] = useState<AbilityEffect[]>([]);
+  const [triggers, setTriggers] = useState<AbilityTrigger[]>([]);
   const [expandedMods, setExpandedMods] = useState<Record<number, boolean>>({});
   const [linkedStats, setLinkedStats] = useState<string[]>([]);
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
+  const [assignedToMechanicsTracker, setAssignedToMechanicsTracker] = useState(false);
   const [essenceId, setEssenceId] = useState<number | null>(null);
   const [isInnatePassive, setIsInnatePassive] = useState<boolean>(false);
   const [resistances, setResistances] = useState("");
@@ -91,9 +94,12 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setPrimaryStat("power");
     setEvolutionModifiers([]);
     setSubAbilities([]);
+    setAbilityEffects([]);
+    setTriggers([]);
     setExpandedMods({});
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
+    setAssignedToMechanicsTracker(false);
     setEssenceId(null);
     setIsInnatePassive(false);
     setResistances("");
@@ -135,8 +141,11 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setPrimaryStat(ability.primaryStat || "power");
     setEvolutionModifiers(ability.evolutionModifiers ? [...ability.evolutionModifiers] : []);
     setSubAbilities(ability.subAbilities ? [...ability.subAbilities] : []);
+    setAbilityEffects(ability.abilityEffects ? [...ability.abilityEffects] : []);
+    setTriggers(ability.triggers ? [...ability.triggers] : []);
     setLinkedStats(ability.linkedStats || (ability.linkedStat ? [ability.linkedStat] : []));
-    setAssignedToQuickRolls(ability.assignedToQuickRolls);
+    setAssignedToQuickRolls(!!ability.assignedToQuickRolls);
+    setAssignedToMechanicsTracker(!!ability.assignedToMechanicsTracker);
     const isIp = !!(ability.isInnatePassive || ability.essenceId === -1 || ability.type === "Innate Passive");
     setIsInnatePassive(isIp);
     setEssenceId(isIp ? null : (ability.essenceId || null));
@@ -178,7 +187,7 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     const info = EVOLUTION_THRESHOLDS_TABLE[nextIdx];
     const newMod: EvolutionModifier = {
       id: `mod-${Date.now()}-${nextIdx}`,
-      name: `Modifier ${nextIdx + 1}`,
+      name: "",
       rankLabel: info.rankLabel,
       requiredStat: info.requiredStat,
       effect: "",
@@ -227,8 +236,11 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
       primaryStat,
       evolutionModifiers,
       subAbilities,
+      abilityEffects,
+      triggers,
       linkedStats,
       assignedToQuickRolls,
+      assignedToMechanicsTracker,
       essenceId: isInnatePassive ? null : essenceId,
       isInnatePassive,
       resistances,
@@ -549,6 +561,140 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
               </div>
+            </div>
+
+            {/* Ability Effects Section */}
+            <div className="space-y-3 border-t border-border/30 pt-3">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Effects</label>
+              {abilityEffects.map((eff, effIdx) => (
+                <div key={eff.id || effIdx} className="bg-amber-500/5 border border-amber-500/20 p-3 space-y-3 rounded-none">
+                  <div className="flex items-center justify-between">
+                    <span className="font-serif text-xs font-bold text-amber-400 uppercase tracking-wider">
+                      Ability Effect #{effIdx + 1}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAbilityEffects(prev => prev.filter((_, i) => i !== effIdx))}
+                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Remove Effect
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Effect Name</label>
+                      <Input
+                        value={eff.name || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setAbilityEffects(prev => {
+                            const copy = [...prev];
+                            copy[effIdx] = { ...copy[effIdx], name: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="Effect name..."
+                        className="bg-background rounded-none font-bold text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Category</label>
+                      <select
+                        value={eff.category || "debuff"}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setAbilityEffects(prev => {
+                            const copy = [...prev];
+                            copy[effIdx] = { ...copy[effIdx], category: val };
+                            return copy;
+                          });
+                        }}
+                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                      >
+                        <option value="debuff">Debuff</option>
+                        <option value="buff">Buff</option>
+                        <option value="dot">DoT</option>
+                        <option value="mark">Mark</option>
+                        <option value="status">Status</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Duration</label>
+                      <Input
+                        value={eff.duration || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setAbilityEffects(prev => {
+                            const copy = [...prev];
+                            copy[effIdx] = { ...copy[effIdx], duration: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="e.g. 2 rounds"
+                        className="bg-background rounded-none text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Effect Description / Rules</label>
+                    <Textarea
+                      value={eff.description || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setAbilityEffects(prev => {
+                          const copy = [...prev];
+                          copy[effIdx] = { ...copy[effIdx], description: val };
+                          return copy;
+                        });
+                      }}
+                      placeholder="Describe the effect rules and passives..."
+                      className="bg-background min-h-[100px] rounded-none font-serif text-sm"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Checkbox
+                      id={`eff-mechanics-${effIdx}`}
+                      checked={!!eff.assignedToMechanicsTracker}
+                      onCheckedChange={chk => {
+                        setAbilityEffects(prev => {
+                          const copy = [...prev];
+                          copy[effIdx] = { ...copy[effIdx], assignedToMechanicsTracker: !!chk };
+                          return copy;
+                        });
+                      }}
+                    />
+                    <label htmlFor={`eff-mechanics-${effIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                      Mechanics Tracker
+                    </label>
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newEff: AbilityEffect = {
+                    id: `effect-${Date.now()}-${abilityEffects.length}`,
+                    name: "",
+                    category: "debuff",
+                    duration: "",
+                    description: "",
+                    assignedToMechanicsTracker: false,
+                  };
+                  setAbilityEffects(prev => [...prev, newEff]);
+                }}
+                className="w-full h-8 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold my-2"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Ability Effect</span>
+              </Button>
             </div>
 
             {/* Description textarea */}
@@ -1073,27 +1219,46 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                     />
                   </div>
 
-                  {/* Assign to Favorites / Quick Rolls Toggle */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Checkbox
-                      id={`sub-quickroll-${subIdx}`}
-                      checked={!!sub.assignedToQuickRolls}
-                      onCheckedChange={chk => {
-                        setSubAbilities(prev => {
-                          const copy = [...prev];
-                          copy[subIdx] = { ...copy[subIdx], assignedToQuickRolls: !!chk };
-                          return copy;
-                        });
-                      }}
-                    />
-                    <label htmlFor={`sub-quickroll-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
-                      Assign Sub-Effect to Quick Rolls / Favorites Hotbar
-                    </label>
+                  {/* Assign to Favorites / Mechanics Tracker Toggles */}
+                  <div className="flex items-center gap-4 pt-1 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`sub-quickroll-${subIdx}`}
+                        checked={!!sub.assignedToQuickRolls}
+                        onCheckedChange={chk => {
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], assignedToQuickRolls: !!chk };
+                            return copy;
+                          });
+                        }}
+                      />
+                      <label htmlFor={`sub-quickroll-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                        Assign Sub-Effect to Quick Rolls / Favorites Hotbar
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`sub-mechanics-${subIdx}`}
+                        checked={!!sub.assignedToMechanicsTracker}
+                        onCheckedChange={chk => {
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], assignedToMechanicsTracker: !!chk };
+                            return copy;
+                          });
+                        }}
+                      />
+                      <label htmlFor={`sub-mechanics-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                        Mechanics Tracker
+                      </label>
+                    </div>
                   </div>
                 </div>
               ))}
 
-              {/* Multi-Sequential + Add Additional Effect Button */}
+              {/* Multi-Sequential + Sub Ability Button */}
               <Button
                 type="button"
                 variant="outline"
@@ -1108,13 +1273,250 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                     rollFormula: "",
                     linkedStats: [],
                     assignedToQuickRolls: false,
+                    assignedToMechanicsTracker: false,
                   };
                   setSubAbilities(prev => [...prev, newSub]);
                 }}
                 className="w-full h-8 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Add Additional Effect</span>
+                <span>+ Sub Ability</span>
+              </Button>
+            </div>
+
+            {/* Ability Triggers Section */}
+            <div className="space-y-3 pt-2 border-t border-border/30">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Triggers</label>
+              {triggers.map((trig, trigIdx) => (
+                <div key={trig.id || trigIdx} className="bg-cyan-500/5 border border-cyan-500/20 p-3 space-y-3 rounded-none">
+                  <div className="flex items-center justify-between">
+                    <span className="font-serif text-xs font-bold text-cyan-400 uppercase tracking-wider">
+                      Ability Trigger #{trigIdx + 1}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTriggers(prev => prev.filter((_, i) => i !== trigIdx))}
+                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3 mr-1" /> Remove Trigger
+                    </Button>
+                  </div>
+
+                  {/* Trigger Name & Nickname */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Trigger Name</label>
+                      <Input
+                        value={trig.name || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], name: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="Trigger name..."
+                        className="bg-background rounded-none font-bold text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Nickname</label>
+                      <Input
+                        value={trig.nickname || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], nickname: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="Short nickname..."
+                        className="bg-background rounded-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 1-Line Threshold Builder */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Resource</label>
+                      <select
+                        value={trig.resource || "hp"}
+                        onChange={e => {
+                          const val = e.target.value as any;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], resource: val };
+                            return copy;
+                          });
+                        }}
+                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                      >
+                        <option value="hp">Health (HP)</option>
+                        <option value="mana">Mana</option>
+                        <option value="dt">DT</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Operator</label>
+                      <select
+                        value={trig.operator || "below_percent"}
+                        onChange={e => {
+                          const val = e.target.value as any;
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], operator: val };
+                            return copy;
+                          });
+                        }}
+                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground font-mono"
+                      >
+                        <option value="below_percent">&lt; %</option>
+                        <option value="below_value">&lt;= Val</option>
+                        <option value="depleted">= 0</option>
+                        <option value="above_percent">&gt;= %</option>
+                        <option value="full">= Max</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Threshold Value</label>
+                      <Input
+                        type="number"
+                        value={trig.threshold ?? 50}
+                        onChange={e => {
+                          const val = Number(e.target.value);
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], threshold: val };
+                            return copy;
+                          });
+                        }}
+                        className="bg-background rounded-none font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Point to Target Selector */}
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Point to Existing Target (Optional)</label>
+                    <select
+                      value={trig.linkedTargetId || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setTriggers(prev => {
+                          const copy = [...prev];
+                          if (!val) {
+                            copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: "none", linkedTargetId: "" };
+                          } else {
+                            const subMatch = subAbilities.find(s => s.id === val);
+                            const effMatch = abilityEffects.find(ef => ef.id === val);
+                            const modMatch = evolutionModifiers.find(m => m.id === val);
+                            let tType: any = "none";
+                            if (subMatch) tType = "sub-ability";
+                            else if (effMatch) tType = "effect";
+                            else if (modMatch) tType = "modifier";
+
+                            copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: tType, linkedTargetId: val };
+                          }
+                          return copy;
+                        });
+                      }}
+                      className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                    >
+                      <option value="">None / Custom</option>
+                      {subAbilities.map((s, idx) => (
+                        <option key={s.id || idx} value={s.id}>Sub-Ability: {s.name || `Sub #${idx + 2}`}</option>
+                      ))}
+                      {abilityEffects.map((ef, idx) => (
+                        <option key={ef.id || idx} value={ef.id}>Ability Effect: {ef.name || `Effect #${idx + 1}`}</option>
+                      ))}
+                      {evolutionModifiers.map((m, idx) => (
+                        <option key={m.id || idx} value={m.id}>Ability Mod: {m.name || `Mod #${idx + 1}`}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Description textarea */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Trigger Description / Effect</label>
+                    <Textarea
+                      value={trig.description || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setTriggers(prev => {
+                          const copy = [...prev];
+                          copy[trigIdx] = { ...copy[trigIdx], description: val };
+                          return copy;
+                        });
+                      }}
+                      placeholder="Describe what happens when this trigger fires..."
+                      className="bg-background min-h-[100px] rounded-none font-serif text-sm"
+                    />
+                  </div>
+
+                  {/* Options Toggles */}
+                  <div className="flex items-center gap-4 pt-1 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`trig-quickroll-${trigIdx}`}
+                        checked={!!trig.assignedToQuickRolls}
+                        onCheckedChange={chk => {
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], assignedToQuickRolls: !!chk };
+                            return copy;
+                          });
+                        }}
+                      />
+                      <label htmlFor={`trig-quickroll-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                        Assign Trigger to Quick Rolls / Hotbar
+                      </label>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`trig-mechanics-${trigIdx}`}
+                        checked={!!trig.assignedToMechanicsTracker}
+                        onCheckedChange={chk => {
+                          setTriggers(prev => {
+                            const copy = [...prev];
+                            copy[trigIdx] = { ...copy[trigIdx], assignedToMechanicsTracker: !!chk };
+                            return copy;
+                          });
+                        }}
+                      />
+                      <label htmlFor={`trig-mechanics-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                        Mechanics Tracker
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const newTrig: AbilityTrigger = {
+                    id: `trig-${Date.now()}-${triggers.length}`,
+                    name: "",
+                    resource: "hp",
+                    operator: "below_percent",
+                    threshold: 50,
+                    description: "",
+                    assignedToMechanicsTracker: false,
+                  };
+                  setTriggers(prev => [...prev, newTrig]);
+                }}
+                className="w-full h-8 bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Ability Trigger</span>
               </Button>
             </div>
 
@@ -1235,7 +1637,31 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                                 />
                               </div>
 
-                              <div className="flex justify-end pt-1">
+                              <div className="flex justify-between items-center pt-1">
+                                <div className="flex items-center gap-2">
+                                  <Checkbox
+                                    id={`mod-mechanics-${slotIdx}`}
+                                    checked={!!existingMod?.assignedToMechanicsTracker}
+                                    onCheckedChange={chk => {
+                                      setEvolutionModifiers(prev => {
+                                        const copy = [...prev];
+                                        const base = copy[slotIdx] || {
+                                          id: `mod-${Date.now()}-${slotIdx}`,
+                                          name: "",
+                                          rankLabel: slotMeta.rankLabel,
+                                          requiredStat: slotMeta.requiredStat,
+                                          effect: "",
+                                        };
+                                        copy[slotIdx] = { ...base, assignedToMechanicsTracker: !!chk };
+                                        return copy;
+                                      });
+                                    }}
+                                  />
+                                  <label htmlFor={`mod-mechanics-${slotIdx}`} className="text-[10px] font-serif text-muted-foreground cursor-pointer select-none">
+                                    Mechanics Tracker
+                                  </label>
+                                </div>
+
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -1257,15 +1683,28 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                 </div>
               );
             })()}
-            <div className="flex items-center gap-2 pt-1">
-              <Checkbox 
-                id="quick_roll" 
-                checked={assignedToQuickRolls} 
-                onCheckedChange={(checked) => setAssignedToQuickRolls(!!checked)} 
-              />
-              <label htmlFor="quick_roll" className="font-bold text-[10px] text-muted-foreground uppercase cursor-pointer">
-                Assign to Quick Rolls HUD
-              </label>
+            <div className="flex items-center gap-4 pt-1 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="quick_roll" 
+                  checked={assignedToQuickRolls} 
+                  onCheckedChange={(checked) => setAssignedToQuickRolls(!!checked)} 
+                />
+                <label htmlFor="quick_roll" className="font-bold text-[10px] text-muted-foreground uppercase cursor-pointer">
+                  Assign to Quick Rolls HUD
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="mechanics_tracker" 
+                  checked={assignedToMechanicsTracker} 
+                  onCheckedChange={(checked) => setAssignedToMechanicsTracker(!!checked)} 
+                />
+                <label htmlFor="mechanics_tracker" className="font-bold text-[10px] text-muted-foreground uppercase cursor-pointer">
+                  Mechanics Tracker
+                </label>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-border/30 pt-4">
