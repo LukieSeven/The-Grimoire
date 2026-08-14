@@ -469,7 +469,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                   {/* Top row: Name & Nickname */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-2">
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Sub-Effect Name</label>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Sub-Effect Name</label>
                       <Input
                         value={sub.name || ""}
                         onChange={e => {
@@ -481,11 +481,11 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                           });
                         }}
                         placeholder={`Sub-effect name (default: ${name || "Ability"} (${subIdx + 2}))...`}
-                        className="h-8 text-xs bg-background rounded-none font-bold"
+                        className="bg-background rounded-none font-bold text-sm"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Nickname</label>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Nickname</label>
                       <Input
                         value={sub.nickname || ""}
                         onChange={e => {
@@ -497,17 +497,50 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                           });
                         }}
                         placeholder="Short nickname..."
-                        className="h-8 text-xs bg-background rounded-none"
+                        className="bg-background rounded-none"
                       />
                     </div>
                   </div>
 
-                  {/* Vitals row: MP Cost, Cooldown, Range, Speed */}
-                  <div className="grid grid-cols-4 gap-2">
+                  {/* Linked Attributes checkboxes */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1.5">Linked Attributes (For Roll Modifiers)</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {STAT_OPTIONS.map(stat => {
+                        const isChecked = (sub.linkedStats || []).includes(stat);
+                        return (
+                          <div key={stat} className="flex items-center gap-2 bg-background border border-border/40 p-2 rounded-none">
+                            <Checkbox
+                              id={`sub_${subIdx}_link_${stat}`}
+                              checked={isChecked}
+                              onCheckedChange={checked => {
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  const curLinked = copy[subIdx].linkedStats || [];
+                                  const nextLinked = checked
+                                    ? [...curLinked, stat]
+                                    : curLinked.filter(s => s !== stat);
+                                  copy[subIdx] = { ...copy[subIdx], linkedStats: nextLinked };
+                                  return copy;
+                                });
+                              }}
+                            />
+                            <label htmlFor={`sub_${subIdx}_link_${stat}`} className="text-[10px] font-mono font-bold uppercase cursor-pointer">
+                              {stat.substring(0, 3)}
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 5-Column Header Vitals Row */}
+                  <div className="grid grid-cols-5 gap-2.5">
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">MP Cost</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost</label>
                       <Input
                         type="number"
+                        min={0}
                         value={sub.cost ?? 0}
                         onChange={e => {
                           const val = Number(e.target.value);
@@ -517,13 +550,14 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             return copy;
                           });
                         }}
-                        className="h-8 text-xs bg-background font-mono rounded-none"
+                        className="bg-background font-mono rounded-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Cooldown (s)</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Cooldown (sec)</label>
                       <Input
                         type="number"
+                        min={0}
                         value={sub.cooldown ?? 0}
                         onChange={e => {
                           const val = Number(e.target.value);
@@ -533,11 +567,11 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             return copy;
                           });
                         }}
-                        className="h-8 text-xs bg-background font-mono rounded-none"
+                        className="bg-background font-mono rounded-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Range</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Range</label>
                       <Input
                         value={sub.range || ""}
                         onChange={e => {
@@ -548,12 +582,12 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             return copy;
                           });
                         }}
-                        placeholder="e.g. Melee, 30 ft"
-                        className="h-8 text-xs bg-background rounded-none"
+                        placeholder="e.g. Melee, 30ft"
+                        className="bg-background rounded-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Speed</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
                       <Input
                         value={sub.speed || ""}
                         onChange={e => {
@@ -564,17 +598,13 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             return copy;
                           });
                         }}
-                        placeholder="e.g. Instant, Action"
-                        className="h-8 text-xs bg-background rounded-none"
+                        placeholder="e.g. Standard, Instant"
+                        className="bg-background rounded-none"
                       />
                     </div>
-                  </div>
-
-                  {/* Formula and Type row */}
-                  <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Type (e.g. Melee, Spell, Buff)</label>
-                      <Input
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Type</label>
+                      <select
                         value={sub.type || ""}
                         onChange={e => {
                           const val = e.target.value;
@@ -584,63 +614,79 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             return copy;
                           });
                         }}
-                        placeholder="e.g. Melee, Spell..."
-                        className="h-8 text-xs bg-background rounded-none"
-                      />
+                        className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm transition-colors text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="">None</option>
+                        <option value="Passive">Passive</option>
+                        <option value="Attack">Attack</option>
+                        <option value="Buff">Buff</option>
+                        <option value="Debuff">Debuff</option>
+                        <option value="Defense">Defense</option>
+                        <option value="Movement">Movement</option>
+                        <option value="Utility">Utility</option>
+                        <option value="Stance">Stance</option>
+                        <option value="Reaction">Reaction</option>
+                      </select>
                     </div>
+                  </div>
+
+                  {/* Roll Formula */}
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Roll Formula / Modifier (Optional)</label>
+                    <Input
+                      value={sub.rollFormula || ""}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setSubAbilities(prev => {
+                          const copy = [...prev];
+                          copy[subIdx] = { ...copy[subIdx], rollFormula: val };
+                          return copy;
+                        });
+                      }}
+                      placeholder="e.g. d20+powr+6, 2d6+prer"
+                      className="bg-background font-mono rounded-none"
+                    />
+                  </div>
+
+                  {/* Resistances & Immunities 2-Column Grid */}
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Roll Formula / Math</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
                       <Input
-                        value={sub.rollFormula || ""}
+                        value={sub.resistances || ""}
                         onChange={e => {
                           const val = e.target.value;
                           setSubAbilities(prev => {
                             const copy = [...prev];
-                            copy[subIdx] = { ...copy[subIdx], rollFormula: val };
+                            copy[subIdx] = { ...copy[subIdx], resistances: val };
                             return copy;
                           });
                         }}
-                        placeholder="e.g. powr*2 or SPI..."
-                        className="h-8 text-xs bg-background font-mono rounded-none"
+                        placeholder="e.g. Fire, Piercing"
+                        className="bg-background rounded-none"
                       />
                     </div>
-                  </div>
-
-                  {/* Linked Stats Multi-Select */}
-                  <div>
-                    <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Linked Attributes (Action Roll Buttons)</label>
-                    <div className="flex flex-wrap gap-1.5 bg-background p-2 border border-border/40">
-                      {STAT_OPTIONS.map(sKey => {
-                        const isChecked = (sub.linkedStats || []).includes(sKey);
-                        return (
-                          <div key={sKey} className="flex items-center gap-1">
-                            <Checkbox
-                              id={`sub-${subIdx}-stat-${sKey}`}
-                              checked={isChecked}
-                              onCheckedChange={chk => {
-                                setSubAbilities(prev => {
-                                  const copy = [...prev];
-                                  const curLinked = copy[subIdx].linkedStats || [];
-                                  const nextLinked = chk 
-                                    ? [...curLinked, sKey]
-                                    : curLinked.filter(k => k !== sKey);
-                                  copy[subIdx] = { ...copy[subIdx], linkedStats: nextLinked };
-                                  return copy;
-                                });
-                              }}
-                            />
-                            <label htmlFor={`sub-${subIdx}-stat-${sKey}`} className="text-[10px] uppercase font-mono cursor-pointer select-none">
-                              {sKey.substring(0, 3)}
-                            </label>
-                          </div>
-                        );
-                      })}
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
+                      <Input
+                        value={sub.immunities || ""}
+                        onChange={e => {
+                          const val = e.target.value;
+                          setSubAbilities(prev => {
+                            const copy = [...prev];
+                            copy[subIdx] = { ...copy[subIdx], immunities: val };
+                            return copy;
+                          });
+                        }}
+                        placeholder="e.g. Poison, Stun"
+                        className="bg-background rounded-none"
+                      />
                     </div>
                   </div>
 
                   {/* Description textarea */}
                   <div>
-                    <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Description / Dialogue Text</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
                     <Textarea
                       value={sub.description || ""}
                       onChange={e => {
@@ -652,7 +698,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                         });
                       }}
                       placeholder="Describe the secondary effect..."
-                      className="min-h-[100px] text-xs bg-background rounded-none font-serif"
+                      className="bg-background min-h-[140px] rounded-none font-serif text-sm"
                     />
                   </div>
 
@@ -669,7 +715,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                         });
                       }}
                     />
-                    <label htmlFor={`sub-quickroll-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer">
+                    <label htmlFor={`sub-quickroll-${subIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
                       Assign Sub-Effect to Quick Rolls / Favorites Hotbar
                     </label>
                   </div>
