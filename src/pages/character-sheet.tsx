@@ -4395,6 +4395,7 @@ export default function CharacterSheet() {
 
                               {/* Ability Effect Badges (Display Effect Name, hover for details) */}
                               {ability.abilityEffects && ability.abilityEffects.map((eff, effIdx) => {
+                                if (!eff) return null;
                                 const tooltipText = [
                                   `Effect: ${eff.name || "Effect"}`,
                                   eff.category ? `Category: ${eff.category}` : null,
@@ -4415,24 +4416,26 @@ export default function CharacterSheet() {
 
                               {/* Active Trigger Badges (Display Vital Condition, hover for trigger details) */}
                               {ability.triggers && ability.triggers.map((trig, trigIdx) => {
+                                if (!trig) return null;
                                 const isActive = isAbilityTriggerActive(trig, {
-                                  hp: character.currentHp,
+                                  hp: character ? character.currentHp : 0,
                                   maxHp,
-                                  mana: character.currentMana,
+                                  mana: character ? character.currentMana : 0,
                                   maxMana,
-                                  dt: character.currentDt,
+                                  dt: character ? character.currentDt : 0,
                                   maxDt,
                                 });
 
                                 if (!isActive) return null;
 
-                                const opSymbol = trig.operator === "below_percent" ? `< ${trig.threshold}%`
-                                  : trig.operator === "below_value" ? `<= ${trig.threshold}`
+                                const resName = trig.resource ? String(trig.resource).toUpperCase() : "HP";
+                                const opSymbol = trig.operator === "below_percent" ? `< ${trig.threshold ?? 50}%`
+                                  : trig.operator === "below_value" ? `<= ${trig.threshold ?? 0}`
                                   : trig.operator === "depleted" ? `= 0`
-                                  : trig.operator === "above_percent" ? `>= ${trig.threshold}%`
+                                  : trig.operator === "above_percent" ? `>= ${trig.threshold ?? 50}%`
                                   : `= Max`;
 
-                                const label = `${trig.resource.toUpperCase()} ${opSymbol}`;
+                                const label = `${resName} ${opSymbol}`;
                                 const tooltipText = `Trigger: ${trig.name || "Active Trigger"}${trig.description ? ` — ${trig.description}` : ""}`;
 
                                 return (

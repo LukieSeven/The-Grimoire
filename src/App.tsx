@@ -6,12 +6,32 @@ import { Layout } from "@/components/layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { lazy, Suspense, useEffect } from "react";
 
-const NotFound = lazy(() => import("@/pages/not-found"));
-const Dashboard = lazy(() => import("@/pages/dashboard"));
-const CharacterSheet = lazy(() => import("@/pages/character-sheet"));
-const Bookshelf = lazy(() => import("@/pages/bookshelf"));
-const Codex = lazy(() => import("@/pages/codex"));
-const Chronicle = lazy(() => import("@/pages/chronicle"));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    const pageHasBeenReloaded = sessionStorage.getItem("page_chunk_reloaded") === "true";
+    try {
+      const component = await componentImport();
+      sessionStorage.setItem("page_chunk_reloaded", "false");
+      return component;
+    } catch (error) {
+      if (!pageHasBeenReloaded) {
+        sessionStorage.setItem("page_chunk_reloaded", "true");
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
+const Dashboard = lazyWithRetry(() => import("@/pages/dashboard"));
+const CharacterSheet = lazyWithRetry(() => import("@/pages/character-sheet"));
+const Bookshelf = lazyWithRetry(() => import("@/pages/bookshelf"));
+const Codex = lazyWithRetry(() => import("@/pages/codex"));
+const Chronicle = lazyWithRetry(() => import("@/pages/chronicle"));
 
 const queryClient = new QueryClient();
 

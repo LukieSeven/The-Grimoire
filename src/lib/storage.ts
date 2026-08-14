@@ -277,18 +277,21 @@ export function isAbilityTriggerActive(
   trigger: AbilityTrigger,
   vitals: { hp: number; maxHp: number; mana: number; maxMana: number; dt: number; maxDt: number }
 ): boolean {
+  if (!trigger) return false;
   let cur = 0;
   let max = 1;
 
-  if (trigger.resource === "hp") {
-    cur = vitals.hp;
-    max = vitals.maxHp || 1;
-  } else if (trigger.resource === "mana") {
-    cur = vitals.mana;
-    max = vitals.maxMana || 1;
-  } else if (trigger.resource === "dt") {
-    cur = vitals.dt;
-    max = vitals.maxDt || 1;
+  const res = trigger.resource ? String(trigger.resource).toLowerCase() : "hp";
+
+  if (res === "hp") {
+    cur = vitals ? (vitals.hp ?? 0) : 0;
+    max = vitals && vitals.maxHp ? vitals.maxHp : 1;
+  } else if (res === "mana") {
+    cur = vitals ? (vitals.mana ?? 0) : 0;
+    max = vitals && vitals.maxMana ? vitals.maxMana : 1;
+  } else if (res === "dt") {
+    cur = vitals ? (vitals.dt ?? 0) : 0;
+    max = vitals && vitals.maxDt ? vitals.maxDt : 1;
   }
 
   const percent = (cur / max) * 100;
