@@ -1534,6 +1534,7 @@ export default function CharacterSheet() {
 
   const toggleAbilityActive = (ability: Ability) => {
     const nextActive = !ability.active;
+    const prevStats = getAdjustedStats(character, equipment, abilities);
     const updatedAbilities = abilities.map(a => a.id === ability.id ? { ...a, active: nextActive } : a);
     const newStats = getAdjustedStats(character, equipment, updatedAbilities);
 
@@ -1576,10 +1577,14 @@ export default function CharacterSheet() {
     let newDt = curDt;
 
     if (nextActive) {
-      // Activating: Add gains to current pools up to new total max
-      newHp = Math.min(newStats.totalMaxHp, curHp + valHpAdd + valHpBuff);
-      newMana = Math.min(newStats.totalMaxMana, curMana + valManaAdd + valManaBuff);
-      newDt = Math.min(newStats.totalMaxDt, curDt + valDtAdd + valDtBuff);
+      // Activating: If pool was full or gains an increase, fill current pool to new max
+      const isHpFull = curHp >= prevStats.totalMaxHp;
+      const isManaFull = curMana >= prevStats.totalMaxMana;
+      const isDtFull = curDt >= prevStats.totalMaxDt;
+
+      newHp = isHpFull ? newStats.totalMaxHp : Math.min(newStats.totalMaxHp, curHp + valHpAdd + valHpBuff);
+      newMana = isManaFull ? newStats.totalMaxMana : Math.min(newStats.totalMaxMana, curMana + valManaAdd + valManaBuff);
+      newDt = isDtFull ? newStats.totalMaxDt : Math.min(newStats.totalMaxDt, curDt + valDtAdd + valDtBuff);
     } else {
       // Deactivating:
       // Hard Rule:
