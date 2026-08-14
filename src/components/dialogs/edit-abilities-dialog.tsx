@@ -1551,7 +1551,8 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                               ⚡ Complete Drop-In Replacement Ability (Active When Triggered)
                             </span>
 
-                            <div className="grid grid-cols-3 gap-2">
+                            {/* Row 1: Name, Nickname & Type */}
+                            <div className="grid grid-cols-4 gap-2">
                               <div className="col-span-2">
                                 <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Ability Name</label>
                                 <Input
@@ -1569,6 +1570,42 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                                 />
                               </div>
                               <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Nickname</label>
+                                <Input
+                                  value={trig.updatedNickname || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedNickname: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="Short name..."
+                                  className="bg-background rounded-none text-xs h-8"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Type</label>
+                                <Input
+                                  value={trig.updatedType || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedType: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. Spell / Action"
+                                  className="bg-background rounded-none text-xs h-8"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Row 2: Cost, Cooldown, Range, Speed */}
+                            <div className="grid grid-cols-4 gap-2">
+                              <div>
                                 <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement MP Cost</label>
                                 <Input
                                   type="number"
@@ -1585,22 +1622,20 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                                   className="bg-background rounded-none font-mono text-xs h-8"
                                 />
                               </div>
-                            </div>
-
-                            <div className="grid grid-cols-3 gap-2">
                               <div>
-                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Formula</label>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Cooldown</label>
                                 <Input
-                                  value={trig.updatedRollFormula || ""}
+                                  type="number"
+                                  value={trig.updatedCooldown ?? ""}
                                   onChange={e => {
-                                    const val = e.target.value;
+                                    const val = e.target.value === "" ? undefined : Number(e.target.value);
                                     setTriggers(prev => {
                                       const copy = [...prev];
-                                      copy[trigIdx] = { ...copy[trigIdx], updatedRollFormula: val };
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedCooldown: val };
                                       return copy;
                                     });
                                   }}
-                                  placeholder="e.g. 3d12 + SPI"
+                                  placeholder="e.g. 1"
                                   className="bg-background rounded-none font-mono text-xs h-8"
                                 />
                               </div>
@@ -1638,6 +1673,50 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                               </div>
                             </div>
 
+                            {/* Row 3: Roll Formula & Linked Stats */}
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold uppercase text-purple-300 block">Replacement Roll Formula</label>
+                              <Input
+                                value={trig.updatedRollFormula || ""}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setTriggers(prev => {
+                                    const copy = [...prev];
+                                    copy[trigIdx] = { ...copy[trigIdx], updatedRollFormula: val };
+                                    return copy;
+                                  });
+                                }}
+                                placeholder="e.g. 3d12 + SPI"
+                                className="bg-background rounded-none font-mono text-xs h-8"
+                              />
+                              <div>
+                                <label className="text-[8px] font-bold uppercase text-muted-foreground block mb-1">Replacement Linked Action Stats</label>
+                                <div className="flex flex-wrap gap-2">
+                                  {["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"].map(st => {
+                                    const isChecked = (trig.updatedLinkedStats || []).includes(st);
+                                    return (
+                                      <label key={st} className="flex items-center gap-1 cursor-pointer select-none text-[9px] font-mono text-purple-200">
+                                        <Checkbox
+                                          checked={isChecked}
+                                          onCheckedChange={chk => {
+                                            setTriggers(prev => {
+                                              const copy = [...prev];
+                                              const curStats = copy[trigIdx].updatedLinkedStats || [];
+                                              const nextStats = chk ? [...curStats, st] : curStats.filter(s => s !== st);
+                                              copy[trigIdx] = { ...copy[trigIdx], updatedLinkedStats: nextStats };
+                                              return copy;
+                                            });
+                                          }}
+                                        />
+                                        {st.substring(0, 3).toUpperCase()}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Row 4: Replacement Description / Base Effect */}
                             <div>
                               <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Description / Base Effect</label>
                               <Textarea
@@ -1653,6 +1732,105 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                                 placeholder="Describe the complete replacement effects of this ability when triggered..."
                                 className="bg-background min-h-[90px] rounded-none font-serif text-xs"
                               />
+                            </div>
+
+                            {/* Row 5: Trigger Active Modifiers Grid */}
+                            <div className="border-t border-purple-500/30 pt-2 space-y-2">
+                              <span className="text-[9px] font-bold uppercase text-purple-300 block">Replacement Active Stat Bonuses</span>
+                              <div className="grid grid-cols-4 gap-1.5">
+                                {[
+                                  { label: "POW", key: "bonusPower" },
+                                  { label: "VIT", key: "bonusVitality" },
+                                  { label: "SPI", key: "bonusSpirit" },
+                                  { label: "AGI", key: "bonusAgility" },
+                                  { label: "END", key: "bonusEndurance" },
+                                  { label: "PRE", key: "bonusPrecision" },
+                                  { label: "WIL", key: "bonusWillpower" },
+                                  { label: "CHA", key: "bonusCharisma" },
+                                ].map(item => (
+                                  <div key={item.key}>
+                                    <label className="text-[8px] font-mono text-purple-200 block text-center mb-0.5">{item.label}</label>
+                                    <Input
+                                      value={(trig as any)[item.key] ?? ""}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setTriggers(prev => {
+                                          const copy = [...prev];
+                                          copy[trigIdx] = { ...copy[trigIdx], [item.key]: val };
+                                          return copy;
+                                        });
+                                      }}
+                                      placeholder="+0"
+                                      className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+
+                              <div className="grid grid-cols-7 gap-1 pt-1">
+                                {[
+                                  { label: "HP Add", key: "hpAdd" },
+                                  { label: "HP Buff", key: "hpBuff" },
+                                  { label: "MP Add", key: "manaAdd" },
+                                  { label: "MP Buff", key: "manaBuff" },
+                                  { label: "DT Add", key: "dtAdd" },
+                                  { label: "DT Buff", key: "dtBuff" },
+                                  { label: "Init", key: "bonusInitiative" },
+                                ].map(item => (
+                                  <div key={item.key}>
+                                    <label className="text-[8px] font-mono text-purple-200 block text-center mb-0.5">{item.label}</label>
+                                    <Input
+                                      value={(trig as any)[item.key] ?? ""}
+                                      onChange={e => {
+                                        const val = e.target.value;
+                                        setTriggers(prev => {
+                                          const copy = [...prev];
+                                          copy[trigIdx] = { ...copy[trigIdx], [item.key]: val };
+                                          return copy;
+                                        });
+                                      }}
+                                      placeholder="+0"
+                                      className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Row 6: Replacement Resistances & Immunities */}
+                            <div className="grid grid-cols-2 gap-2 border-t border-purple-500/30 pt-2">
+                              <div>
+                                <label className="text-[8px] font-bold text-purple-300 uppercase block mb-0.5">Replacement Resistances</label>
+                                <Input
+                                  value={trig.resistances || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], resistances: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. Fire, Piercing"
+                                  className="bg-background font-mono h-7 text-xs rounded-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[8px] font-bold text-purple-300 uppercase block mb-0.5">Replacement Immunities</label>
+                                <Input
+                                  value={trig.immunities || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], immunities: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. Poison, Stun"
+                                  className="bg-background font-mono h-7 text-xs rounded-none"
+                                />
+                              </div>
                             </div>
                           </div>
                         )}

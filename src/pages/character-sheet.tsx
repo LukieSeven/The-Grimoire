@@ -4349,6 +4349,7 @@ export default function CharacterSheet() {
                   );
 
                   const displayName = activeUpdateTrigger?.updatedName || ability.name;
+                  const displayType = activeUpdateTrigger?.updatedType || ability.type;
                   const displayCost = activeUpdateTrigger?.updatedCost !== undefined ? activeUpdateTrigger.updatedCost : ability.cost;
                   const displayRange = activeUpdateTrigger?.updatedRange || ability.range;
                   const displaySpeed = activeUpdateTrigger?.updatedSpeed || ability.speed;
@@ -4387,9 +4388,9 @@ export default function CharacterSheet() {
                                       Trigger Replaced
                                     </Badge>
                                   )}
-                                  {ability.type && (
+                                  {displayType && (
                                     <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5">
-                                      {ability.type}
+                                      {displayType}
                                     </Badge>
                                   )}
                                 </h4>
