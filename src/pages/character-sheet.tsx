@@ -32,7 +32,8 @@ import {
 import { 
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
   Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
-  getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum
+  getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum,
+  getAbilityActiveModifierBadges, ActiveModifierBadge
 } from "@/lib/storage";
 
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
@@ -3776,7 +3777,7 @@ export default function CharacterSheet() {
                                               if (badges.length === 0) return null;
                                               return (
                                                 <div className="flex flex-wrap items-center gap-1 mt-1">
-                                                  {badges.map((b, i) => (
+                                                  {badges.map((b: ActiveModifierBadge, i: number) => (
                                                     <span 
                                                       key={i} 
                                                       className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${
@@ -4272,7 +4273,7 @@ export default function CharacterSheet() {
                               if (badges.length === 0) return null;
                               return (
                                 <div className="flex flex-wrap items-center gap-1 mt-1">
-                                  {badges.map((b, i) => (
+                                  {badges.map((b: ActiveModifierBadge, i: number) => (
                                     <span 
                                       key={i} 
                                       className={`text-[9px] font-mono px-1.5 py-0.5 rounded-none border ${
@@ -5246,7 +5247,7 @@ export default function CharacterSheet() {
                                             if (badges.length === 0) return null;
                                             return (
                                               <div className="flex flex-wrap items-center gap-1 mt-1">
-                                                {badges.map((b, i) => (
+                                                {badges.map((b: ActiveModifierBadge, i: number) => (
                                                   <span 
                                                     key={i} 
                                                     className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${

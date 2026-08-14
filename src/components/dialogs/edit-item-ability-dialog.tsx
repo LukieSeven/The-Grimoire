@@ -179,7 +179,7 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         }
       });
     } else {
-      addAbility.mutate(payload, {
+      addAbility.mutate(payload as Omit<Ability, "id">, {
         onSuccess: () => {
           toast.success("Item ability added.");
           onOpenChange(false);

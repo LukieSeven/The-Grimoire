@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Edit2, Trash2, Plus } from "lucide-react";
 import { Familiar, FamiliarAbility, evaluateFormula, parseFormulaOrNum } from "@/lib/storage";
 
@@ -311,7 +312,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                       <Checkbox 
                         id={`fam_link_${stat}`} 
                         checked={isChecked} 
-                        onCheckedChange={(checked) => {
+                        onCheckedChange={(checked: boolean | "indeterminate") => {
                           if (checked) {
                             setAbilityLinkedStats([...abilityLinkedStats, stat]);
                           } else {
