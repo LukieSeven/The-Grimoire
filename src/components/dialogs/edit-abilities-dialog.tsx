@@ -41,6 +41,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
   const [type, setType] = useState("");
   const [primaryStat, setPrimaryStat] = useState("power");
   const [evolutionModifiers, setEvolutionModifiers] = useState<EvolutionModifier[]>([]);
+  const [expandedMods, setExpandedMods] = useState<Record<number, boolean>>({});
   const [linkedStats, setLinkedStats] = useState<string[]>([]);
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
   const [essenceId, setEssenceId] = useState<number | null>(null);
@@ -77,6 +78,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setType("");
     setPrimaryStat("power");
     setEvolutionModifiers([]);
+    setExpandedMods({});
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
     setEssenceId(null);
@@ -438,10 +440,10 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
             {/* Description textarea */}
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
-              <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the base effects of this ability..." className="bg-background min-h-[60px] rounded-none font-serif text-sm" />
+              <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe the base effects of this ability..." className="bg-background min-h-[240px] rounded-none font-serif text-sm" />
             </div>
 
-            {/* Ability Evolution System Section */}
+            {/* Ability Evolution Section (Only renders box if there are active earned slots) */}
             {(() => {
               const currentDraftAbility: Ability = {
                 id: editingId || 0,
@@ -469,117 +471,114 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                 charisma: character?.charisma || 0,
               };
 
-                  const evolRes = calculateAbilityEvolutions(
+              const evolRes = calculateAbilityEvolutions(
                 currentDraftAbility,
                 character?.rank || "Iron",
                 charStats
               );
 
-              // Completely remove the entire evolution box if ability doesn't meet requirements (Iron, 0 linkedStats, or 0 earned slots)
+              // ONLY show box IF active earned slots exist (> 0)
               if (evolRes.isDormant || evolRes.earnedSlotCount === 0 || !linkedStats || linkedStats.length === 0) {
                 return null;
               }
 
               return (
-                <div className="border-t border-amber-900/30 pt-3.5 space-y-3 bg-amber-950/10 p-3 border border-amber-900/40">
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                      {Array.from({ length: evolRes.earnedSlotCount }).map((_, slotIdx) => {
-                        const slotMeta = EVOLUTION_THRESHOLDS_TABLE[slotIdx];
-                        const existingMod = evolutionModifiers[slotIdx];
+                <div className="border-t border-amber-900/30 pt-3 space-y-2 bg-amber-950/10 p-3 border border-amber-900/40">
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {Array.from({ length: evolRes.earnedSlotCount }).map((_, slotIdx) => {
+                      const slotMeta = EVOLUTION_THRESHOLDS_TABLE[slotIdx];
+                      const existingMod = evolutionModifiers[slotIdx];
+                      const isOpen = !!expandedMods[slotIdx];
+                      const titleText = existingMod?.name?.trim()
+                        ? `${slotMeta.rankLabel} - ${existingMod.name.trim()}`
+                        : `${slotMeta.rankLabel} - Ability Mod`;
 
-                        if (!existingMod) {
-                          return (
-                            <Button
-                              key={`empty-slot-${slotIdx}`}
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const newMod: EvolutionModifier = {
-                                  id: `mod-${Date.now()}-${slotIdx}`,
-                                  name: "",
-                                  rankLabel: slotMeta.rankLabel,
-                                  requiredStat: slotMeta.requiredStat,
-                                  effect: "",
-                                };
-                                setEvolutionModifiers(prev => {
-                                  const copy = [...prev];
-                                  copy[slotIdx] = newMod;
-                                  return copy;
-                                });
-                              }}
-                              className="w-full h-8 bg-amber-950/30 border-amber-800/40 text-amber-300 hover:bg-amber-900/50 rounded-none font-mono text-xs flex items-center justify-start gap-2 cursor-pointer"
-                            >
-                              <Plus className="w-3.5 h-3.5 text-amber-500" />
-                              <span>+ {slotMeta.rankLabel} - Ability Mod</span>
-                            </Button>
-                          );
-                        }
-
-                        return (
-                          <div key={existingMod.id || slotIdx} className="bg-background/80 border border-border/60 p-2 space-y-1.5 relative">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5">
-                                <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none">
-                                  {slotMeta.rankLabel} (Stat {slotMeta.requiredStat})
-                                </Badge>
-                                <span className="text-[10px] font-mono text-muted-foreground">Slot #{slotIdx + 1}</span>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setEvolutionModifiers(prev => prev.filter((_, i) => i !== slotIdx));
-                                }}
-                                className="h-5 w-5 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
+                      return (
+                        <div key={slotIdx} className="bg-background/80 border border-border/60 rounded-none overflow-hidden">
+                          {/* Row Header (Click to expand/collapse) */}
+                          <div
+                            onClick={() => setExpandedMods(prev => ({ ...prev, [slotIdx]: !isOpen }))}
+                            className="flex items-center justify-between p-2 bg-amber-950/30 hover:bg-amber-900/40 cursor-pointer select-none border-b border-border/30"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[10px] font-bold font-mono rounded-none px-1.5 py-0.5">
+                                {slotMeta.rankLabel}
+                              </Badge>
+                              <span className="font-serif text-xs font-bold text-amber-200">{titleText}</span>
                             </div>
+                            <svg className={`w-3.5 h-3.5 text-amber-400/80 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                          </div>
 
-                            <div className="grid grid-cols-3 gap-2">
-                              <div className="col-span-1">
-                                <label className="text-[8px] font-bold uppercase text-muted-foreground block">Modifier Name</label>
+                          {/* Expandable Body */}
+                          {isOpen && (
+                            <div className="p-3 space-y-2.5 bg-background/90 border-t border-border/30">
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Modifier Name</label>
                                 <Input
-                                  value={existingMod.name}
+                                  value={existingMod?.name || ""}
                                   onChange={e => {
                                     const val = e.target.value;
                                     setEvolutionModifiers(prev => {
                                       const copy = [...prev];
-                                      if (copy[slotIdx]) {
-                                        copy[slotIdx] = { ...copy[slotIdx], name: val };
-                                      }
+                                      const base = copy[slotIdx] || {
+                                        id: `mod-${Date.now()}-${slotIdx}`,
+                                        name: "",
+                                        rankLabel: slotMeta.rankLabel,
+                                        requiredStat: slotMeta.requiredStat,
+                                        effect: "",
+                                      };
+                                      copy[slotIdx] = { ...base, name: val };
                                       return copy;
                                     });
                                   }}
-                                  placeholder="Optional name..."
-                                  className="h-7 text-xs bg-background rounded-none font-bold"
+                                  placeholder="Modifier name..."
+                                  className="h-8 text-xs bg-background rounded-none font-bold"
                                 />
                               </div>
-                              <div className="col-span-2">
-                                <label className="text-[8px] font-bold uppercase text-muted-foreground block">Evolution Effect / Info</label>
-                                <Input
-                                  value={existingMod.effect}
+
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-muted-foreground block mb-1">Evolution Info / Effect</label>
+                                <Textarea
+                                  value={existingMod?.effect || ""}
                                   onChange={e => {
                                     const val = e.target.value;
                                     setEvolutionModifiers(prev => {
                                       const copy = [...prev];
-                                      if (copy[slotIdx]) {
-                                        copy[slotIdx] = { ...copy[slotIdx], effect: val };
-                                      }
+                                      const base = copy[slotIdx] || {
+                                        id: `mod-${Date.now()}-${slotIdx}`,
+                                        name: "",
+                                        rankLabel: slotMeta.rankLabel,
+                                        requiredStat: slotMeta.requiredStat,
+                                        effect: "",
+                                      };
+                                      copy[slotIdx] = { ...base, effect: val };
                                       return copy;
                                     });
                                   }}
                                   placeholder="Describe the modifier effect..."
-                                  className="h-7 text-xs bg-background rounded-none font-serif"
+                                  className="min-h-[80px] text-xs bg-background rounded-none font-serif"
                                 />
                               </div>
+
+                              <div className="flex justify-end pt-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEvolutionModifiers(prev => prev.filter((_, i) => i !== slotIdx));
+                                  }}
+                                  className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" /> Remove Modifier
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               );
             })()}

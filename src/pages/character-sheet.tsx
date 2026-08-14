@@ -3967,7 +3967,7 @@ export default function CharacterSheet() {
 
               // Helper to render ability card
               const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean) => {
-                const isExpanded = expandedAbilities[ability.id];
+                const isExpanded = isRowExpanded;
                 const bonuses = getAbilityBonusList(ability);
                 const rankInfo = getAbilityHighestRank(ability, finalStats);
                 const evolData = calculateAbilityEvolutions(ability, character.rank, finalStats);
@@ -3979,128 +3979,125 @@ export default function CharacterSheet() {
                     onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
                     onDragOver={handleAbilityDragOver}
                     onDrop={(e) => handleAbilityDrop(e, ability.id, allList)}
-                    className="bg-card border border-border/40 hover:border-primary/20 transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative"
+                    className="bg-card border border-border/40 hover:border-primary/20 transition-all rounded-none overflow-hidden cursor-grab active:cursor-grabbing relative h-full flex flex-col justify-between"
                   >
-                    <CardContent className="p-3.5 space-y-2">
-                      {/* Header row (Clickable card body toggles expansion except buttons) */}
-                      <div 
-                        className="flex justify-between items-start cursor-pointer select-none"
-                        onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !isExpanded }))}
-                      >
-                        <div className="space-y-1.5 flex-1 pr-4">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {/* Read-Only Rank Marker Badge */}
-                            <div className="flex items-center gap-1 border border-amber-700/50 px-2 py-0.5 rounded-none bg-amber-950/40 text-[10px] font-bold text-amber-300 font-mono shadow-sm">
-                              <Zap className="w-3 h-3 text-amber-400" />
-                              <span>Rank: {rankInfo.label}</span>
-                            </div>
-
-                            <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
-                              {ability.name}
-                              {ability.type && (
-                                <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5">
-                                  {ability.type}
-                                </Badge>
-                              )}
-                            </h4>
-                            <svg className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ability.cost} MP</Badge>
-                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.range}</Badge>
-                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.speed}</Badge>
-                            
-                            {/* Active Toggle Switch */}
-                            <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                              <button
-                                type="button"
-                                onClick={() => toggleAbilityActive(ability)}
-                                className={`px-2 py-0.5 rounded-none text-[9px] font-bold uppercase transition-all border cursor-pointer ${
-                                  ability.active 
-                                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]" 
-                                    : "bg-background/40 border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                                }`}
-                              >
-                                {ability.active ? "Active" : "Inactive"}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Action Roll Buttons (Prevent Card Click Toggle) */}
-                        <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
-                          {ability.linkedStats && ability.linkedStats.length > 0 ? (
-                            ability.linkedStats.map(statKey => (
-                              <Button
-                                key={statKey}
-                                size="sm"
-                                onClick={() => handleAbilityRoll(ability, statKey)}
-                                className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer whitespace-nowrap"
-                              >
-                                <Dice5 className="w-3 h-3 mr-1" /> Activate ({statKey.substring(0, 3).toUpperCase()})
-                              </Button>
-                            ))
-                          ) : (
-                            <Button
-                              size="sm"
-                              onClick={() => handleAbilityRoll(ability)}
-                              className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer"
-                            >
-                              <Dice5 className="w-3 h-3 mr-1" /> Activate
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Expandable Content (Markdown + Stats + Formulas + Evolution Modifiers) */}
-                      {isExpanded && (
-                        <div className="border-t border-border/20 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
-                          {ability.rollFormula && (
-                            <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2.5 py-1.5 rounded-none flex items-center justify-between">
-                              <span>Formula: <code className="text-primary font-bold">{ability.rollFormula}</code></span>
-                            </div>
-                          )}
-
-                          {bonuses.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 text-[9px]">
-                              {bonuses.map((b, idx) => (
-                                <Badge key={idx} variant="outline" className="border-emerald-500/20 text-emerald-500 rounded bg-emerald-500/[0.03] uppercase tracking-wider font-bold">
-                                  {b}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
-
-                          <div
-                            className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-1"
-                            dangerouslySetInnerHTML={{ __html: parseMarkdown(ability.description || "*No description.*") }}
-                          />
-
-                          {/* Active Evolution Modifiers section — ONLY rendered if ability meets requirements and has active modifiers */}
-                          {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (
-                            <div className="border-t border-amber-900/30 pt-2 space-y-1.5 bg-amber-950/10 p-2 border border-amber-900/40 mt-2">
-                              <div className="flex items-center gap-1.5 text-amber-400 font-serif text-[11px] font-bold uppercase">
-                                <Zap className="w-3 h-3" />
-                                <span>Active Evolution Modifiers</span>
+                    <CardContent className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+                      <div>
+                        {/* Header row (Clickable card body toggles expansion except buttons) */}
+                        <div 
+                          className="flex justify-between items-start cursor-pointer select-none"
+                          onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !expandedAbilities[ability.id] }))}
+                        >
+                          <div className="space-y-1.5 flex-1 pr-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Read-Only Rank Marker Badge */}
+                              <div className="flex items-center gap-1 border border-amber-700/50 px-2 py-0.5 rounded-none bg-amber-950/40 text-[10px] font-bold text-amber-300 font-mono shadow-sm">
+                                <span>Rank: {rankInfo.label}</span>
                               </div>
-                              <div className="space-y-1">
+
+                              <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
+                                {ability.name}
+                                {ability.type && (
+                                  <Badge className="bg-primary/10 border border-primary/30 text-primary text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5">
+                                    {ability.type}
+                                  </Badge>
+                                )}
+                              </h4>
+                              <svg className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ability.cost} MP</Badge>
+                              <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.range}</Badge>
+                              <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{ability.speed}</Badge>
+                              
+                              {/* Active Toggle Switch */}
+                              <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAbilityActive(ability)}
+                                  className={`px-2 py-0.5 rounded-none text-[9px] font-bold uppercase transition-all border cursor-pointer ${
+                                    ability.active 
+                                      ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]" 
+                                      : "bg-background/40 border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                                  }`}
+                                >
+                                  {ability.active ? "Active" : "Inactive"}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Roll Buttons (Prevent Card Click Toggle) */}
+                          <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                            {ability.linkedStats && ability.linkedStats.length > 0 ? (
+                              ability.linkedStats.map(statKey => (
+                                <Button
+                                  key={statKey}
+                                  size="sm"
+                                  onClick={() => handleAbilityRoll(ability, statKey)}
+                                  className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer whitespace-nowrap"
+                                >
+                                  <Dice5 className="w-3 h-3 mr-1" /> Activate ({statKey.substring(0, 3).toUpperCase()})
+                                </Button>
+                              ))
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleAbilityRoll(ability)}
+                                className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer"
+                              >
+                                <Dice5 className="w-3 h-3 mr-1" /> Activate
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expandable Content (Markdown + Stats + Formulas + Evolution Modifiers) */}
+                        {isExpanded && (
+                          <div className="border-t border-border/20 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200 mt-2">
+                            {ability.rollFormula && (
+                              <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2.5 py-1.5 rounded-none flex items-center justify-between">
+                                <span>Formula: <code className="text-primary font-bold">{ability.rollFormula}</code></span>
+                              </div>
+                            )}
+
+                            {bonuses.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 text-[9px]">
+                                {bonuses.map((b, idx) => (
+                                  <Badge key={idx} variant="outline" className="border-emerald-500/20 text-emerald-500 rounded bg-emerald-500/[0.03] uppercase tracking-wider font-bold">
+                                    {b}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+
+                            <div
+                              className="text-xs text-muted-foreground font-serif leading-relaxed whitespace-pre-wrap pl-1"
+                              dangerouslySetInnerHTML={{ __html: parseMarkdown(ability.description || "*No description.*") }}
+                            />
+
+                            {/* Active Evolution Modifiers section — Header title & Zap icon COMPLETELY PURGED */}
+                            {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (
+                              <div className="space-y-1.5 mt-2 pt-2 border-t border-amber-900/30">
                                 {evolData.activeModifiers.map((mod, idx) => (
-                                  <div key={mod.id || idx} className="text-xs bg-background/60 border border-amber-900/30 p-1.5 space-y-0.5">
-                                    <div className="flex items-center gap-1.5">
-                                      <Badge className="bg-amber-950 text-amber-400 border border-amber-800/40 text-[8px] font-mono px-1 py-0 rounded-none">
+                                  <div key={mod.id || idx} className="text-xs bg-amber-950/20 border border-amber-900/40 p-2 space-y-1 rounded-none">
+                                    <div className="flex items-center gap-2">
+                                      <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none px-1.5 py-0.5">
                                         {mod.rankLabel}
                                       </Badge>
-                                      {mod.name && <span className="font-bold text-amber-200">{mod.name}</span>}
+                                      {mod.name && <span className="font-serif font-bold text-amber-200">{mod.name}</span>}
                                     </div>
-                                    {mod.effect && <p className="text-[11px] text-muted-foreground font-serif leading-tight">{mod.effect}</p>}
+                                    {mod.effect && (
+                                      <p className="text-xs text-amber-100/90 font-serif leading-relaxed pl-0.5">{mod.effect}</p>
+                                    )}
                                   </div>
                                 ))}
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
