@@ -387,9 +387,9 @@ export default function CharacterSheet() {
   const [isLongRestConfirmOpen, setIsLongRestConfirmOpen] = useState(false);
 
   const handleLongRest = () => {
-    const targetHp = maxHp + abilityHpBonus;
+    const targetHp = maxHp;
     const targetDt = maxDt + abilityDtBonus;
-    const targetMana = maxMana + abilityManaBonus;
+    const targetMana = maxMana;
 
     updateChar.mutate({
       id,
@@ -408,9 +408,9 @@ export default function CharacterSheet() {
         setCurrentDt(targetDt);
         setMana(targetMana);
 
-        createRoll.mutate({ id, data: { diceType: "hp-log", modifier: targetHp - curHp, label: "Long Rest (HP)" } });
-        createRoll.mutate({ id, data: { diceType: "dt-log", modifier: targetDt - curDt, label: "Long Rest (DT)" } });
-        createRoll.mutate({ id, data: { diceType: "mana-log", modifier: targetMana - curMana, label: "Long Rest (Mana)" } });
+        createRoll.mutate({ id, data: { diceType: "hp-log", modifier: targetHp - curHp, label: "Long Rest" } });
+        createRoll.mutate({ id, data: { diceType: "dt-log", modifier: targetDt - curDt, label: "Long Rest" } });
+        createRoll.mutate({ id, data: { diceType: "mana-log", modifier: targetMana - curMana, label: "Long Rest" } });
         
         toast.success("Long Rest completed. Vitals restored.");
         setIsLongRestConfirmOpen(false);
@@ -764,7 +764,7 @@ export default function CharacterSheet() {
 
   const handleFullRestoreHp = () => {
     const cur = hp ?? character.currentHp;
-    const limit = maxHp + abilityHpBonus;
+    const limit = maxHp;
     setHp(limit);
     updateChar.mutate({ id, data: { currentHp: limit } });
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: limit - cur, label: "Full Restore HP" } });
@@ -869,7 +869,7 @@ export default function CharacterSheet() {
 
   const handleFullRestoreMana = () => {
     const cur = mana ?? character.currentMana;
-    const limit = maxMana + abilityManaBonus;
+    const limit = maxMana;
     setMana(limit);
     updateChar.mutate({ id, data: { currentMana: limit } });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: limit - cur, label: "Full Restore Mana" } });
@@ -890,6 +890,36 @@ export default function CharacterSheet() {
         list[idx] = updatedFam;
         updateChar.mutate({ id, data: { familiars: list } });
       }
+    }
+  };
+
+  const handleFamStatTrain = (fam: Familiar, statKey: string, direction: "up" | "down" = "up") => {
+    const baseVal = (fam as any)[statKey] as number;
+    const trainingKey = `${statKey}Training`;
+    const curTraining = ((fam as any)[trainingKey] as number) || 0;
+
+    if (direction === "up") {
+      const nextTraining = curTraining + 1;
+      if (nextTraining >= baseVal) {
+        const nextBaseVal = baseVal + 1;
+        updateFamiliarData(fam.id, {
+          ...fam,
+          [statKey]: nextBaseVal,
+          [trainingKey]: 0,
+        });
+        toast.success(`${fam.name}'s ${statKey.toUpperCase()} increased to ${nextBaseVal}!`);
+      } else {
+        updateFamiliarData(fam.id, {
+          ...fam,
+          [trainingKey]: nextTraining,
+        });
+      }
+    } else {
+      const nextTraining = Math.max(0, curTraining - 1);
+      updateFamiliarData(fam.id, {
+        ...fam,
+        [trainingKey]: nextTraining,
+      });
     }
   };
 
@@ -2203,6 +2233,10 @@ export default function CharacterSheet() {
   // ── Familiar Full Rest ──
   const handleFamFullRest = (fam: Familiar) => {
     const fMax = getFamiliarMaxValues(fam);
+    const curHp = fam.currentHp;
+    const curMana = fam.currentMana;
+    const curDt = fam.currentDt;
+
     setFamDtFlashes(prev => ({
       ...prev,
       [fam.id]: "restore" as const
@@ -2218,7 +2252,12 @@ export default function CharacterSheet() {
       currentDt: fMax.maxDt,
       currentMana: fMax.maxMana
     });
-    toast.success(`${fam.name} completed a Full Rest. Vitals restored.`);
+
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: fMax.maxHp - curHp, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: fMax.maxDt - curDt, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: fMax.maxMana - curMana, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
+
+    toast.success(`${fam.name} completed a Long Rest. Vitals restored.`);
     setTimeout(() => {
       setFamDtFlashes(prev => ({
         ...prev,
@@ -3490,7 +3529,7 @@ export default function CharacterSheet() {
           { key: "essences", label: "Essence Imbuement", icon: Layers },
           { key: "abilities", label: "Abilities", icon: Flame },
           { key: "notes", label: "Campaign Notes", icon: BookText },
-          { key: "familiar", label: "Familiars", icon: UserCheck },
+          { key: "familiar", label: "Minions", icon: UserCheck },
           { key: "combat", label: "Combat Tracker", icon: Swords }
         ].map((tab) => {
           const isActive = activeTab === tab.key;
@@ -4830,8 +4869,8 @@ export default function CharacterSheet() {
                 <CardContent className="p-6 space-y-6">
                   <div className="flex justify-between items-center border-b border-border/30 pb-3">
                     <div>
-                      <h3 className="font-serif text-2xl text-primary font-bold">Add Familiar</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Familiars share your adventure and can execute actions and attacks directly from your Hotbar.</p>
+                      <h3 className="font-serif text-2xl text-primary font-bold">Add Minion</h3>
+                      <p className="text-xs text-muted-foreground mt-1">Minions & familiars share your adventure and can execute actions and attacks directly from your Hotbar.</p>
                     </div>
                     {character.familiars && character.familiars.length > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => setIsAddingFamiliar(false)} className="rounded-md">Cancel</Button>
@@ -4843,7 +4882,7 @@ export default function CharacterSheet() {
                     {/* Basic specs */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Familiar Name</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Minion Name</label>
                         <Input value={famName} onChange={e => setFamName(e.target.value)} required placeholder="e.g. Rocky, Hedwig" className="bg-background rounded-md h-8 text-sm" />
                       </div>
                       <div>
@@ -4925,25 +4964,25 @@ export default function CharacterSheet() {
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-border/20">
-                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Familiar</Button>
+                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Minion</Button>
                     </div>
                   </form>
                 </CardContent>
               </Card>
             ) : (
               
-              // Familiar display sheets
+              // Minion display sheets
               <div className="space-y-6">
                 
                 {/* Toolbar */}
                 <div className="flex justify-between items-center border-b border-border/20 pb-3">
-                  <h3 className="font-serif text-2xl text-primary font-bold">Familiars ({character.familiars.length})</h3>
+                  <h3 className="font-serif text-2xl text-primary font-bold">Minions ({character.familiars.length})</h3>
                   <Button onClick={() => setIsAddingFamiliar(true)} className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">
-                    <Plus className="w-4 h-4 mr-1.5" /> Add Familiar
+                    <Plus className="w-4 h-4 mr-1.5" /> Add Minion
                   </Button>
                 </div>
 
-                {/* Grid List of Familiars */}
+                {/* Grid List of Minions */}
                 <div className="grid grid-cols-1 gap-6">
                   {character.familiars.map(fam => {
                     const fMax = getFamiliarMaxValues(fam);
@@ -4962,7 +5001,7 @@ export default function CharacterSheet() {
                         {/* Title Banner */}
                         <div className="flex justify-between items-start flex-wrap gap-3 border-b border-border/20 pb-2">
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {/* Familiar Avatar Portrait Upload */}
+                            {/* Avatar Portrait Upload */}
                             <div className="relative group w-11 h-11 rounded-full overflow-hidden border border-border/60 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
                               {fam.avatar ? (
                                 <img src={fam.avatar} alt={fam.name} className="w-full h-full object-cover" />
@@ -4981,7 +5020,7 @@ export default function CharacterSheet() {
                                       try {
                                         const dataUrl = await compressImage(file, 200, 200);
                                         updateFamiliarData(fam.id, { ...fam, avatar: dataUrl });
-                                        toast.success("Familiar portrait updated!");
+                                        toast.success("Minion portrait updated!");
                                       } catch (err) {
                                         toast.error("Failed to upload/compress image.");
                                       }
@@ -5012,8 +5051,9 @@ export default function CharacterSheet() {
                             </div>
                           </div>
                           
+                          {/* Controls in identical order as Player HUD: Hit box -> Roll Initiative -> Long Rest -> Edit/Release */}
                           <div className="flex items-center gap-2 flex-wrap">
-                            {/* ── Pulsing Red Familiar Damage Area ── */}
+                            {/* Pulsing Red Damage Input Area */}
                             <div className="flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10 overflow-hidden h-7">
                               <Input
                                 type="number"
@@ -5034,15 +5074,38 @@ export default function CharacterSheet() {
                               </Button>
                             </div>
 
+                            {/* Roll Initiative Button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleFamiliarStatRoll(fam.id, "agility", "Initiative", fam.agility)}
+                              className="h-7 px-2.5 border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 font-bold font-serif text-[10px] rounded-md cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.3)] transition-all"
+                              title="Roll Initiative (Agility Check)"
+                            >
+                              <Dice5 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                              <span>Roll Initiative</span>
+                            </Button>
+
+                            {/* Long Rest Button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleFamFullRest(fam)}
+                              className="h-7 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-[10px] px-2.5"
+                              title="Take Long Rest"
+                            >
+                              Long Rest
+                            </Button>
+
                             <EditFamiliarDialog familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
                             <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer h-7 text-[10px] font-bold px-2" 
                               onClick={() => handleReleaseFamiliarClick(fam.id)}>
-                              Release Familiar
+                              Release
                             </Button>
                           </div>
                         </div>
 
-                        {/* Resource HUD Columns (DT, HP, Mana) */}
+                        {/* Resource HUD Columns in identical order as Player HUD: 1. DT -> 2. HP -> 3. Mana */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           
                           {/* 1. DT (Damage Threshold) */}
@@ -5052,7 +5115,7 @@ export default function CharacterSheet() {
                             : "border-border/40"
                           }`}>
                             <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Shield className="w-3.5 h-3.5 text-yellow-500" /> Familiar DT
+                              <Shield className="w-3.5 h-3.5 text-yellow-500" /> Damage Threshold
                             </div>
                             <div className="text-center py-0.5">
                               <span className={`text-2xl font-mono font-bold ${flash === "hit" ? "text-destructive" : "text-foreground"}`}>
@@ -5100,10 +5163,10 @@ export default function CharacterSheet() {
                                 onClick={() => handleFamRestoreDt(fam)}>
                                 Full Restore DT
                               </Button>
-                              {/* Fixed Height Container to prevent layout shifts */}
+                              {/* Fixed Height Container */}
                               <div className="h-3 flex items-center justify-center mt-0.5">
                                 {latestFamDtLog && (
-                                  <p className={`text-[9px] font-mono text-center ${latestFamDtLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                                  <p className={`text-[9px] font-mono text-center ${latestFamDtLog.result >= 0 ? "text-yellow-500 font-bold" : "text-destructive"}`}>
                                     {latestFamDtLog.result >= 0 ? `+${latestFamDtLog.result}` : latestFamDtLog.result} DT ({latestFamDtLog.label})
                                   </p>
                                 )}
@@ -5114,7 +5177,7 @@ export default function CharacterSheet() {
                           {/* 2. HP (Health) */}
                           <div className="rounded-none border border-border/40 p-2 flex flex-col justify-between gap-2 bg-background/20">
                             <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Heart className="w-3.5 h-3.5 text-destructive" /> Familiar HP
+                              <Heart className="w-3.5 h-3.5 text-destructive" /> Health (HP)
                             </div>
                             <div className="text-center py-0.5">
                               <span className="text-2xl font-mono font-bold text-foreground">
@@ -5175,7 +5238,7 @@ export default function CharacterSheet() {
                           {/* 3. Mana (MP) */}
                           <div className="rounded-none border border-border/40 p-2 flex flex-col justify-between gap-2 bg-background/20">
                             <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Familiar Mana
+                              <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Mana (MP)
                             </div>
                             <div className="text-center py-0.5">
                               <span className="text-2xl font-mono font-bold text-foreground">
@@ -5225,7 +5288,7 @@ export default function CharacterSheet() {
                               </Button>
                               <div className="h-3 flex items-center justify-center mt-0.5">
                                 {latestFamManaLog && (
-                                  <p className={`text-[9px] font-mono text-center ${latestFamManaLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
+                                  <p className={`text-[9px] font-mono text-center ${latestFamManaLog.result >= 0 ? "text-blue-400 font-bold" : "text-destructive"}`}>
                                     {latestFamManaLog.result >= 0 ? `+${latestFamManaLog.result}` : latestFamManaLog.result} MP ({latestFamManaLog.label})
                                   </p>
                                 )}
@@ -5235,24 +5298,44 @@ export default function CharacterSheet() {
 
                         </div>
 
-                        {/* Companion Attributes */}
+                        {/* Minion Attributes Grid with compact Stat Training (- X/Base +) Header */}
                         <div className="space-y-1.5 pt-1.5 border-t border-border/20">
                           <h5 className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Attributes (Click to Roll)</h5>
                           <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
                             {STATS.map(stat => {
                               const val = (fam as any)[stat.key] as number;
                               const mod = Math.floor((Number(val) || 0) / 3);
+                              const trainingKey = `${stat.key}Training`;
+                              const trainVal = ((fam as any)[trainingKey] as number) || 0;
                               return (
-                                <button
-                                  type="button"
-                                  key={stat.key}
-                                  onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, val)}
-                                  className="rounded-none border border-border/30 bg-card/60 p-1 text-center hover:border-primary transition-all cursor-pointer"
-                                >
-                                  <div className="text-[8px] font-bold text-muted-foreground uppercase">{stat.label}</div>
-                                  <div className="text-base font-serif text-foreground font-bold mt-0.5">{val}</div>
-                                  <div className="text-[9px] font-mono text-primary">+{mod}</div>
-                                </button>
+                                <div key={stat.key} className="bg-card/60 border border-border/30 p-1 rounded-none text-center flex flex-col justify-between">
+                                  {/* Compact Training Control Row above stat */}
+                                  <div className="flex items-center justify-between gap-0.5 text-[8px] text-muted-foreground font-mono bg-background/50 px-1 py-0.5 mb-1 border-b border-border/20 select-none">
+                                    <button 
+                                      type="button" 
+                                      onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "down"); }}
+                                      className="hover:text-foreground hover:bg-accent/40 w-3.5 h-3.5 flex items-center justify-center font-bold cursor-pointer rounded-sm"
+                                      title="Decrease Training"
+                                    >-</button>
+                                    <span className="text-[7.5px] font-bold text-amber-400/90">{trainVal}/{val}</span>
+                                    <button 
+                                      type="button" 
+                                      onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "up"); }}
+                                      className="hover:text-foreground hover:bg-accent/40 w-3.5 h-3.5 flex items-center justify-center font-bold cursor-pointer rounded-sm"
+                                      title="Increase Training"
+                                    >+</button>
+                                  </div>
+                                  {/* Stat Roll Button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, val)}
+                                    className="hover:border-primary transition-all cursor-pointer text-center w-full py-0.5"
+                                  >
+                                    <div className="text-[8px] font-bold uppercase text-muted-foreground">{stat.label}</div>
+                                    <div className="text-sm font-bold font-serif text-primary">{val}</div>
+                                    <div className="text-[8px] font-mono text-muted-foreground">({mod >= 0 ? `+${mod}` : mod})</div>
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>

@@ -84,6 +84,14 @@ export interface Familiar {
   resistances?: string;
   immunities?: string;
   avatar?: string;
+  powerTraining?: number;
+  vitalityTraining?: number;
+  spiritTraining?: number;
+  agilityTraining?: number;
+  enduranceTraining?: number;
+  precisionTraining?: number;
+  willpowerTraining?: number;
+  charismaTraining?: number;
 }
 
 export interface Character {
