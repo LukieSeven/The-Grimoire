@@ -98,7 +98,7 @@ export function EditInventoryDialog({
   const [quantity, setQuantity] = useState(1);
 
   // Equipment State
-  const [dtBonus, setDtBonus] = useState(0);
+  const [dtBonus, setDtBonus] = useState<string | number>("");
   const [diceType, setDiceType] = useState("");
   const [modifier, setModifier] = useState("");
   const [equipped, setEquipped] = useState(false);
@@ -115,7 +115,7 @@ export function EditInventoryDialog({
         setDescription(initialData.description || "");
         setAmount(initialData.amount || 0);
         setQuantity(initialData.quantity || 1);
-        setDtBonus(initialData.dtBonus || 0);
+        setDtBonus(initialData.dtBonus ?? "");
         setDiceType(initialData.diceType || "");
         setModifier(initialData.modifier !== undefined ? String(initialData.modifier) : "");
         setEquipped(!!initialData.equipped);
@@ -127,7 +127,7 @@ export function EditInventoryDialog({
         setDescription("");
         setAmount(0);
         setQuantity(1);
-        setDtBonus(0);
+        setDtBonus("");
         setDiceType("");
         setModifier("");
         setEquipped(false);
@@ -366,7 +366,7 @@ export function EditInventoryDialog({
               <div className="grid grid-cols-2 gap-4 border-t border-border/20 pt-3">
                 <div>
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">DT Bonus</label>
-                  <Input type="number" min={0} value={dtBonus} onChange={e => setDtBonus(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
+                  <Input value={dtBonus} onChange={e => setDtBonus(e.target.value)} placeholder="e.g. 2+Wil, 5" className="bg-background font-mono rounded-none h-9 text-xs" />
                 </div>
                 <div>
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Weapon Damage Die</label>

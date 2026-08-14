@@ -47,12 +47,12 @@ export interface FamiliarAbility {
   bonusPrecision?: number;
   bonusWillpower?: number;
   bonusCharisma?: number;
-  hpAdd?: number;
-  hpBuff?: number;
-  manaAdd?: number;
-  manaBuff?: number;
-  dtAdd?: number;
-  dtBuff?: number;
+  hpAdd?: number | string;
+  hpBuff?: number | string;
+  manaAdd?: number | string;
+  manaBuff?: number | string;
+  dtAdd?: number | string;
+  dtBuff?: number | string;
   sortOrder?: number;
 }
 
@@ -74,7 +74,7 @@ export interface Familiar {
   currentHp: number;
   currentMana: number;
   currentDt: number;
-  dtBonus: number;
+  dtBonus: number | string;
   hpFormula: string;
   manaFormula: string;
   dtFormula: string;
@@ -92,7 +92,7 @@ export interface Character {
   level: number;
   maxHp: number;
   currentHp: number;
-  dtBonus: number;
+  dtBonus: number | string;
   currentDt: number;
   speed: number;
   power: number;
@@ -135,8 +135,8 @@ export interface Equipment {
   description: string;
   equipped: boolean;
   assignedToQuickRolls: boolean;
-  dtBonus: number;
-  bonusInitiative?: number;
+  dtBonus: number | string;
+  bonusInitiative?: number | string;
   statModifiers: Record<string, number>;
   diceType?: string;
   modifier?: string | number;
@@ -519,7 +519,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   }
 
   // Calculate equipped armor DT bonus
-  const armorDtBonus = equippedList.reduce((sum, item) => sum + (item.dtBonus || 0), 0);
+  const armorDtBonus = equippedList.reduce((sum, item) => sum + parseFormulaOrNum(item.dtBonus, {}), 0);
 
   // Helper to build formula evaluation variables map
   const buildVars = (sMap: Record<string, number>) => ({
@@ -547,7 +547,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     prer: getModifierForStat(sMap.precision || 0, char.rank),
     wilr: getModifierForStat(sMap.willpower || 0, char.rank),
     char: getModifierForStat(sMap.charisma || 0, char.rank),
-    dtbonus: (char.dtBonus || 0) + armorDtBonus,
+    dtbonus: parseFormulaOrNum(char.dtBonus, sMap) + armorDtBonus,
   });
 
   // Add active ability & sub-ability stat bonuses
@@ -598,7 +598,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff || ab.manaAdd, variables), 0);
   const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff || ab.dtAdd, variables), 0);
   const abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.bonusInitiative, variables), 0);
-  const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + (eq.bonusInitiative || 0), 0);
+  const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + parseFormulaOrNum(eq.bonusInitiative, variables), 0);
 
   const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
   const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Edit2, Trash2, Plus } from "lucide-react";
-import { Familiar, FamiliarAbility, evaluateFormula } from "@/lib/storage";
+import { Familiar, FamiliarAbility, evaluateFormula, parseFormulaOrNum } from "@/lib/storage";
 
 interface EditFamiliarDialogProps {
   familiar: Familiar;
@@ -52,12 +52,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   const [abilityCost, setAbilityCost] = useState(0);
   const [abilityRange, setAbilityRange] = useState("Self");
   const [abilitySpeed, setAbilitySpeed] = useState("Instant");
-  const [abilityHpAdd, setAbilityHpAdd] = useState<number>(0);
-  const [abilityHpBuff, setAbilityHpBuff] = useState<number>(0);
-  const [abilityManaAdd, setAbilityManaAdd] = useState<number>(0);
-  const [abilityManaBuff, setAbilityManaBuff] = useState<number>(0);
-  const [abilityDtAdd, setAbilityDtAdd] = useState<number>(0);
-  const [abilityDtBuff, setAbilityDtBuff] = useState<number>(0);
+  const [abilityHpAdd, setAbilityHpAdd] = useState<string | number>("");
+  const [abilityHpBuff, setAbilityHpBuff] = useState<string | number>("");
+  const [abilityManaAdd, setAbilityManaAdd] = useState<string | number>("");
+  const [abilityManaBuff, setAbilityManaBuff] = useState<string | number>("");
+  const [abilityDtAdd, setAbilityDtAdd] = useState<string | number>("");
+  const [abilityDtBuff, setAbilityDtBuff] = useState<string | number>("");
 
   const handleStartAddAbility = () => {
     setAbilityIndexToEdit(null);
@@ -67,12 +67,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     setAbilityCost(0);
     setAbilityRange("Self");
     setAbilitySpeed("Instant");
-    setAbilityHpAdd(0);
-    setAbilityHpBuff(0);
-    setAbilityManaAdd(0);
-    setAbilityManaBuff(0);
-    setAbilityDtAdd(0);
-    setAbilityDtBuff(0);
+    setAbilityHpAdd("");
+    setAbilityHpBuff("");
+    setAbilityManaAdd("");
+    setAbilityManaBuff("");
+    setAbilityDtAdd("");
+    setAbilityDtBuff("");
     setIsEditingAbility(true);
   };
 
@@ -84,12 +84,12 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     setAbilityCost(ab.cost || 0);
     setAbilityRange(ab.range || "Self");
     setAbilitySpeed(ab.speed || "Instant");
-    setAbilityHpAdd(ab.hpAdd || 0);
-    setAbilityHpBuff(ab.hpBuff || 0);
-    setAbilityManaAdd(ab.manaAdd || 0);
-    setAbilityManaBuff(ab.manaBuff || 0);
-    setAbilityDtAdd(ab.dtAdd || 0);
-    setAbilityDtBuff(ab.dtBuff || 0);
+    setAbilityHpAdd(ab.hpAdd ?? "");
+    setAbilityHpBuff(ab.hpBuff ?? "");
+    setAbilityManaAdd(ab.manaAdd ?? "");
+    setAbilityManaBuff(ab.manaBuff ?? "");
+    setAbilityDtAdd(ab.dtAdd ?? "");
+    setAbilityDtBuff(ab.dtBuff ?? "");
     setIsEditingAbility(true);
   };
 
@@ -140,7 +140,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
       precision, pre: precision,
       willpower, wil: willpower,
       charisma, cha: charisma,
-      dtbonus: familiar.dtBonus || 0,
+      dtbonus: parseFormulaOrNum(familiar.dtBonus, {}),
     };
 
     const calculatedMaxHp = Math.max(1, evaluateFormula(hpFormula, vars));
@@ -245,11 +245,11 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                 <div className="grid grid-cols-2 gap-1">
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={abilityHpAdd} onChange={e => setAbilityHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityHpAdd} onChange={e => setAbilityHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={abilityHpBuff} onChange={e => setAbilityHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityHpBuff} onChange={e => setAbilityHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                 </div>
               </div>
@@ -258,11 +258,11 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                 <div className="grid grid-cols-2 gap-1">
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={abilityManaAdd} onChange={e => setAbilityManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityManaAdd} onChange={e => setAbilityManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={abilityManaBuff} onChange={e => setAbilityManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityManaBuff} onChange={e => setAbilityManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                 </div>
               </div>
@@ -271,11 +271,11 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                 <div className="grid grid-cols-2 gap-1">
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={abilityDtAdd} onChange={e => setAbilityDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityDtAdd} onChange={e => setAbilityDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={abilityDtBuff} onChange={e => setAbilityDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={abilityDtBuff} onChange={e => setAbilityDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                 </div>
               </div>

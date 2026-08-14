@@ -597,12 +597,12 @@ export default function CharacterSheet() {
       precision: fam.precision, pre: fam.precision,
       willpower: fam.willpower, wil: fam.willpower,
       charisma: fam.charisma, cha: fam.charisma,
-      dtbonus: fam.dtBonus
+      dtbonus: parseFormulaOrNum(fam.dtBonus, {})
     };
     const activeFamAbilities = fam.abilities?.filter(ab => ab.active) || [];
-    const abilityHpBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.hpBuff || 0), 0);
-    const abilityManaBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.manaBuff || 0), 0);
-    const abilityDtBonus = activeFamAbilities.reduce((sum, ab) => sum + (ab.dtBuff || 0), 0);
+    const abilityHpBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff || ab.hpAdd, vars), 0);
+    const abilityManaBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff || ab.manaAdd, vars), 0);
+    const abilityDtBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff || ab.dtAdd, vars), 0);
 
     return {
       maxHp: Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars) + abilityHpBonus),
@@ -1568,22 +1568,26 @@ export default function CharacterSheet() {
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `Fam: ${ability.name} Cost`, familiarId: fam.id } });
     }
 
-    if (ability.hpAdd) {
-      const nextHp = Math.min(fMax.maxHp, fam.currentHp + ability.hpAdd);
+    const valHpAdd = parseFormulaOrNum(ability.hpAdd, fMax);
+    const valManaAdd = parseFormulaOrNum(ability.manaAdd, fMax);
+    const valDtAdd = parseFormulaOrNum(ability.dtAdd, fMax);
+
+    if (valHpAdd > 0) {
+      const nextHp = Math.min(fMax.maxHp, fam.currentHp + valHpAdd);
       updates.currentHp = nextHp;
-      changes.push(`+${ability.hpAdd} HP`);
+      changes.push(`+${valHpAdd} HP`);
       createRoll.mutate({ id, data: { diceType: "hp-log", modifier: nextHp - fam.currentHp, label: `Fam: ${ability.name} Heal`, familiarId: fam.id } });
     }
-    if (ability.manaAdd) {
-      const nextM = Math.min(fMax.maxMana, nextMana + ability.manaAdd);
+    if (valManaAdd > 0) {
+      const nextM = Math.min(fMax.maxMana, nextMana + valManaAdd);
       updates.currentMana = nextM;
-      changes.push(`+${ability.manaAdd} MP`);
+      changes.push(`+${valManaAdd} MP`);
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `Fam: ${ability.name} Restore`, familiarId: fam.id } });
     }
-    if (ability.dtAdd) {
-      const nextDt = Math.min(fMax.maxDt, fam.currentDt + ability.dtAdd);
+    if (valDtAdd > 0) {
+      const nextDt = Math.min(fMax.maxDt, fam.currentDt + valDtAdd);
       updates.currentDt = nextDt;
-      changes.push(`+${ability.dtAdd} DT`);
+      changes.push(`+${valDtAdd} DT`);
       createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - fam.currentDt, label: `Fam: ${ability.name} Shield`, familiarId: fam.id } });
     }
 
@@ -3655,7 +3659,8 @@ export default function CharacterSheet() {
                 <div className="space-y-2">
                   {equipment.map(eq => {
                     const bonusList = Object.entries(eq.statModifiers || {}).map(([stat, val]) => `${stat.toUpperCase()}: +${val}`);
-                    if (eq.dtBonus > 0) bonusList.push(`DT: +${eq.dtBonus}`);
+                    const eqDtVal = parseFormulaOrNum(eq.dtBonus, {});
+                    if (eqDtVal > 0 || String(eq.dtBonus).trim().length > 0) bonusList.push(`DT: +${eq.dtBonus}`);
                     
                     return (
                       <Card id={`equipment-card-${eq.id}`} key={eq.id} className={`bg-card/50 border-border/40 transition-all rounded-none ${eq.equipped ? "border-primary/40 shadow-sm bg-primary/[0.01]" : ""}`}>

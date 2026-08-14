@@ -21,7 +21,7 @@ export function EditCharacterDialog({ character }: Props) {
   const [race, setRace] = useState(character.race);
   const [level, setLevel] = useState(character.level);
   const [speed, setSpeed] = useState(character.speed);
-  const [dtBonus, setDtBonus] = useState(character.dtBonus);
+  const [dtBonus, setDtBonus] = useState<string | number>(character.dtBonus ?? 0);
   const [resistances, setResistances] = useState(character.resistances || "");
   const [immunities, setImmunities] = useState(character.immunities || "");
 
@@ -52,7 +52,7 @@ export function EditCharacterDialog({ character }: Props) {
       setRace(character.race);
       setLevel(character.level);
       setSpeed(character.speed);
-      setDtBonus(character.dtBonus);
+      setDtBonus(character.dtBonus ?? 0);
       setResistances(character.resistances || "");
       setImmunities(character.immunities || "");
       setPower(character.power);
@@ -158,7 +158,7 @@ export function EditCharacterDialog({ character }: Props) {
             </div>
             <div>
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Base DT Bonus (Armor)</label>
-              <Input type="number" min={0} value={dtBonus} onChange={e => setDtBonus(Number(e.target.value))} required className="bg-background font-mono" />
+              <Input value={dtBonus} onChange={e => setDtBonus(e.target.value)} placeholder="e.g. 2+Wil, 5" className="bg-background font-mono" />
             </div>
           </div>
 
