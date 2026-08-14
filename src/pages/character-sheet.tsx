@@ -509,6 +509,8 @@ export default function CharacterSheet() {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [noteImages, setNoteImages] = useState<string[]>([]);
   const [expandedSubAbilities, setExpandedSubAbilities] = useState<Record<string, boolean>>({});
+  const [isEditAbilitiesOpen, setIsEditAbilitiesOpen] = useState(false);
+  const [editingAbilityId, setEditingAbilityId] = useState<number | null>(null);
 
   // ── Inventory Dialog Trigger State ────────────────────────
   const [isInvOpen, setIsInvOpen] = useState(false);
@@ -1426,13 +1428,36 @@ export default function CharacterSheet() {
     const updatedAbilities = abilities.map(a => a.id === ability.id ? { ...a, active: nextActive } : a);
     const newStats = getAdjustedStats(character, equipment, updatedAbilities);
 
-    const hpDiff = (newStats.maxHp + newStats.abilityHpBonus) - (oldStats.maxHp + oldStats.abilityHpBonus);
-    const manaDiff = (newStats.maxMana + newStats.abilityManaBonus) - (oldStats.maxMana + oldStats.abilityManaBonus);
-    const dtDiff = (newStats.maxDt + newStats.abilityDtBonus) - (oldStats.maxDt + oldStats.abilityDtBonus);
+    const oldLimitHp = oldStats.maxHp + oldStats.abilityHpBonus;
+    const newLimitHp = newStats.maxHp + newStats.abilityHpBonus;
+    const oldLimitMana = oldStats.maxMana + oldStats.abilityManaBonus;
+    const newLimitMana = newStats.maxMana + newStats.abilityManaBonus;
+    const oldLimitDt = oldStats.maxDt + oldStats.abilityDtBonus;
+    const newLimitDt = newStats.maxDt + newStats.abilityDtBonus;
 
-    const newHp = Math.max(0, (hp ?? character.currentHp) + hpDiff);
-    const newMana = Math.max(0, (mana ?? character.currentMana) + manaDiff);
-    const newDt = Math.max(0, (currentDt ?? character.currentDt) + dtDiff);
+    const curHp = hp ?? character.currentHp;
+    const curMana = mana ?? character.currentMana;
+    const curDt = currentDt ?? character.currentDt;
+
+    let newHp = curHp;
+    let newMana = curMana;
+    let newDt = curDt;
+
+    if (nextActive) {
+      // Activating: Add flat/buff gains
+      const hpDiff = newLimitHp - oldLimitHp;
+      const manaDiff = newLimitMana - oldLimitMana;
+      const dtDiff = newLimitDt - oldLimitDt;
+      newHp = Math.min(newLimitHp, curHp + (hpDiff > 0 ? hpDiff : 0));
+      newMana = Math.min(newLimitMana, curMana + (manaDiff > 0 ? manaDiff : 0));
+      newDt = Math.min(newLimitDt, curDt + (dtDiff > 0 ? dtDiff : 0));
+    } else {
+      // Deactivating: Remove max capacity bonus; DO NOT drain current HP/MP/DT!
+      // Only trim down if current exceeds the new reduced max pool!
+      newHp = Math.min(newLimitHp, curHp);
+      newMana = Math.min(newLimitMana, curMana);
+      newDt = Math.min(newLimitDt, curDt);
+    }
 
     updateAbilityMut.mutate({
       id: ability.id,
@@ -4014,7 +4039,16 @@ export default function CharacterSheet() {
                   <p className="text-xs text-muted-foreground mt-0.5">Activate and cast abilities using mana</p>
                 </div>
               </div>
-              <EditAbilitiesDialog characterId={id} abilities={abilities} />
+              <EditAbilitiesDialog 
+                characterId={id} 
+                abilities={abilities} 
+                open={isEditAbilitiesOpen} 
+                onOpenChange={(open) => { 
+                  setIsEditAbilitiesOpen(open); 
+                  if (!open) setEditingAbilityId(null); 
+                }} 
+                initialAbilityId={editingAbilityId} 
+              />
             </div>
 
             {(() => {
@@ -4104,7 +4138,19 @@ export default function CharacterSheet() {
                           </div>
 
                           {/* Action Roll Buttons (Prevent Card Click Toggle) */}
-                          <div className="flex flex-col gap-1.5" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingAbilityId(ability.id);
+                                setIsEditAbilitiesOpen(true);
+                              }}
+                              className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer px-2"
+                              title="Edit Ability"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
                             {ability.linkedStats && ability.linkedStats.length > 0 ? (
                               ability.linkedStats.map(statKey => (
                                 <Button

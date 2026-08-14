@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useListEssences, useAddAbility, useUpdateAbility, useDeleteAbility, useGetCharacter } from "@/hooks/useStorage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,29 @@ import { Ability, SubAbility, EvolutionModifier, EVOLUTION_THRESHOLDS_TABLE, cal
 interface Props {
   characterId: number;
   abilities: Ability[];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialAbilityId?: number | null;
 }
 
 const STAT_OPTIONS = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
 
-export function EditAbilitiesDialog({ characterId, abilities }: Props) {
+export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange, initialAbilityId }: Props) {
   const { data: essences } = useListEssences(characterId);
   const { data: character } = useGetCharacter(characterId);
   const addAbility = useAddAbility();
   const updateAbility = useUpdateAbility();
   const deleteAbility = useDeleteAbility();
 
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isDialogOpen = open !== undefined ? open : internalOpen;
+  const setDialogOpen = (v: boolean) => {
+    if (onOpenChange) onOpenChange(v);
+    setInternalOpen(v);
+  };
+
+  const playerAbilities = abilities.filter(a => !a.equipmentId && !a.inventoryItemId);
+
   // Mode: 'list' | 'add' | 'edit'
   const [mode, setMode] = useState<"list" | "add" | "edit">("list");
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -149,6 +160,15 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     setMode("edit");
   };
 
+  useEffect(() => {
+    if (initialAbilityId) {
+      const target = abilities.find(a => a.id === initialAbilityId);
+      if (target) {
+        handleOpenEdit(target);
+      }
+    }
+  }, [initialAbilityId, abilities]);
+
   const handleAddEvolutionModifier = () => {
     const nextIdx = evolutionModifiers.length;
     if (nextIdx >= EVOLUTION_THRESHOLDS_TABLE.length) {
@@ -252,10 +272,10 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
     }
   };
 
-  const characterAbilities = (abilities || []).filter(a => !a.equipmentId);
+  const characterAbilities = playerAbilities;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) setMode("list"); }}>
+    <Dialog open={isDialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setMode("list"); }}>
       <DialogTrigger asChild>
         <Button variant="outline" className="border-primary/40 text-primary hover:bg-primary/10 font-serif text-sm rounded-none">
           Edit Abilities
