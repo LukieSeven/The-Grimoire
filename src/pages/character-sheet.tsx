@@ -600,14 +600,32 @@ export default function CharacterSheet() {
       dtbonus: parseFormulaOrNum(fam.dtBonus, {})
     };
     const activeFamAbilities = fam.abilities?.filter(ab => ab.active) || [];
-    const abilityHpBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff || ab.hpAdd, vars), 0);
-    const abilityManaBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff || ab.manaAdd, vars), 0);
-    const abilityDtBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff || ab.dtAdd, vars), 0);
+    const hpAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpAdd, vars), 0);
+    const hpBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff, vars), 0);
+    const manaAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaAdd, vars), 0);
+    const manaBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff, vars), 0);
+    const dtAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtAdd, vars), 0);
+    const dtBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff, vars), 0);
+
+    const baseMaxHp = Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars) + hpAddBonus);
+    const totalMaxHp = Math.max(1, baseMaxHp + hpBuffBonus);
+
+    const baseMaxMana = Math.max(0, evaluateFormula(fam.manaFormula || "Spirit * 5", vars) + manaAddBonus);
+    const totalMaxMana = Math.max(0, baseMaxMana + manaBuffBonus);
+
+    const baseMaxDt = Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars) + dtAddBonus);
+    const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
 
     return {
-      maxHp: Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars) + abilityHpBonus),
-      maxMana: Math.max(0, evaluateFormula(fam.manaFormula || "Spirit * 5", vars) + abilityManaBonus),
-      maxDt: Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars) + abilityDtBonus),
+      baseMaxHp,
+      totalMaxHp,
+      maxHp: totalMaxHp,
+      baseMaxMana,
+      totalMaxMana,
+      maxMana: totalMaxMana,
+      baseMaxDt,
+      totalMaxDt,
+      maxDt: totalMaxDt,
     };
   };
 
@@ -1455,16 +1473,38 @@ export default function CharacterSheet() {
 
   const toggleAbilityActive = (ability: Ability) => {
     const nextActive = !ability.active;
-    const oldStats = getAdjustedStats(character, equipment, abilities);
     const updatedAbilities = abilities.map(a => a.id === ability.id ? { ...a, active: nextActive } : a);
     const newStats = getAdjustedStats(character, equipment, updatedAbilities);
 
-    const oldLimitHp = oldStats.maxHp + oldStats.abilityHpBonus;
-    const newLimitHp = newStats.maxHp + newStats.abilityHpBonus;
-    const oldLimitMana = oldStats.maxMana + oldStats.abilityManaBonus;
-    const newLimitMana = newStats.maxMana + newStats.abilityManaBonus;
-    const oldLimitDt = oldStats.maxDt + oldStats.abilityDtBonus;
-    const newLimitDt = newStats.maxDt + newStats.abilityDtBonus;
+    const evalVars = {
+      power: newStats.stats.power, pow: newStats.stats.power,
+      vitality: newStats.stats.vitality, vit: newStats.stats.vitality,
+      spirit: newStats.stats.spirit, spi: newStats.stats.spirit,
+      agility: newStats.stats.agility, agi: newStats.stats.agility,
+      endurance: newStats.stats.endurance, end: newStats.stats.endurance,
+      precision: newStats.stats.precision, pre: newStats.stats.precision,
+      willpower: newStats.stats.willpower, wil: newStats.stats.willpower,
+      charisma: newStats.stats.charisma, cha: newStats.stats.charisma,
+    };
+
+    // Calculate ability (and sub-abilities) Add vs Buff totals
+    let valHpAdd = parseFormulaOrNum(ability.hpAdd, evalVars);
+    let valHpBuff = parseFormulaOrNum(ability.hpBuff, evalVars);
+    let valManaAdd = parseFormulaOrNum(ability.manaAdd, evalVars);
+    let valManaBuff = parseFormulaOrNum(ability.manaBuff, evalVars);
+    let valDtAdd = parseFormulaOrNum(ability.dtAdd, evalVars);
+    let valDtBuff = parseFormulaOrNum(ability.dtBuff, evalVars);
+
+    if (ability.subAbilities && ability.subAbilities.length > 0) {
+      for (const sub of ability.subAbilities) {
+        valHpAdd += parseFormulaOrNum(sub.hpAdd, evalVars);
+        valHpBuff += parseFormulaOrNum(sub.hpBuff, evalVars);
+        valManaAdd += parseFormulaOrNum(sub.manaAdd, evalVars);
+        valManaBuff += parseFormulaOrNum(sub.manaBuff, evalVars);
+        valDtAdd += parseFormulaOrNum(sub.dtAdd, evalVars);
+        valDtBuff += parseFormulaOrNum(sub.dtBuff, evalVars);
+      }
+    }
 
     const curHp = hp ?? character.currentHp;
     const curMana = mana ?? character.currentMana;
@@ -1475,19 +1515,37 @@ export default function CharacterSheet() {
     let newDt = curDt;
 
     if (nextActive) {
-      // Activating: Add flat/buff gains
-      const hpDiff = newLimitHp - oldLimitHp;
-      const manaDiff = newLimitMana - oldLimitMana;
-      const dtDiff = newLimitDt - oldLimitDt;
-      newHp = Math.min(newLimitHp, curHp + (hpDiff > 0 ? hpDiff : 0));
-      newMana = Math.min(newLimitMana, curMana + (manaDiff > 0 ? manaDiff : 0));
-      newDt = Math.min(newLimitDt, curDt + (dtDiff > 0 ? dtDiff : 0));
+      // Activating: Add gains to current pools up to new total max
+      newHp = Math.min(newStats.totalMaxHp, curHp + valHpAdd + valHpBuff);
+      newMana = Math.min(newStats.totalMaxMana, curMana + valManaAdd + valManaBuff);
+      newDt = Math.min(newStats.totalMaxDt, curDt + valDtAdd + valDtBuff);
     } else {
-      // Deactivating: Remove max capacity bonus; DO NOT drain current HP/MP/DT!
-      // Only trim down if current exceeds the new reduced max pool!
-      newHp = Math.min(newLimitHp, curHp);
-      newMana = Math.min(newLimitMana, curMana);
-      newDt = Math.min(newLimitDt, curDt);
+      // Deactivating:
+      // Hard Rule:
+      // "Add": Adds to Base total. Removing resets the base value altogether (bonus is lost).
+      // "Buff": Adds a Bonus to maximum that ONLY goes away once spent.
+
+      // HP Add resets base value altogether:
+      let targetHp = curHp;
+      if (valHpAdd > 0) {
+        targetHp -= valHpAdd;
+      }
+      // HP Buff only caps current HP if it still exceeds new totalMaxHp
+      newHp = Math.min(newStats.totalMaxHp, Math.max(0, targetHp));
+
+      // Mana Add resets base value altogether:
+      let targetMana = curMana;
+      if (valManaAdd > 0) {
+        targetMana -= valManaAdd;
+      }
+      newMana = Math.min(newStats.totalMaxMana, Math.max(0, targetMana));
+
+      // DT Add resets base value altogether:
+      let targetDt = curDt;
+      if (valDtAdd > 0) {
+        targetDt -= valDtAdd;
+      }
+      newDt = Math.min(newStats.totalMaxDt, Math.max(0, targetDt));
     }
 
     updateAbilityMut.mutate({
@@ -3703,7 +3761,6 @@ export default function CharacterSheet() {
                                 </div>
                                 <div className="space-y-1.5">
                                   {eqAbilities.map(ab => {
-                                    const errorEventName = `ability-error-${ab.id}`;
                                     return (
                                       <div key={ab.id} className="bg-background/30 p-2 border border-border/10">
                                         <div className="flex justify-between items-center gap-2">
@@ -3714,8 +3771,45 @@ export default function CharacterSheet() {
                                             </div>
                                             {ab.description && <p className="text-[10px] text-muted-foreground/80 font-serif line-clamp-1">{ab.description}</p>}
                                             {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
+                                            {(() => {
+                                              const badges = getAbilityActiveModifierBadges(ab);
+                                              if (badges.length === 0) return null;
+                                              return (
+                                                <div className="flex flex-wrap items-center gap-1 mt-1">
+                                                  {badges.map((b, i) => (
+                                                    <span 
+                                                      key={i} 
+                                                      className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${
+                                                        b.type === "stat" 
+                                                          ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                                          : b.type.includes("add")
+                                                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                                          : b.type.includes("buff")
+                                                          ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                                          : b.type === "init"
+                                                          ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
+                                                          : "bg-primary/10 border-primary/30 text-primary"
+                                                      }`}
+                                                    >
+                                                      {b.label}
+                                                    </span>
+                                                  ))}
+                                                </div>
+                                              );
+                                            })()}
                                           </div>
                                           <div className="flex items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleAbilityActive(ab)}
+                                              className={`px-1.5 py-0.5 rounded-none text-[8px] font-bold uppercase transition-all border cursor-pointer ${
+                                                ab.active 
+                                                  ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]" 
+                                                  : "bg-background/40 border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                                              }`}
+                                            >
+                                              {ab.active ? "Active" : "Inactive"}
+                                            </button>
                                             <Button
                                               size="sm"
                                               variant="outline"
@@ -4171,6 +4265,34 @@ export default function CharacterSheet() {
                                 </button>
                               </div>
                             </div>
+
+                            {/* Active Modifiers Summary Badges */}
+                            {(() => {
+                              const badges = getAbilityActiveModifierBadges(ability);
+                              if (badges.length === 0) return null;
+                              return (
+                                <div className="flex flex-wrap items-center gap-1 mt-1">
+                                  {badges.map((b, i) => (
+                                    <span 
+                                      key={i} 
+                                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded-none border ${
+                                        b.type === "stat" 
+                                          ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                          : b.type.includes("add")
+                                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                          : b.type.includes("buff")
+                                          ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                          : b.type === "init"
+                                          ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
+                                          : "bg-primary/10 border-primary/30 text-primary"
+                                      }`}
+                                    >
+                                      {b.label}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {/* Action Roll Buttons (Prevent Card Click Toggle) */}
@@ -5119,6 +5241,32 @@ export default function CharacterSheet() {
                                             <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">{ab.speed}</Badge>
                                             {ab.rollFormula && <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">Formula: {ab.rollFormula}</Badge>}
                                           </div>
+                                          {(() => {
+                                            const badges = getAbilityActiveModifierBadges(ab);
+                                            if (badges.length === 0) return null;
+                                            return (
+                                              <div className="flex flex-wrap items-center gap-1 mt-1">
+                                                {badges.map((b, i) => (
+                                                  <span 
+                                                    key={i} 
+                                                    className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${
+                                                      b.type === "stat" 
+                                                        ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                                        : b.type.includes("add")
+                                                        ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                                        : b.type.includes("buff")
+                                                        ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                                        : b.type === "init"
+                                                        ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
+                                                        : "bg-primary/10 border-primary/30 text-primary"
+                                                    }`}
+                                                  >
+                                                    {b.label}
+                                                  </span>
+                                                ))}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
                                         <Button
                                           size="sm"

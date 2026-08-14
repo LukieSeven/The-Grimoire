@@ -24,6 +24,7 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   const updateAbility = useUpdateAbility();
 
   const [name, setName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [description, setDescription] = useState("");
   const [cost, setCost] = useState(0);
   const [cooldown, setCooldown] = useState(0);
@@ -56,11 +57,13 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   const [manaBuff, setManaBuff] = useState<string | number>("");
   const [dtAdd, setDtAdd] = useState<string | number>("");
   const [dtBuff, setDtBuff] = useState<string | number>("");
+  const [bonusInitiative, setBonusInitiative] = useState<string | number>("");
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
         setName(initialData.name || "");
+        setNickname(initialData.nickname || "");
         setDescription(initialData.description || "");
         setCost(initialData.cost || 0);
         setCooldown(initialData.cooldown || 0);
@@ -86,12 +89,14 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setManaBuff(initialData.manaBuff ?? "");
         setDtAdd(initialData.dtAdd ?? "");
         setDtBuff(initialData.dtBuff ?? "");
+        setBonusInitiative(initialData.bonusInitiative ?? "");
         
         // Load usage
         setUsageType((initialData.usageType as any) || "standard");
         setMaxCharges(initialData.maxCharges || 0);
       } else {
         setName("");
+        setNickname("");
         setDescription("");
         setCost(0);
         setCooldown(0);
@@ -103,20 +108,21 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setAssignedToQuickRolls(false);
         setResistances("");
         setImmunities("");
-        setBonusPower(0);
-        setBonusVitality(0);
-        setBonusSpirit(0);
-        setBonusAgility(0);
-        setBonusEndurance(0);
-        setBonusPrecision(0);
-        setBonusWillpower(0);
-        setBonusCharisma(0);
-        setHpAdd(0);
-        setHpBuff(0);
-        setManaAdd(0);
-        setManaBuff(0);
-        setDtAdd(0);
-        setDtBuff(0);
+        setBonusPower("");
+        setBonusVitality("");
+        setBonusSpirit("");
+        setBonusAgility("");
+        setBonusEndurance("");
+        setBonusPrecision("");
+        setBonusWillpower("");
+        setBonusCharisma("");
+        setHpAdd("");
+        setHpBuff("");
+        setManaAdd("");
+        setManaBuff("");
+        setDtAdd("");
+        setDtBuff("");
+        setBonusInitiative("");
 
         // Reset usage
         setUsageType("standard");
@@ -129,11 +135,12 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
     e.preventDefault();
     if (!name.trim()) return;
 
-    const payload = {
+    const payload: Partial<Ability> = {
       characterId,
       equipmentId: equipmentId || null,
       inventoryItemId: inventoryItemId || null,
       name,
+      nickname: nickname ? nickname.substring(0, 6) : undefined,
       description,
       cost,
       cooldown,
@@ -143,13 +150,6 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
       type,
       linkedStats,
       assignedToQuickRolls,
-      resistances,
-      immunities,
-      bonusPower,
-      bonusVitality,
-      bonusSpirit,
-      bonusAgility,
-      bonusEndurance,
       bonusPrecision,
       bonusWillpower,
       bonusCharisma,
@@ -201,10 +201,20 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 pt-3 font-sans text-xs z-10 relative">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
               <Input value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. Cleave, Fireball" className="bg-background font-serif rounded-none" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">CIT Nick Name (Max 6 Chars)</label>
+              <Input 
+                value={nickname} 
+                onChange={e => setNickname(e.target.value.substring(0, 6))} 
+                placeholder="e.g. Fball" 
+                maxLength={6}
+                className="bg-background rounded-none font-mono" 
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Type</label>
@@ -337,7 +347,7 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
             </div>
 
             {/* Vitals Modifiers Grid */}
-            <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-2">
+            <div className="grid grid-cols-4 gap-3 border-t border-border/20 pt-2">
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
                 <div className="grid grid-cols-2 gap-1">
@@ -375,6 +385,13 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
                     <Input value={dtBuff} onChange={e => setDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
+                <div>
+                  <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
+                  <Input value={bonusInitiative} onChange={e => setBonusInitiative(e.target.value)} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
               </div>
             </div>

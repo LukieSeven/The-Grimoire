@@ -47,49 +47,97 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   const [isEditingAbility, setIsEditingAbility] = useState(false);
   const [abilityIndexToEdit, setAbilityIndexToEdit] = useState<number | null>(null);
   const [abilityName, setAbilityName] = useState("");
+  const [abilityName, setAbilityName] = useState("");
+  const [abilityNickname, setAbilityNickname] = useState("");
+  const [abilityType, setAbilityType] = useState("");
   const [abilityDescription, setAbilityDescription] = useState("");
   const [abilityRollFormula, setAbilityRollFormula] = useState("");
   const [abilityCost, setAbilityCost] = useState(0);
+  const [abilityCooldown, setAbilityCooldown] = useState(0);
   const [abilityRange, setAbilityRange] = useState("Self");
   const [abilitySpeed, setAbilitySpeed] = useState("Instant");
+  const [abilityLinkedStats, setAbilityLinkedStats] = useState<string[]>([]);
+  const [abilityResistances, setAbilityResistances] = useState("");
+  const [abilityImmunities, setAbilityImmunities] = useState("");
+
+  const [abilityBonusPower, setAbilityBonusPower] = useState<string | number>("");
+  const [abilityBonusVitality, setAbilityBonusVitality] = useState<string | number>("");
+  const [abilityBonusSpirit, setAbilityBonusSpirit] = useState<string | number>("");
+  const [abilityBonusAgility, setAbilityBonusAgility] = useState<string | number>("");
+  const [abilityBonusEndurance, setAbilityBonusEndurance] = useState<string | number>("");
+  const [abilityBonusPrecision, setAbilityBonusPrecision] = useState<string | number>("");
+  const [abilityBonusWillpower, setAbilityBonusWillpower] = useState<string | number>("");
+  const [abilityBonusCharisma, setAbilityBonusCharisma] = useState<string | number>("");
+
   const [abilityHpAdd, setAbilityHpAdd] = useState<string | number>("");
   const [abilityHpBuff, setAbilityHpBuff] = useState<string | number>("");
   const [abilityManaAdd, setAbilityManaAdd] = useState<string | number>("");
   const [abilityManaBuff, setAbilityManaBuff] = useState<string | number>("");
   const [abilityDtAdd, setAbilityDtAdd] = useState<string | number>("");
   const [abilityDtBuff, setAbilityDtBuff] = useState<string | number>("");
+  const [abilityBonusInitiative, setAbilityBonusInitiative] = useState<string | number>("");
 
   const handleStartAddAbility = () => {
     setAbilityIndexToEdit(null);
     setAbilityName("");
+    setAbilityNickname("");
+    setAbilityType("");
     setAbilityDescription("");
     setAbilityRollFormula("");
     setAbilityCost(0);
+    setAbilityCooldown(0);
     setAbilityRange("Self");
     setAbilitySpeed("Instant");
+    setAbilityLinkedStats([]);
+    setAbilityResistances("");
+    setAbilityImmunities("");
+    setAbilityBonusPower("");
+    setAbilityBonusVitality("");
+    setAbilityBonusSpirit("");
+    setAbilityBonusAgility("");
+    setAbilityBonusEndurance("");
+    setAbilityBonusPrecision("");
+    setAbilityBonusWillpower("");
+    setAbilityBonusCharisma("");
     setAbilityHpAdd("");
     setAbilityHpBuff("");
     setAbilityManaAdd("");
     setAbilityManaBuff("");
     setAbilityDtAdd("");
     setAbilityDtBuff("");
+    setAbilityBonusInitiative("");
     setIsEditingAbility(true);
   };
 
   const handleStartEditAbility = (ab: FamiliarAbility, idx: number) => {
     setAbilityIndexToEdit(idx);
     setAbilityName(ab.name);
-    setAbilityDescription(ab.description);
+    setAbilityNickname(ab.nickname || "");
+    setAbilityType(ab.type || "");
+    setAbilityDescription(ab.description || "");
     setAbilityRollFormula(ab.rollFormula || "");
     setAbilityCost(ab.cost || 0);
+    setAbilityCooldown(ab.cooldown || 0);
     setAbilityRange(ab.range || "Self");
     setAbilitySpeed(ab.speed || "Instant");
+    setAbilityLinkedStats(ab.linkedStats || []);
+    setAbilityResistances(ab.resistances || "");
+    setAbilityImmunities(ab.immunities || "");
+    setAbilityBonusPower(ab.bonusPower ?? "");
+    setAbilityBonusVitality(ab.bonusVitality ?? "");
+    setAbilityBonusSpirit(ab.bonusSpirit ?? "");
+    setAbilityBonusAgility(ab.bonusAgility ?? "");
+    setAbilityBonusEndurance(ab.bonusEndurance ?? "");
+    setAbilityBonusPrecision(ab.bonusPrecision ?? "");
+    setAbilityBonusWillpower(ab.bonusWillpower ?? "");
+    setAbilityBonusCharisma(ab.bonusCharisma ?? "");
     setAbilityHpAdd(ab.hpAdd ?? "");
     setAbilityHpBuff(ab.hpBuff ?? "");
     setAbilityManaAdd(ab.manaAdd ?? "");
     setAbilityManaBuff(ab.manaBuff ?? "");
     setAbilityDtAdd(ab.dtAdd ?? "");
     setAbilityDtBuff(ab.dtBuff ?? "");
+    setAbilityBonusInitiative(ab.bonusInitiative ?? "");
     setIsEditingAbility(true);
   };
 
@@ -100,20 +148,34 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     const newAbility: FamiliarAbility = {
       id: abilityIndexToEdit !== null ? (abilities[abilityIndexToEdit].id || Date.now()) : Date.now(),
       name: abilityName,
+      nickname: abilityNickname ? abilityNickname.substring(0, 6) : undefined,
+      type: abilityType || undefined,
       description: abilityDescription,
       rollFormula: abilityRollFormula,
       cost: abilityCost,
+      cooldown: abilityCooldown,
       range: abilityRange,
       speed: abilitySpeed,
-      hpAdd: abilityHpAdd,
-      hpBuff: abilityHpBuff,
-      manaAdd: abilityManaAdd,
-      manaBuff: abilityManaBuff,
-      dtAdd: abilityDtAdd,
-      dtBuff: abilityDtBuff,
-      cooldown: 0,
-      linkedStats: [],
-      assignedToQuickRolls: false
+      linkedStats: abilityLinkedStats,
+      assignedToQuickRolls: false,
+      resistances: abilityResistances || undefined,
+      immunities: abilityImmunities || undefined,
+      bonusPower: abilityBonusPower !== "" ? abilityBonusPower : undefined,
+      bonusVitality: abilityBonusVitality !== "" ? abilityBonusVitality : undefined,
+      bonusSpirit: abilityBonusSpirit !== "" ? abilityBonusSpirit : undefined,
+      bonusAgility: abilityBonusAgility !== "" ? abilityBonusAgility : undefined,
+      bonusEndurance: abilityBonusEndurance !== "" ? abilityBonusEndurance : undefined,
+      bonusPrecision: abilityBonusPrecision !== "" ? abilityBonusPrecision : undefined,
+      bonusWillpower: abilityBonusWillpower !== "" ? abilityBonusWillpower : undefined,
+      bonusCharisma: abilityBonusCharisma !== "" ? abilityBonusCharisma : undefined,
+      hpAdd: abilityHpAdd !== "" ? abilityHpAdd : undefined,
+      hpBuff: abilityHpBuff !== "" ? abilityHpBuff : undefined,
+      manaAdd: abilityManaAdd !== "" ? abilityManaAdd : undefined,
+      manaBuff: abilityManaBuff !== "" ? abilityManaBuff : undefined,
+      dtAdd: abilityDtAdd !== "" ? abilityDtAdd : undefined,
+      dtBuff: abilityDtBuff !== "" ? abilityDtBuff : undefined,
+      bonusInitiative: abilityBonusInitiative !== "" ? abilityBonusInitiative : undefined,
+      subAbilities: abilityIndexToEdit !== null ? abilities[abilityIndexToEdit].subAbilities : undefined,
     };
 
     if (abilityIndexToEdit !== null) {
@@ -125,6 +187,8 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
     }
     setIsEditingAbility(false);
   };
+
+  const STAT_OPTIONS = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,81 +268,182 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
 
         {isEditingAbility ? (
           <form onSubmit={handleSaveAbility} className="space-y-4 mt-4 text-xs font-sans z-10 relative">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Name</label>
-                <Input value={abilityName} onChange={e => setAbilityName(e.target.value)} required placeholder="e.g. Bite, Shadow Dash" className="bg-background rounded-none" />
+                <Input value={abilityName} onChange={e => setAbilityName(e.target.value)} required placeholder="e.g. Bite, Shadow Dash" className="bg-background rounded-none font-serif" />
               </div>
               <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">CIT Nick Name (Max 6 Chars)</label>
+                <Input 
+                  value={abilityNickname} 
+                  onChange={e => setAbilityNickname(e.target.value.substring(0, 6))} 
+                  placeholder="e.g. Bite" 
+                  maxLength={6}
+                  className="bg-background rounded-none font-mono" 
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Type</label>
+                <select 
+                  value={abilityType} 
+                  onChange={e => setAbilityType(e.target.value)} 
+                  className="w-full h-9 rounded-none border border-border/60 bg-background px-3 py-1 text-xs shadow-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">None</option>
+                  <option value="Attack">Attack</option>
+                  <option value="Buff">Buff</option>
+                  <option value="Debuff">Debuff</option>
+                  <option value="Defense">Defense</option>
+                  <option value="Movement">Movement</option>
+                  <option value="Utility">Utility</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Linked Attributes checkboxes */}
+            <div className="border-t border-border/20 pt-3">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1.5">Linked Attributes (For Roll Modifiers)</label>
+              <div className="grid grid-cols-4 gap-2">
+                {STAT_OPTIONS.map(stat => {
+                  const isChecked = abilityLinkedStats.includes(stat);
+                  return (
+                    <div key={stat} className="flex items-center gap-2 bg-background border border-border/40 p-2 rounded-none">
+                      <Checkbox 
+                        id={`fam_link_${stat}`} 
+                        checked={isChecked} 
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setAbilityLinkedStats([...abilityLinkedStats, stat]);
+                          } else {
+                            setAbilityLinkedStats(abilityLinkedStats.filter(s => s !== stat));
+                          }
+                        }} 
+                      />
+                      <label htmlFor={`fam_link_${stat}`} className="text-[10px] font-mono font-bold uppercase cursor-pointer">
+                        {stat.substring(0, 3)}
+                      </label>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Mana Cost (MP)</label>
-                <Input type="number" min={0} value={abilityCost} onChange={e => setAbilityCost(Number(e.target.value))} required className="bg-background font-mono rounded-none" />
+                <Input type="number" min={0} value={abilityCost} onChange={e => setAbilityCost(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Cooldown</label>
+                <Input type="number" min={0} value={abilityCooldown} onChange={e => setAbilityCooldown(Number(e.target.value))} required className="bg-background font-mono rounded-none h-9 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Range</label>
+                <Input value={abilityRange} onChange={e => setAbilityRange(e.target.value)} required placeholder="e.g. 5 ft, Self" className="bg-background font-serif rounded-none h-9 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
+                <Input value={abilitySpeed} onChange={e => setAbilitySpeed(e.target.value)} required placeholder="e.g. Instant" className="bg-background font-serif rounded-none h-9 text-xs" />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Roll Formula / Action Modifier (Optional)</label>
+              <Input value={abilityRollFormula} onChange={e => setAbilityRollFormula(e.target.value)} placeholder="e.g. 1d6+powr, d20+pre" className="bg-background font-mono rounded-none h-9 text-xs" />
+            </div>
+
+            {/* Active Modifiers (Granted While Active) */}
+            <div className="border border-border/60 bg-background/40 p-3 rounded-none space-y-3">
+              <h5 className="font-serif font-bold text-primary text-xs uppercase tracking-wider">Active Modifiers</h5>
+              <div className="grid grid-cols-4 gap-2">
+                {STAT_OPTIONS.map(stat => {
+                  const stateSetter = {
+                    power: [abilityBonusPower, setAbilityBonusPower],
+                    vitality: [abilityBonusVitality, setAbilityBonusVitality],
+                    spirit: [abilityBonusSpirit, setAbilityBonusSpirit],
+                    agility: [abilityBonusAgility, setAbilityBonusAgility],
+                    endurance: [abilityBonusEndurance, setAbilityBonusEndurance],
+                    precision: [abilityBonusPrecision, setAbilityBonusPrecision],
+                    willpower: [abilityBonusWillpower, setAbilityBonusWillpower],
+                    charisma: [abilityBonusCharisma, setAbilityBonusCharisma]
+                  }[stat];
+                  if (!stateSetter) return null;
+                  const [val, setter] = stateSetter as [string | number, (v: string | number) => void];
+                  return (
+                    <div key={stat}>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">{stat.substring(0,3)}</label>
+                      <Input value={val} onChange={e => setter(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Vitals Modifiers Grid */}
+              <div className="grid grid-cols-4 gap-3 border-t border-border/20 pt-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input value={abilityHpAdd} onChange={e => setAbilityHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input value={abilityHpBuff} onChange={e => setAbilityHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input value={abilityManaAdd} onChange={e => setAbilityManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input value={abilityManaBuff} onChange={e => setAbilityManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input value={abilityDtAdd} onChange={e => setAbilityDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input value={abilityDtBuff} onChange={e => setAbilityDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
+                    <Input value={abilityBonusInitiative} onChange={e => setAbilityBonusInitiative(e.target.value)} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
+                <Input value={abilityResistances} onChange={e => setAbilityResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none h-9 text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
+                <Input value={abilityImmunities} onChange={e => setAbilityImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none h-9 text-xs" />
               </div>
             </div>
 
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Effects</label>
               <Textarea value={abilityDescription} onChange={e => setAbilityDescription(e.target.value)} placeholder="Describe what this action does..." className="bg-background font-serif min-h-[70px] rounded-none" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2">
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Roll Formula / Action Modifier (Optional)</label>
-                <Input value={abilityRollFormula} onChange={e => setAbilityRollFormula(e.target.value)} placeholder="e.g. 1d6+powr, d20+pre" className="bg-background font-mono rounded-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Range</label>
-                <Input value={abilityRange} onChange={e => setAbilityRange(e.target.value)} required placeholder="e.g. 5 ft" className="bg-background font-serif rounded-none" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed</label>
-                <Input value={abilitySpeed} onChange={e => setAbilitySpeed(e.target.value)} required placeholder="e.g. Instant" className="bg-background font-serif rounded-none" />
-              </div>
-            </div>
-
-            {/* Vitals Modifiers Grid */}
-            <div className="grid grid-cols-3 gap-3 border-t border-border/20 pt-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input value={abilityHpAdd} onChange={e => setAbilityHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input value={abilityHpBuff} onChange={e => setAbilityHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input value={abilityManaAdd} onChange={e => setAbilityManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input value={abilityManaBuff} onChange={e => setAbilityManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input value={abilityDtAdd} onChange={e => setAbilityDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input value={abilityDtBuff} onChange={e => setAbilityDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2 border-t border-border/20 pt-3 mt-4">

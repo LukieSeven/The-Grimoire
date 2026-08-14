@@ -21,8 +21,8 @@ export interface FavoriteSlot {
 
 export interface FamiliarAbility {
   id: number;
-  characterId?: number;
   name: string;
+  nickname?: string;
   description: string;
   cost: number;
   cooldown: number;
@@ -39,20 +39,22 @@ export interface FamiliarAbility {
   equipmentId?: number | null;
   resistances?: string;
   immunities?: string;
-  bonusPower?: number;
-  bonusVitality?: number;
-  bonusSpirit?: number;
-  bonusAgility?: number;
-  bonusEndurance?: number;
-  bonusPrecision?: number;
-  bonusWillpower?: number;
-  bonusCharisma?: number;
+  bonusPower?: number | string;
+  bonusVitality?: number | string;
+  bonusSpirit?: number | string;
+  bonusAgility?: number | string;
+  bonusEndurance?: number | string;
+  bonusPrecision?: number | string;
+  bonusWillpower?: number | string;
+  bonusCharisma?: number | string;
   hpAdd?: number | string;
   hpBuff?: number | string;
   manaAdd?: number | string;
   manaBuff?: number | string;
   dtAdd?: number | string;
   dtBuff?: number | string;
+  bonusInitiative?: number | string;
+  subAbilities?: SubAbility[];
   sortOrder?: number;
 }
 
@@ -233,6 +235,72 @@ export function hasStatModifiers(ability: Partial<Ability> | Partial<SubAbility>
     (ability.resistances && ability.resistances.trim().length > 0) ||
     (ability.immunities && ability.immunities.trim().length > 0)
   );
+}
+
+export interface ActiveModifierBadge {
+  label: string;
+  type: "stat" | "hp-add" | "hp-buff" | "mana-add" | "mana-buff" | "dt-add" | "dt-buff" | "init" | "resistance" | "immunity";
+}
+
+export function getAbilityActiveModifierBadges(ab: Partial<Ability> | Partial<SubAbility> | Partial<FamiliarAbility>): ActiveModifierBadge[] {
+  const badges: ActiveModifierBadge[] = [];
+
+  // 1. Primary Stat Boosts
+  const stats: Array<[string, any]> = [
+    ["POW", ab.bonusPower],
+    ["VIT", ab.bonusVitality],
+    ["SPI", ab.bonusSpirit],
+    ["AGI", ab.bonusAgility],
+    ["END", ab.bonusEndurance],
+    ["PRE", ab.bonusPrecision],
+    ["WIL", ab.bonusWillpower],
+    ["CHA", ab.bonusCharisma],
+  ];
+
+  for (const [statLabel, val] of stats) {
+    if (val !== undefined && val !== null && val !== "" && val !== 0 && val !== "0") {
+      const formattedVal = typeof val === "number" ? (val > 0 ? `+${val}` : `${val}`) : (String(val).startsWith("+") || String(val).startsWith("-") ? val : `+${val}`);
+      badges.push({ label: `${statLabel}: ${formattedVal}`, type: "stat" });
+    }
+  }
+
+  // 2. Vital Additions (Base Max Increases)
+  if (ab.hpAdd !== undefined && ab.hpAdd !== null && ab.hpAdd !== "" && ab.hpAdd !== 0 && ab.hpAdd !== "0") {
+    badges.push({ label: `+${ab.hpAdd} HP Add`, type: "hp-add" });
+  }
+  if (ab.manaAdd !== undefined && ab.manaAdd !== null && ab.manaAdd !== "" && ab.manaAdd !== 0 && ab.manaAdd !== "0") {
+    badges.push({ label: `+${ab.manaAdd} MP Add`, type: "mana-add" });
+  }
+  if (ab.dtAdd !== undefined && ab.dtAdd !== null && ab.dtAdd !== "" && ab.dtAdd !== 0 && ab.dtAdd !== "0") {
+    badges.push({ label: `+${ab.dtAdd} DT Add`, type: "dt-add" });
+  }
+
+  // 3. Vital Buffs (Temporary Buffers)
+  if (ab.hpBuff !== undefined && ab.hpBuff !== null && ab.hpBuff !== "" && ab.hpBuff !== 0 && ab.hpBuff !== "0") {
+    badges.push({ label: `+${ab.hpBuff} HP Buff`, type: "hp-buff" });
+  }
+  if (ab.manaBuff !== undefined && ab.manaBuff !== null && ab.manaBuff !== "" && ab.manaBuff !== 0 && ab.manaBuff !== "0") {
+    badges.push({ label: `+${ab.manaBuff} MP Buff`, type: "mana-buff" });
+  }
+  if (ab.dtBuff !== undefined && ab.dtBuff !== null && ab.dtBuff !== "" && ab.dtBuff !== 0 && ab.dtBuff !== "0") {
+    badges.push({ label: `+${ab.dtBuff} DT Buff`, type: "dt-buff" });
+  }
+
+  // 4. Initiative
+  if (ab.bonusInitiative !== undefined && ab.bonusInitiative !== null && ab.bonusInitiative !== "" && ab.bonusInitiative !== 0 && ab.bonusInitiative !== "0") {
+    const initVal = typeof ab.bonusInitiative === "number" ? (ab.bonusInitiative > 0 ? `+${ab.bonusInitiative}` : `${ab.bonusInitiative}`) : String(ab.bonusInitiative);
+    badges.push({ label: `Init: ${initVal}`, type: "init" });
+  }
+
+  // 5. Resistances & Immunities
+  if (ab.resistances && ab.resistances.trim().length > 0) {
+    badges.push({ label: `Resist: ${ab.resistances}`, type: "resistance" });
+  }
+  if (ab.immunities && ab.immunities.trim().length > 0) {
+    badges.push({ label: `Immune: ${ab.immunities}`, type: "immunity" });
+  }
+
+  return badges;
 }
 
 export interface EvolutionModifier {
@@ -594,29 +662,54 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const variables = buildVars(stats);
 
   // Sum active ability & item resource bonuses (evaluating formulas like 2+wil)
-  const abilityHpBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff || ab.hpAdd, variables), 0);
-  const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff || ab.manaAdd, variables), 0);
-  const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff || ab.dtAdd, variables), 0);
+  const hpAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpAdd, variables), 0);
+  const hpBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff, variables), 0);
+  const manaAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaAdd, variables), 0);
+  const manaBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff, variables), 0);
+  const dtAddBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtAdd, variables), 0);
+  const dtBuffBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff, variables), 0);
   const abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.bonusInitiative, variables), 0);
   const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + parseFormulaOrNum(eq.bonusInitiative, variables), 0);
 
-  const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
-  const maxMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
-  const maxDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
+  const rawHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
+  const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
+  const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
+
+  const baseMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus);
+  const totalMaxHp = Math.max(1, baseMaxHp + hpBuffBonus);
+
+  const baseMaxMana = Math.max(0, (rawMana || 0) + manaAddBonus);
+  const totalMaxMana = Math.max(0, baseMaxMana + manaBuffBonus);
+
+  const baseMaxDt = Math.max(0, (rawDt || 0) + dtAddBonus);
+  const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
+
   const maxInitiative = (rawInitiative || 0) + (abilityInitiativeBonus || 0) + (equipmentInitiativeBonus || 0);
 
   return {
     stats,
     modifiers,
     diceLabels,
-    maxHp: Math.max(1, maxHp || 1),
-    maxMana: Math.max(0, maxMana || 0),
-    maxDt: Math.max(0, maxDt || 0),
+    baseMaxHp,
+    totalMaxHp,
+    maxHp: totalMaxHp,
+    baseMaxMana,
+    totalMaxMana,
+    maxMana: totalMaxMana,
+    baseMaxDt,
+    totalMaxDt,
+    maxDt: totalMaxDt,
     maxInitiative: isNaN(maxInitiative) ? 0 : maxInitiative,
-    abilityHpBonus,
-    abilityManaBonus,
-    abilityDtBonus,
+    hpAddBonus,
+    hpBuffBonus,
+    manaAddBonus,
+    manaBuffBonus,
+    dtAddBonus,
+    dtBuffBonus,
+    abilityHpBonus: hpAddBonus + hpBuffBonus,
+    abilityManaBonus: manaAddBonus + manaBuffBonus,
+    abilityDtBonus: dtAddBonus + dtBuffBonus,
     abilityInitiativeBonus: abilityInitiativeBonus + equipmentInitiativeBonus,
   };
 }
