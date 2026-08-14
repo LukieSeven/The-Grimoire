@@ -843,57 +843,6 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   // Add active ability, sub-ability, and active trigger stat bonuses
   const activeAbilities = abilities.filter(a => a.active === true);
 
-  const vitalsForTriggers = {
-    hp: char.currentHp ?? 0,
-    maxHp: 100,
-    mana: char.currentMana ?? 0,
-    maxMana: 100,
-    dt: char.currentDt ?? 0,
-    maxDt: 100,
-  };
-
-  for (const ability of activeAbilities) {
-    const curVars = buildVars(stats);
-    if (ability.bonusPower) stats.power += parseFormulaOrNum(ability.bonusPower, curVars);
-    if (ability.bonusVitality) stats.vitality += parseFormulaOrNum(ability.bonusVitality, curVars);
-    if (ability.bonusSpirit) stats.spirit += parseFormulaOrNum(ability.bonusSpirit, curVars);
-    if (ability.bonusAgility) stats.agility += parseFormulaOrNum(ability.bonusAgility, curVars);
-    if (ability.bonusEndurance) stats.endurance += parseFormulaOrNum(ability.bonusEndurance, curVars);
-    if (ability.bonusPrecision) stats.precision += parseFormulaOrNum(ability.bonusPrecision, curVars);
-    if (ability.bonusWillpower) stats.willpower += parseFormulaOrNum(ability.bonusWillpower, curVars);
-    if (ability.bonusCharisma) stats.charisma += parseFormulaOrNum(ability.bonusCharisma, curVars);
-
-    if (ability.subAbilities && ability.subAbilities.length > 0) {
-      for (const sub of ability.subAbilities) {
-        const subVars = buildVars(stats);
-        if (sub.bonusPower) stats.power += parseFormulaOrNum(sub.bonusPower, subVars);
-        if (sub.bonusVitality) stats.vitality += parseFormulaOrNum(sub.bonusVitality, subVars);
-        if (sub.bonusSpirit) stats.spirit += parseFormulaOrNum(sub.bonusSpirit, subVars);
-        if (sub.bonusAgility) stats.agility += parseFormulaOrNum(sub.bonusAgility, subVars);
-        if (sub.bonusEndurance) stats.endurance += parseFormulaOrNum(sub.bonusEndurance, subVars);
-        if (sub.bonusPrecision) stats.precision += parseFormulaOrNum(sub.bonusPrecision, subVars);
-        if (sub.bonusWillpower) stats.willpower += parseFormulaOrNum(sub.bonusWillpower, subVars);
-        if (sub.bonusCharisma) stats.charisma += parseFormulaOrNum(sub.bonusCharisma, subVars);
-      }
-    }
-
-    if (ability.triggers && ability.triggers.length > 0) {
-      for (const trig of ability.triggers) {
-        if (trig && isAbilityTriggerActive(trig, vitalsForTriggers)) {
-          const trigVars = buildVars(stats);
-          if (trig.bonusPower) stats.power += parseFormulaOrNum(trig.bonusPower, trigVars);
-          if (trig.bonusVitality) stats.vitality += parseFormulaOrNum(trig.bonusVitality, trigVars);
-          if (trig.bonusSpirit) stats.spirit += parseFormulaOrNum(trig.bonusSpirit, trigVars);
-          if (trig.bonusAgility) stats.agility += parseFormulaOrNum(trig.bonusAgility, trigVars);
-          if (trig.bonusEndurance) stats.endurance += parseFormulaOrNum(trig.bonusEndurance, trigVars);
-          if (trig.bonusPrecision) stats.precision += parseFormulaOrNum(trig.bonusPrecision, trigVars);
-          if (trig.bonusWillpower) stats.willpower += parseFormulaOrNum(trig.bonusWillpower, trigVars);
-          if (trig.bonusCharisma) stats.charisma += parseFormulaOrNum(trig.bonusCharisma, trigVars);
-        }
-      }
-    }
-  }
-
   // Calculate auto-modifiers scaling with Rank (Iron 3:1, Bronze 2:1, Silver 1:1, Gold 1:2, Diamond 1:3)
   const modifiers: Record<string, number> = {};
   for (const [stat, val] of Object.entries(stats)) {
@@ -919,6 +868,24 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   let abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.bonusInitiative, variables), 0);
   const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + parseFormulaOrNum(eq.bonusInitiative, variables), 0);
 
+  const rawHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
+  const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
+  const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
+  const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
+
+  const initialMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus + hpBuffBonus);
+  const initialMaxMana = Math.max(0, (rawMana || 0) + manaAddBonus + manaBuffBonus);
+  const initialMaxDt = Math.max(0, (rawDt || 0) + dtAddBonus + dtBuffBonus);
+
+  const vitalsForTriggers = {
+    hp: char.currentHp ?? 0,
+    maxHp: initialMaxHp,
+    mana: char.currentMana ?? 0,
+    maxMana: initialMaxMana,
+    dt: char.currentDt ?? 0,
+    maxDt: initialMaxDt,
+  };
+
   for (const ab of activeAbilities) {
     if (ab.triggers && ab.triggers.length > 0) {
       for (const trig of ab.triggers) {
@@ -934,11 +901,6 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
       }
     }
   }
-
-  const rawHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
-  const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
-  const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
-  const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
 
   const baseMaxHp = Math.max(1, (rawHp || 1) + hpAddBonus);
   const totalMaxHp = Math.max(1, baseMaxHp + hpBuffBonus);
