@@ -137,7 +137,7 @@ export interface Equipment {
   assignedToQuickRolls: boolean;
   dtBonus: number | string;
   bonusInitiative?: number | string;
-  statModifiers: Record<string, number>;
+  statModifiers: Record<string, number | string>;
   diceType?: string;
   modifier?: string | number;
 }
@@ -512,7 +512,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
       for (const [stat, bonus] of Object.entries(item.statModifiers)) {
         const lowerStat = stat.toLowerCase();
         if (lowerStat in stats) {
-          stats[lowerStat] += bonus;
+          stats[lowerStat] += parseFormulaOrNum(bonus, {});
         }
       }
     }

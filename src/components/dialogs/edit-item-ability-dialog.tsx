@@ -337,11 +337,11 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
                   charisma: [bonusCharisma, setBonusCharisma]
                 }[stat];
                 if (!stateSetter) return null;
-                const [val, setter] = stateSetter;
+                const [val, setter] = stateSetter as [string | number, (v: string | number) => void];
                 return (
                   <div key={stat}>
                     <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">{stat.substring(0,3)}</label>
-                    <Input type="number" value={val as number} onChange={e => (setter as any)(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none text-center" />
+                    <Input value={val} onChange={e => setter(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none text-center" />
                   </div>
                 );
               })}
@@ -355,11 +355,11 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
               <div className="grid grid-cols-2 gap-1">
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input type="number" value={hpAdd} onChange={e => setHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={hpAdd} onChange={e => setHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input type="number" value={hpBuff} onChange={e => setHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={hpBuff} onChange={e => setHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
               </div>
             </div>
@@ -368,11 +368,11 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
               <div className="grid grid-cols-2 gap-1">
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input type="number" value={manaAdd} onChange={e => setManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={manaAdd} onChange={e => setManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input type="number" value={manaBuff} onChange={e => setManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={manaBuff} onChange={e => setManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
               </div>
             </div>
@@ -381,11 +381,11 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
               <div className="grid grid-cols-2 gap-1">
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                  <Input type="number" value={dtAdd} onChange={e => setDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={dtAdd} onChange={e => setDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
                 <div>
                   <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                  <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  <Input value={dtBuff} onChange={e => setDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                 </div>
               </div>
             </div>

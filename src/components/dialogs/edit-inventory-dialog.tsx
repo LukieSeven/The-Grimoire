@@ -105,7 +105,7 @@ export function EditInventoryDialog({
   const [assignedToQuickRolls, setAssignedToQuickRolls] = useState(false);
   
   // Stat Modifiers for equipment: key-value map
-  const [statModifiers, setStatModifiers] = useState<Record<string, number>>({});
+  const [statModifiers, setStatModifiers] = useState<Record<string, number | string>>({});
 
   // Sync state when dialog opens or edits
   useEffect(() => {
@@ -137,10 +137,10 @@ export function EditInventoryDialog({
     }
   }, [isOpen, mode, type, initialData]);
 
-  const handleStatModifierChange = (stat: string, val: number) => {
+  const handleStatModifierChange = (stat: string, val: string) => {
     setStatModifiers(prev => {
       const next = { ...prev };
-      if (val === 0) {
+      if (!val || val === "0") {
         delete next[stat];
       } else {
         next[stat] = val;
@@ -386,14 +386,13 @@ export function EditInventoryDialog({
                 <label className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-2 font-serif">Stat Modifiers</label>
                 <div className="grid grid-cols-4 gap-2">
                   {STATS_LIST.map((stat) => {
-                    const currentVal = statModifiers[stat] || 0;
+                    const currentVal = statModifiers[stat] ?? "";
                     return (
                       <div key={stat} className="bg-background/40 p-1 rounded border border-border/40 text-center">
                         <label className="text-[8px] font-bold text-stone-500 uppercase block mb-0.5">{stat.substring(0,3)}</label>
                         <Input 
-                          type="number" 
                           value={currentVal} 
-                          onChange={(e) => handleStatModifierChange(stat, Number(e.target.value))} 
+                          onChange={(e) => handleStatModifierChange(stat, e.target.value)} 
                           className="h-7 text-center font-mono bg-background text-xs rounded-none" 
                         />
                       </div>
