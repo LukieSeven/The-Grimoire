@@ -537,16 +537,17 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
-                <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
-                <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none" />
+              {/* Resistances & Immunities Grid */}
+              <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-2">
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Resistances</label>
+                  <Input value={resistances} onChange={e => setResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Immunities</label>
+                  <Input value={immunities} onChange={e => setImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
               </div>
             </div>
 
@@ -1016,41 +1017,41 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Resistances & Immunities 2-Column Grid */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
-                      <Input
-                        value={sub.resistances || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setSubAbilities(prev => {
-                            const copy = [...prev];
-                            copy[subIdx] = { ...copy[subIdx], resistances: val };
-                            return copy;
-                          });
-                        }}
-                        placeholder="e.g. Fire, Piercing"
-                        className="bg-background rounded-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
-                      <Input
-                        value={sub.immunities || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setSubAbilities(prev => {
-                            const copy = [...prev];
-                            copy[subIdx] = { ...copy[subIdx], immunities: val };
-                            return copy;
-                          });
-                        }}
-                        placeholder="e.g. Poison, Stun"
-                        className="bg-background rounded-none"
-                      />
+                    {/* Resistances & Immunities 2-Column Grid */}
+                    <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">RESISTANCES</label>
+                        <Input
+                          value={sub.resistances || ""}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], resistances: val };
+                              return copy;
+                            });
+                          }}
+                          placeholder="e.g. Fire, Piercing"
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">IMMUNITIES</label>
+                        <Input
+                          value={sub.immunities || ""}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], immunities: val };
+                              return copy;
+                            });
+                          }}
+                          placeholder="e.g. Poison, Stun"
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
                     </div>
                   </div>
 

@@ -428,16 +428,17 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Resistances (Granted while active)</label>
-                <Input value={abilityResistances} onChange={e => setAbilityResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background rounded-none h-9 text-xs" />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Immunities (Granted while active)</label>
-                <Input value={abilityImmunities} onChange={e => setAbilityImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background rounded-none h-9 text-xs" />
+              {/* Resistances & Immunities Grid */}
+              <div className="grid grid-cols-2 gap-3 border-t border-border/20 pt-2">
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Resistances</label>
+                  <Input value={abilityResistances} onChange={e => setAbilityResistances(e.target.value)} placeholder="e.g. Fire, Piercing" className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-1">Immunities</label>
+                  <Input value={abilityImmunities} onChange={e => setAbilityImmunities(e.target.value)} placeholder="e.g. Poison, Stun" className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
               </div>
             </div>
 

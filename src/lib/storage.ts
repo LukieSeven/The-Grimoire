@@ -240,10 +240,27 @@ export function hasStatModifiers(ability: Partial<Ability> | Partial<SubAbility>
 export interface ActiveModifierBadge {
   label: string;
   type: "stat" | "hp-add" | "hp-buff" | "mana-add" | "mana-buff" | "dt-add" | "dt-buff" | "init" | "resistance" | "immunity";
+  rawFormula?: string;
 }
 
-export function getAbilityActiveModifierBadges(ab: Partial<Ability> | Partial<SubAbility> | Partial<FamiliarAbility>): ActiveModifierBadge[] {
+export function getAbilityActiveModifierBadges(
+  ab: Partial<Ability> | Partial<SubAbility> | Partial<FamiliarAbility>,
+  vars: Record<string, number> = {}
+): ActiveModifierBadge[] {
   const badges: ActiveModifierBadge[] = [];
+
+  const formatValAndFormula = (val: any) => {
+    if (val === undefined || val === null || val === "" || val === 0 || val === "0") return null;
+    const num = parseFormulaOrNum(val, vars);
+    const rawStr = String(val).trim();
+    const isFormula = isNaN(Number(rawStr));
+    const labelVal = num >= 0 ? `+${num}` : `${num}`;
+    return {
+      num,
+      labelVal,
+      rawFormula: isFormula ? rawStr : undefined
+    };
+  };
 
   // 1. Primary Stat Boosts
   const stats: Array<[string, any]> = [
@@ -258,38 +275,48 @@ export function getAbilityActiveModifierBadges(ab: Partial<Ability> | Partial<Su
   ];
 
   for (const [statLabel, val] of stats) {
-    if (val !== undefined && val !== null && val !== "" && val !== 0 && val !== "0") {
-      const formattedVal = typeof val === "number" ? (val > 0 ? `+${val}` : `${val}`) : (String(val).startsWith("+") || String(val).startsWith("-") ? val : `+${val}`);
-      badges.push({ label: `${statLabel}: ${formattedVal}`, type: "stat" });
+    const res = formatValAndFormula(val);
+    if (res) {
+      badges.push({ label: `${statLabel}: ${res.labelVal}`, type: "stat", rawFormula: res.rawFormula });
     }
   }
 
   // 2. Vital Additions (Base Max Increases)
-  if (ab.hpAdd !== undefined && ab.hpAdd !== null && ab.hpAdd !== "" && ab.hpAdd !== 0 && ab.hpAdd !== "0") {
-    badges.push({ label: `+${ab.hpAdd} HP Add`, type: "hp-add" });
-  }
-  if (ab.manaAdd !== undefined && ab.manaAdd !== null && ab.manaAdd !== "" && ab.manaAdd !== 0 && ab.manaAdd !== "0") {
-    badges.push({ label: `+${ab.manaAdd} MP Add`, type: "mana-add" });
-  }
-  if (ab.dtAdd !== undefined && ab.dtAdd !== null && ab.dtAdd !== "" && ab.dtAdd !== 0 && ab.dtAdd !== "0") {
-    badges.push({ label: `+${ab.dtAdd} DT Add`, type: "dt-add" });
+  const hpAddRes = formatValAndFormula(ab.hpAdd);
+  if (hpAddRes) {
+    badges.push({ label: `${hpAddRes.labelVal} HP Add`, type: "hp-add", rawFormula: hpAddRes.rawFormula });
   }
 
-  // 3. Vital Buffs (Temporary Buffers)
-  if (ab.hpBuff !== undefined && ab.hpBuff !== null && ab.hpBuff !== "" && ab.hpBuff !== 0 && ab.hpBuff !== "0") {
-    badges.push({ label: `+${ab.hpBuff} HP Buff`, type: "hp-buff" });
+  const manaAddRes = formatValAndFormula(ab.manaAdd);
+  if (manaAddRes) {
+    badges.push({ label: `${manaAddRes.labelVal} MP Add`, type: "mana-add", rawFormula: manaAddRes.rawFormula });
   }
-  if (ab.manaBuff !== undefined && ab.manaBuff !== null && ab.manaBuff !== "" && ab.manaBuff !== 0 && ab.manaBuff !== "0") {
-    badges.push({ label: `+${ab.manaBuff} MP Buff`, type: "mana-buff" });
+
+  const dtAddRes = formatValAndFormula(ab.dtAdd);
+  if (dtAddRes) {
+    badges.push({ label: `${dtAddRes.labelVal} DT Add`, type: "dt-add", rawFormula: dtAddRes.rawFormula });
   }
-  if (ab.dtBuff !== undefined && ab.dtBuff !== null && ab.dtBuff !== "" && ab.dtBuff !== 0 && ab.dtBuff !== "0") {
-    badges.push({ label: `+${ab.dtBuff} DT Buff`, type: "dt-buff" });
+
+  // 3. Vital Buffs (Flat Temporary Bonuses)
+  const hpBuffRes = formatValAndFormula(ab.hpBuff);
+  if (hpBuffRes) {
+    badges.push({ label: `${hpBuffRes.labelVal} HP Buff`, type: "hp-buff", rawFormula: hpBuffRes.rawFormula });
+  }
+
+  const manaBuffRes = formatValAndFormula(ab.manaBuff);
+  if (manaBuffRes) {
+    badges.push({ label: `${manaBuffRes.labelVal} MP Buff`, type: "mana-buff", rawFormula: manaBuffRes.rawFormula });
+  }
+
+  const dtBuffRes = formatValAndFormula(ab.dtBuff);
+  if (dtBuffRes) {
+    badges.push({ label: `${dtBuffRes.labelVal} DT Buff`, type: "dt-buff", rawFormula: dtBuffRes.rawFormula });
   }
 
   // 4. Initiative
-  if (ab.bonusInitiative !== undefined && ab.bonusInitiative !== null && ab.bonusInitiative !== "" && ab.bonusInitiative !== 0 && ab.bonusInitiative !== "0") {
-    const initVal = typeof ab.bonusInitiative === "number" ? (ab.bonusInitiative > 0 ? `+${ab.bonusInitiative}` : `${ab.bonusInitiative}`) : String(ab.bonusInitiative);
-    badges.push({ label: `Init: ${initVal}`, type: "init" });
+  const initRes = formatValAndFormula(ab.bonusInitiative);
+  if (initRes) {
+    badges.push({ label: `Init: ${initRes.labelVal}`, type: "init", rawFormula: initRes.rawFormula });
   }
 
   // 5. Resistances & Immunities
@@ -695,7 +722,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const totalMaxMana = Math.max(0, baseMaxMana + manaBuffBonus);
 
   const baseMaxDt = Math.max(0, (rawDt || 0) + dtAddBonus);
-  const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
+  const totalMaxDt = baseMaxDt;
 
   const maxInitiative = (rawInitiative || 0) + (abilityInitiativeBonus || 0) + (equipmentInitiativeBonus || 0);
 

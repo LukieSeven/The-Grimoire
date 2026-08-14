@@ -3773,31 +3773,34 @@ export default function CharacterSheet() {
                                             {ab.description && <p className="text-[10px] text-muted-foreground/80 font-serif line-clamp-1">{ab.description}</p>}
                                             {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                             {(() => {
-                                              const badges = getAbilityActiveModifierBadges(ab);
-                                              if (badges.length === 0) return null;
-                                              return (
-                                                <div className="flex flex-wrap items-center gap-1 mt-1">
-                                                  {badges.map((b: ActiveModifierBadge, i: number) => (
-                                                    <span 
-                                                      key={i} 
-                                                      className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${
-                                                        b.type === "stat" 
-                                                          ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
-                                                          : b.type.includes("add")
-                                                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                                                          : b.type.includes("buff")
-                                                          ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
-                                                          : b.type === "init"
-                                                          ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
-                                                          : "bg-primary/10 border-primary/30 text-primary"
-                                                      }`}
-                                                    >
-                                                      {b.label}
-                                                    </span>
-                                                  ))}
-                                                </div>
-                                              );
-                                            })()}
+                                               const badges = getAbilityActiveModifierBadges(ab, finalStats);
+                                               if (badges.length === 0) return null;
+                                               return (
+                                                 <div className="flex flex-wrap items-center gap-1 mt-1">
+                                                   {badges.map((b: ActiveModifierBadge, i: number) => (
+                                                     <span 
+                                                       key={i} 
+                                                       title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
+                                                       className={`text-[8px] font-mono px-1 py-0.2 rounded-none border transition-all ${
+                                                         !ab.active ? "opacity-50" : ""
+                                                       } ${
+                                                         b.type === "stat" 
+                                                           ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                                           : b.type.includes("add")
+                                                           ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                                           : b.type.includes("buff")
+                                                           ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                                           : b.type === "init"
+                                                           ? "bg-purple-500/10 border-purple-500/40 text-purple-300 font-bold"
+                                                           : "bg-orange-500/10 border-orange-500/40 text-orange-300"
+                                                       }`}
+                                                     >
+                                                       {b.label}
+                                                     </span>
+                                                   ))}
+                                                 </div>
+                                               );
+                                             })()}
                                           </div>
                                           <div className="flex items-center gap-1.5">
                                             <button
@@ -4265,35 +4268,30 @@ export default function CharacterSheet() {
                                   {ability.active ? "Active" : "Inactive"}
                                 </button>
                               </div>
-                            </div>
 
-                            {/* Active Modifiers Summary Badges */}
-                            {(() => {
-                              const badges = getAbilityActiveModifierBadges(ability);
-                              if (badges.length === 0) return null;
-                              return (
-                                <div className="flex flex-wrap items-center gap-1 mt-1">
-                                  {badges.map((b: ActiveModifierBadge, i: number) => (
-                                    <span 
-                                      key={i} 
-                                      className={`text-[9px] font-mono px-1.5 py-0.5 rounded-none border ${
-                                        b.type === "stat" 
-                                          ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
-                                          : b.type.includes("add")
-                                          ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                                          : b.type.includes("buff")
-                                          ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
-                                          : b.type === "init"
-                                          ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
-                                          : "bg-primary/10 border-primary/30 text-primary"
-                                      }`}
-                                    >
-                                      {b.label}
-                                    </span>
-                                  ))}
-                                </div>
-                              );
-                            })()}
+                              {/* Active Modifiers Summary Badges */}
+                              {getAbilityActiveModifierBadges(ability, finalStats).map((b: ActiveModifierBadge, i: number) => (
+                                <span 
+                                  key={i} 
+                                  title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
+                                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded-none border transition-all ${
+                                    !ability.active ? "opacity-50" : ""
+                                  } ${
+                                    b.type === "stat" 
+                                      ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                      : b.type.includes("add")
+                                      ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                      : b.type.includes("buff")
+                                      ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                      : b.type === "init"
+                                      ? "bg-purple-500/10 border-purple-500/40 text-purple-300 font-bold"
+                                      : "bg-orange-500/10 border-orange-500/40 text-orange-300"
+                                  }`}
+                                >
+                                  {b.label}
+                                </span>
+                              ))}
+                            </div>
                           </div>
 
                           {/* Action Roll Buttons (Prevent Card Click Toggle) */}
@@ -5235,39 +5233,34 @@ export default function CharacterSheet() {
                                               </Badge>
                                             )}
                                           </h6>
-                                          <div className="flex gap-1.5 mt-1 flex-wrap">
+                                          <div className="flex gap-1.5 mt-1 flex-wrap items-center">
                                             <Badge variant="outline" className="text-[8px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{ab.cost} MP</Badge>
                                             {ab.cooldown ? <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">{ab.cooldown}s CD</Badge> : null}
                                             <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">{ab.range}</Badge>
                                             <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">{ab.speed}</Badge>
                                             {ab.rollFormula && <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">Formula: {ab.rollFormula}</Badge>}
+
+                                            {/* Active Modifiers Summary Badges */}
+                                            {getAbilityActiveModifierBadges(ab, finalStats).map((b: ActiveModifierBadge, i: number) => (
+                                              <span 
+                                                key={i} 
+                                                title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
+                                                className={`text-[8px] font-mono px-1 py-0.2 rounded-none border transition-all ${
+                                                  b.type === "stat" 
+                                                    ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
+                                                    : b.type.includes("add")
+                                                    ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                                    : b.type.includes("buff")
+                                                    ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
+                                                    : b.type === "init"
+                                                    ? "bg-purple-500/10 border-purple-500/40 text-purple-300 font-bold"
+                                                    : "bg-orange-500/10 border-orange-500/40 text-orange-300"
+                                                }`}
+                                              >
+                                                {b.label}
+                                              </span>
+                                            ))}
                                           </div>
-                                          {(() => {
-                                            const badges = getAbilityActiveModifierBadges(ab);
-                                            if (badges.length === 0) return null;
-                                            return (
-                                              <div className="flex flex-wrap items-center gap-1 mt-1">
-                                                {badges.map((b: ActiveModifierBadge, i: number) => (
-                                                  <span 
-                                                    key={i} 
-                                                    className={`text-[8px] font-mono px-1 py-0.2 rounded-none border ${
-                                                      b.type === "stat" 
-                                                        ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
-                                                        : b.type.includes("add")
-                                                        ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
-                                                        : b.type.includes("buff")
-                                                        ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-300"
-                                                        : b.type === "init"
-                                                        ? "bg-purple-500/10 border-purple-500/40 text-purple-300"
-                                                        : "bg-primary/10 border-primary/30 text-primary"
-                                                    }`}
-                                                  >
-                                                    {b.label}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            );
-                                          })()}
                                         </div>
                                         <Button
                                           size="sm"
