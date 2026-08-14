@@ -663,7 +663,7 @@ export default function Bookshelf() {
       {/* Tucked away footer */}
       <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
         <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 85
+          Lovingly crafted by LukieSeven — Mark 86
         </p>
       </footer>
     </div>

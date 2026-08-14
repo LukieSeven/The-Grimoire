@@ -50,11 +50,19 @@ function Router() {
   );
 }
 
+const getBase = () => {
+  const envBase = import.meta.env.BASE_URL;
+  if (!envBase || envBase === "/" || envBase === "." || envBase === "./") {
+    return "";
+  }
+  return envBase.replace(/\/$/, "");
+};
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+        <WouterRouter base={getBase()}>
           <Router />
         </WouterRouter>
         <Toaster />

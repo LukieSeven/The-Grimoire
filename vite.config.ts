@@ -11,7 +11,7 @@ const port = Number(process.env.PORT) || 3000;
 const basePath = process.env.BASE_PATH || "/The-Grimoire/";
 
 export default defineConfig(({ command }) => ({
-  base: "./",
+  base: command === "build" ? "/The-Grimoire/" : "/",
   plugins: [
     react(),
     tailwindcss(),
