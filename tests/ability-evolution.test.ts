@@ -226,9 +226,14 @@ test("Sub-Abilities Integration: ability supports nested sub-abilities with indi
         id: "sub-1",
         name: "Secondary Strike",
         type: "Melee",
+        range: "30 ft",
+        speed: "Instant",
+        cooldown: 60,
         description: "Deals additional physical damage.",
         cost: 2,
         rollFormula: "POWr * 1.5",
+        linkedStats: ["power"],
+        bonusPower: 2,
         assignedToQuickRolls: true
       }
     ]
@@ -237,6 +242,9 @@ test("Sub-Abilities Integration: ability supports nested sub-abilities with indi
   assert.ok(ab.subAbilities);
   assert.equal(ab.subAbilities.length, 1);
   assert.equal(ab.subAbilities[0].name, "Secondary Strike");
+  assert.equal(ab.subAbilities[0].range, "30 ft");
+  assert.equal(ab.subAbilities[0].speed, "Instant");
   assert.equal(ab.subAbilities[0].cost, 2);
+  assert.equal(ab.subAbilities[0].bonusPower, 2);
   assert.equal(ab.subAbilities[0].rollFormula, "POWr * 1.5");
 });

@@ -4110,10 +4110,31 @@ export default function CharacterSheet() {
                                               {sub.cost} MP
                                             </Badge>
                                           )}
+                                          {sub.range && (
+                                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">
+                                              {sub.range}
+                                            </Badge>
+                                          )}
+                                          {sub.speed && (
+                                            <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">
+                                              {sub.speed}
+                                            </Badge>
+                                          )}
                                         </div>
 
-                                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                          {sub.rollFormula && (
+                                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                                          {sub.linkedStats && sub.linkedStats.length > 0 ? (
+                                            sub.linkedStats.map(statKey => (
+                                              <Button
+                                                key={statKey}
+                                                size="sm"
+                                                onClick={() => handleAbilityRoll({ ...ability, name: subTitle, rollFormula: sub.rollFormula || ability.rollFormula }, statKey)}
+                                                className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-6 text-[10px] font-serif rounded-none cursor-pointer px-2"
+                                              >
+                                                <Dice5 className="w-3 h-3 mr-1" /> Activate ({statKey.substring(0, 3).toUpperCase()})
+                                              </Button>
+                                            ))
+                                          ) : sub.rollFormula ? (
                                             <Button
                                               size="sm"
                                               onClick={() => handleRoll(sub.rollFormula || "d20", `Sub: ${subTitle}`)}
@@ -4121,7 +4142,7 @@ export default function CharacterSheet() {
                                             >
                                               <Dice5 className="w-3 h-3 mr-1" /> Activate
                                             </Button>
-                                          )}
+                                          ) : null}
                                           <svg className={`w-3.5 h-3.5 text-primary/80 transition-transform duration-200 ${isSubOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
                                         </div>
                                       </div>

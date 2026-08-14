@@ -168,12 +168,33 @@ export interface Essence {
 export interface SubAbility {
   id: string;
   name: string;
+  nickname?: string;
   type?: string;
   description?: string;
   cost?: number;
+  cooldown?: number;
+  range?: string;
+  speed?: string;
   rollFormula?: string;
   linkedStats?: string[];
   assignedToQuickRolls?: boolean;
+  bonusPower?: number;
+  bonusVitality?: number;
+  bonusSpirit?: number;
+  bonusAgility?: number;
+  bonusEndurance?: number;
+  bonusPrecision?: number;
+  bonusWillpower?: number;
+  bonusCharisma?: number;
+  hpAdd?: number;
+  hpBuff?: number;
+  manaAdd?: number;
+  manaBuff?: number;
+  dtAdd?: number;
+  dtBuff?: number;
+  bonusInitiative?: number;
+  resistances?: string;
+  immunities?: string;
 }
 
 export interface EvolutionModifier {
@@ -459,7 +480,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     }
   }
 
-  // Add active ability stat bonuses
+  // Add active ability & sub-ability stat bonuses
   const activeAbilities = abilities.filter(a => a.active === true);
   for (const ability of activeAbilities) {
     if (ability.bonusPower) stats.power += ability.bonusPower;
@@ -470,6 +491,19 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     if (ability.bonusPrecision) stats.precision += ability.bonusPrecision;
     if (ability.bonusWillpower) stats.willpower += ability.bonusWillpower;
     if (ability.bonusCharisma) stats.charisma += ability.bonusCharisma;
+
+    if (ability.subAbilities && ability.subAbilities.length > 0) {
+      for (const sub of ability.subAbilities) {
+        if (sub.bonusPower) stats.power += sub.bonusPower;
+        if (sub.bonusVitality) stats.vitality += sub.bonusVitality;
+        if (sub.bonusSpirit) stats.spirit += sub.bonusSpirit;
+        if (sub.bonusAgility) stats.agility += sub.bonusAgility;
+        if (sub.bonusEndurance) stats.endurance += sub.bonusEndurance;
+        if (sub.bonusPrecision) stats.precision += sub.bonusPrecision;
+        if (sub.bonusWillpower) stats.willpower += sub.bonusWillpower;
+        if (sub.bonusCharisma) stats.charisma += sub.bonusCharisma;
+      }
+    }
   }
 
   // Calculate auto-modifiers scaling with Rank (Iron 3:1, Bronze 2:1, Silver 1:1, Gold 1:2, Diamond 1:3)
