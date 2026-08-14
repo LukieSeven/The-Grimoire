@@ -32,7 +32,7 @@ import {
 import { 
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
   Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
-  getAbilityHighestRank, calculateAbilityEvolutions
+  getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers
 } from "@/lib/storage";
 
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
@@ -1323,6 +1323,19 @@ export default function CharacterSheet() {
       createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - curDt, label: `${ability.name} Shield` } });
     }
 
+    // Toggle active state for stat-modifying abilities
+    const parentAb = abilities.find(a => a.id === ability.id);
+    if (parentAb && hasStatModifiers(ability)) {
+      if (parentAb.active) {
+        // If already active, deactivating it DOES NOT roll again
+        toggleAbilityActive(parentAb);
+        return;
+      } else {
+        // If unactive, set to active and proceed with rolls
+        toggleAbilityActive(parentAb);
+      }
+    }
+
     updateChar.mutate({ id, data: updates });
 
     if (changes.length > 0) {
@@ -1599,6 +1612,44 @@ export default function CharacterSheet() {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
       if (ability) handleAbilityRoll(ability);
       else toast.error("Ability not found");
+    } else if (slot.type === "sub-ability") {
+      const ability = abilities.find(a => a.id === Number(slot.targetId));
+      if (ability && ability.subAbilities) {
+        const subIndex = ability.subAbilities.findIndex(s => s.id === slot.subId);
+        const sub = subIndex !== -1 ? ability.subAbilities[subIndex] : null;
+        if (sub) {
+          const subTitle = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIndex + 2})`;
+          const subAsAbility: Ability = {
+            ...ability,
+            name: subTitle,
+            cost: sub.cost ?? 0,
+            cooldown: sub.cooldown ?? 0,
+            range: sub.range || "",
+            speed: sub.speed || "",
+            type: sub.type || "",
+            rollFormula: sub.rollFormula || ability.rollFormula,
+            linkedStats: sub.linkedStats || ability.linkedStats,
+            bonusPower: sub.bonusPower ?? 0,
+            bonusVitality: sub.bonusVitality ?? 0,
+            bonusSpirit: sub.bonusSpirit ?? 0,
+            bonusAgility: sub.bonusAgility ?? 0,
+            bonusEndurance: sub.bonusEndurance ?? 0,
+            bonusPrecision: sub.bonusPrecision ?? 0,
+            bonusWillpower: sub.bonusWillpower ?? 0,
+            bonusCharisma: sub.bonusCharisma ?? 0,
+            hpAdd: sub.hpAdd ?? 0,
+            hpBuff: sub.hpBuff ?? 0,
+            manaAdd: sub.manaAdd ?? 0,
+            manaBuff: sub.manaBuff ?? 0,
+            dtAdd: sub.dtAdd ?? 0,
+            dtBuff: sub.dtBuff ?? 0,
+            bonusInitiative: sub.bonusInitiative ?? 0,
+            resistances: sub.resistances || "",
+            immunities: sub.immunities || "",
+          };
+          handleAbilityRoll(subAsAbility);
+        }
+      }
     } else if (slot.type === "skill") {
       const skill = skills.find(s => s.id === Number(slot.targetId));
       if (skill) handleSkillRoll(skill);
@@ -3011,12 +3062,18 @@ export default function CharacterSheet() {
             {activeFavorites.map((fav, index) => {
               if (fav) {
                 const details = getSlotDetails(fav);
+                const isSlotActive = (fav.type === "ability" || fav.type === "sub-ability") && !!abilities.find(a => a.id === Number(fav.targetId))?.active;
+
                 return (
                   <div 
                     key={index} 
                     onClick={() => handleExecuteFavorite(fav)}
-                    className="min-h-[72px] bg-background/60 hover:bg-accent/40 border border-primary/45 hover:border-primary transition-all relative flex flex-col justify-between cursor-pointer p-2 rounded-md group shadow-sm"
-                    title={`Favorite #${index + 1}: ${fav.label}`}
+                    className={`min-h-[72px] transition-all relative flex flex-col justify-between cursor-pointer p-2 rounded-md group shadow-sm ${
+                      isSlotActive 
+                        ? "bg-primary/20 border-2 border-primary shadow-md shadow-primary/30 ring-1 ring-primary/50" 
+                        : "bg-background/60 hover:bg-accent/40 border border-primary/45 hover:border-primary"
+                    }`}
+                    title={`Favorite #${index + 1}: ${fav.label}${isSlotActive ? " (ACTIVE)" : ""}`}
                   >
                     {/* Actions Panel */}
                     <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -3039,8 +3096,12 @@ export default function CharacterSheet() {
                     {/* Header slot ID + Type badge */}
                     <div className="flex justify-between items-center w-full pr-8">
                       <span className="text-[8px] font-mono text-muted-foreground/75 font-semibold">#{index + 1}</span>
-                      <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-primary border border-primary/20 px-1 py-0.25 rounded bg-primary/5">
-                        {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
+                      <span className={`text-[7px] font-mono font-bold uppercase tracking-wider border px-1 py-0.25 rounded ${
+                        isSlotActive
+                          ? "bg-primary text-primary-foreground border-primary font-black"
+                          : "text-primary border-primary/20 bg-primary/5"
+                      }`}>
+                        {isSlotActive ? "ACTIVE" : (fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "sub-ability" ? "Sub-Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat")}
                       </span>
                     </div>
 

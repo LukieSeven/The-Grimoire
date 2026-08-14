@@ -197,6 +197,28 @@ export interface SubAbility {
   immunities?: string;
 }
 
+export function hasStatModifiers(ability: Partial<Ability> | Partial<SubAbility>): boolean {
+  return !!(
+    (ability.bonusPower && ability.bonusPower !== 0) ||
+    (ability.bonusVitality && ability.bonusVitality !== 0) ||
+    (ability.bonusSpirit && ability.bonusSpirit !== 0) ||
+    (ability.bonusAgility && ability.bonusAgility !== 0) ||
+    (ability.bonusEndurance && ability.bonusEndurance !== 0) ||
+    (ability.bonusPrecision && ability.bonusPrecision !== 0) ||
+    (ability.bonusWillpower && ability.bonusWillpower !== 0) ||
+    (ability.bonusCharisma && ability.bonusCharisma !== 0) ||
+    (ability.hpAdd && ability.hpAdd !== 0) ||
+    (ability.hpBuff && ability.hpBuff !== 0) ||
+    (ability.manaAdd && ability.manaAdd !== 0) ||
+    (ability.manaBuff && ability.manaBuff !== 0) ||
+    (ability.dtAdd && ability.dtAdd !== 0) ||
+    (ability.dtBuff && ability.dtBuff !== 0) ||
+    (ability.bonusInitiative && ability.bonusInitiative !== 0) ||
+    (ability.resistances && ability.resistances.trim().length > 0) ||
+    (ability.immunities && ability.immunities.trim().length > 0)
+  );
+}
+
 export interface EvolutionModifier {
   id: string;
   name: string;
