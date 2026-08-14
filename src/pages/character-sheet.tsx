@@ -32,7 +32,7 @@ import {
 import { 
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
   Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
-  getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers
+  getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum
 } from "@/lib/storage";
 
 import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
@@ -1301,27 +1301,58 @@ export default function CharacterSheet() {
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `${ability.name} Cost` } });
     }
 
-    if (ability.hpAdd) {
+    const evalVars = {
+      power: finalStats.power || 0,
+      pow: finalStats.power || 0,
+      vitality: finalStats.vitality || 0,
+      vit: finalStats.vitality || 0,
+      spirit: finalStats.spirit || 0,
+      spi: finalStats.spirit || 0,
+      agility: finalStats.agility || 0,
+      agi: finalStats.agility || 0,
+      endurance: finalStats.endurance || 0,
+      end: finalStats.endurance || 0,
+      precision: finalStats.precision || 0,
+      pre: finalStats.precision || 0,
+      willpower: finalStats.willpower || 0,
+      wil: finalStats.willpower || 0,
+      charisma: finalStats.charisma || 0,
+      cha: finalStats.charisma || 0,
+      powr: autoModifiers.power || 0,
+      vitr: autoModifiers.vitality || 0,
+      spir: autoModifiers.spirit || 0,
+      agir: autoModifiers.agility || 0,
+      endr: autoModifiers.endurance || 0,
+      prer: autoModifiers.precision || 0,
+      wilr: autoModifiers.willpower || 0,
+      char: autoModifiers.charisma || 0,
+    };
+
+    const valHpAdd = parseFormulaOrNum(ability.hpAdd, evalVars);
+    const valManaAdd = parseFormulaOrNum(ability.manaAdd, evalVars);
+    const valDtAdd = parseFormulaOrNum(ability.dtAdd, evalVars);
+
+    if (valHpAdd > 0) {
       const curHp = hp ?? character.currentHp;
-      const nextHp = Math.min(maxHp, curHp + ability.hpAdd);
+      const nextHp = Math.min(maxHp, curHp + valHpAdd);
       setHp(nextHp);
       updates.currentHp = nextHp;
-      changes.push(`+${ability.hpAdd} HP`);
+      changes.push(`+${valHpAdd} HP`);
       createRoll.mutate({ id, data: { diceType: "hp-log", modifier: nextHp - curHp, label: `${ability.name} Heal` } });
     }
-    if (ability.manaAdd) {
-      const nextM = Math.min(maxMana, nextMana + ability.manaAdd);
+    if (valManaAdd > 0) {
+      const nextM = Math.min(maxMana, nextMana + valManaAdd);
       setMana(nextM);
       updates.currentMana = nextM;
-      changes.push(`+${ability.manaAdd} MP`);
+      changes.push(`+${valManaAdd} MP`);
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `${ability.name} Restore` } });
     }
-    if (ability.dtAdd) {
+    if (valDtAdd > 0) {
       const curDt = currentDt ?? character.currentDt;
-      const nextDt = Math.min(maxDt, curDt + ability.dtAdd);
+      const nextDt = Math.min(maxDt, curDt + valDtAdd);
       setCurrentDt(nextDt);
       updates.currentDt = nextDt;
-      changes.push(`+${ability.dtAdd} DT`);
+      changes.push(`+${valDtAdd} DT`);
       createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - curDt, label: `${ability.name} Shield` } });
     }
 

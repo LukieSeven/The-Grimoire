@@ -61,22 +61,22 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
   const [resistances, setResistances] = useState("");
   const [immunities, setImmunities] = useState("");
 
-  // Bonus states
-  const [bonusPower, setBonusPower] = useState<number>(0);
-  const [bonusVitality, setBonusVitality] = useState<number>(0);
-  const [bonusSpirit, setBonusSpirit] = useState<number>(0);
-  const [bonusAgility, setBonusAgility] = useState<number>(0);
-  const [bonusEndurance, setBonusEndurance] = useState<number>(0);
-  const [bonusPrecision, setBonusPrecision] = useState<number>(0);
-  const [bonusWillpower, setBonusWillpower] = useState<number>(0);
-  const [bonusCharisma, setBonusCharisma] = useState<number>(0);
-  const [hpAdd, setHpAdd] = useState<number>(0);
-  const [hpBuff, setHpBuff] = useState<number>(0);
-  const [manaAdd, setManaAdd] = useState<number>(0);
-  const [manaBuff, setManaBuff] = useState<number>(0);
-  const [dtAdd, setDtAdd] = useState<number>(0);
-  const [dtBuff, setDtBuff] = useState<number>(0);
-  const [bonusInitiative, setBonusInitiative] = useState<number>(0);
+  // Bonus states (support numbers or formula strings like '2+wil')
+  const [bonusPower, setBonusPower] = useState<string | number>("");
+  const [bonusVitality, setBonusVitality] = useState<string | number>("");
+  const [bonusSpirit, setBonusSpirit] = useState<string | number>("");
+  const [bonusAgility, setBonusAgility] = useState<string | number>("");
+  const [bonusEndurance, setBonusEndurance] = useState<string | number>("");
+  const [bonusPrecision, setBonusPrecision] = useState<string | number>("");
+  const [bonusWillpower, setBonusWillpower] = useState<string | number>("");
+  const [bonusCharisma, setBonusCharisma] = useState<string | number>("");
+  const [hpAdd, setHpAdd] = useState<string | number>("");
+  const [hpBuff, setHpBuff] = useState<string | number>("");
+  const [manaAdd, setManaAdd] = useState<string | number>("");
+  const [manaBuff, setManaBuff] = useState<string | number>("");
+  const [dtAdd, setDtAdd] = useState<string | number>("");
+  const [dtBuff, setDtBuff] = useState<string | number>("");
+  const [bonusInitiative, setBonusInitiative] = useState<string | number>("");
 
   const resetForm = () => {
     setName("");
@@ -98,21 +98,21 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setIsInnatePassive(false);
     setResistances("");
     setImmunities("");
-    setBonusPower(0);
-    setBonusVitality(0);
-    setBonusSpirit(0);
-    setBonusAgility(0);
-    setBonusEndurance(0);
-    setBonusPrecision(0);
-    setBonusWillpower(0);
-    setBonusCharisma(0);
-    setHpAdd(0);
-    setHpBuff(0);
-    setManaAdd(0);
-    setManaBuff(0);
-    setDtAdd(0);
-    setDtBuff(0);
-    setBonusInitiative(0);
+    setBonusPower("");
+    setBonusVitality("");
+    setBonusSpirit("");
+    setBonusAgility("");
+    setBonusEndurance("");
+    setBonusPrecision("");
+    setBonusWillpower("");
+    setBonusCharisma("");
+    setHpAdd("");
+    setHpBuff("");
+    setManaAdd("");
+    setManaBuff("");
+    setDtAdd("");
+    setDtBuff("");
+    setBonusInitiative("");
     setEditingId(null);
   };
 
@@ -142,21 +142,21 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setEssenceId(isIp ? null : (ability.essenceId || null));
     setResistances(ability.resistances || "");
     setImmunities(ability.immunities || "");
-    setBonusPower(ability.bonusPower || 0);
-    setBonusVitality(ability.bonusVitality || 0);
-    setBonusSpirit(ability.bonusSpirit || 0);
-    setBonusAgility(ability.bonusAgility || 0);
-    setBonusEndurance(ability.bonusEndurance || 0);
-    setBonusPrecision(ability.bonusPrecision || 0);
-    setBonusWillpower(ability.bonusWillpower || 0);
-    setBonusCharisma(ability.bonusCharisma || 0);
-    setHpAdd(ability.hpAdd || 0);
-    setHpBuff(ability.hpBuff || 0);
-    setManaAdd(ability.manaAdd || 0);
-    setManaBuff(ability.manaBuff || 0);
-    setDtAdd(ability.dtAdd || 0);
-    setDtBuff(ability.dtBuff || 0);
-    setBonusInitiative(ability.bonusInitiative || 0);
+    setBonusPower(ability.bonusPower ?? "");
+    setBonusVitality(ability.bonusVitality ?? "");
+    setBonusSpirit(ability.bonusSpirit ?? "");
+    setBonusAgility(ability.bonusAgility ?? "");
+    setBonusEndurance(ability.bonusEndurance ?? "");
+    setBonusPrecision(ability.bonusPrecision ?? "");
+    setBonusWillpower(ability.bonusWillpower ?? "");
+    setBonusCharisma(ability.bonusCharisma ?? "");
+    setHpAdd(ability.hpAdd ?? "");
+    setHpBuff(ability.hpBuff ?? "");
+    setManaAdd(ability.manaAdd ?? "");
+    setManaBuff(ability.manaBuff ?? "");
+    setDtAdd(ability.dtAdd ?? "");
+    setDtBuff(ability.dtBuff ?? "");
+    setBonusInitiative(ability.bonusInitiative ?? "");
     setMode("edit");
   };
 
@@ -467,35 +467,35 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
               <div className="grid grid-cols-4 gap-2">
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
-                  <Input type="number" value={bonusPower} onChange={e => setBonusPower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusPower} onChange={e => setBonusPower(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
-                  <Input type="number" value={bonusVitality} onChange={e => setBonusVitality(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusVitality} onChange={e => setBonusVitality(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
-                  <Input type="number" value={bonusSpirit} onChange={e => setBonusSpirit(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusSpirit} onChange={e => setBonusSpirit(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
-                  <Input type="number" value={bonusAgility} onChange={e => setBonusAgility(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusAgility} onChange={e => setBonusAgility(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
-                  <Input type="number" value={bonusEndurance} onChange={e => setBonusEndurance(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusEndurance} onChange={e => setBonusEndurance(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
-                  <Input type="number" value={bonusPrecision} onChange={e => setBonusPrecision(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusPrecision} onChange={e => setBonusPrecision(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
-                  <Input type="number" value={bonusWillpower} onChange={e => setBonusWillpower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusWillpower} onChange={e => setBonusWillpower(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
-                  <Input type="number" value={bonusCharisma} onChange={e => setBonusCharisma(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                  <Input value={bonusCharisma} onChange={e => setBonusCharisma(e.target.value)} className="bg-background font-mono h-7 text-xs rounded-none" />
                 </div>
               </div>
 
@@ -506,11 +506,11 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   <div className="grid grid-cols-2 gap-1">
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                      <Input type="number" value={hpAdd} onChange={e => setHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={hpAdd} onChange={e => setHpAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                      <Input type="number" value={hpBuff} onChange={e => setHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={hpBuff} onChange={e => setHpBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                   </div>
                 </div>
@@ -519,11 +519,11 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   <div className="grid grid-cols-2 gap-1">
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                      <Input type="number" value={manaAdd} onChange={e => setManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={manaAdd} onChange={e => setManaAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                      <Input type="number" value={manaBuff} onChange={e => setManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={manaBuff} onChange={e => setManaBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                   </div>
                 </div>
@@ -532,11 +532,11 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   <div className="grid grid-cols-2 gap-1">
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                      <Input type="number" value={dtAdd} onChange={e => setDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={dtAdd} onChange={e => setDtAdd(e.target.value)} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                     <div>
                       <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                      <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                      <Input value={dtBuff} onChange={e => setDtBuff(e.target.value)} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                     </div>
                   </div>
                 </div>
@@ -544,7 +544,7 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                   <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
                   <div>
                     <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
-                    <Input type="number" value={bonusInitiative} onChange={e => setBonusInitiative(Number(e.target.value))} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    <Input value={bonusInitiative} onChange={e => setBonusInitiative(e.target.value)} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
                   </div>
                 </div>
               </div>
@@ -800,10 +800,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
                         <Input
-                          type="number"
-                          value={sub.bonusPower ?? 0}
+                          value={sub.bonusPower ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusPower: val };
@@ -816,10 +815,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
                         <Input
-                          type="number"
-                          value={sub.bonusVitality ?? 0}
+                          value={sub.bonusVitality ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusVitality: val };
@@ -832,10 +830,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
                         <Input
-                          type="number"
-                          value={sub.bonusSpirit ?? 0}
+                          value={sub.bonusSpirit ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusSpirit: val };
@@ -848,10 +845,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
                         <Input
-                          type="number"
-                          value={sub.bonusAgility ?? 0}
+                          value={sub.bonusAgility ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusAgility: val };
@@ -864,10 +860,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
                         <Input
-                          type="number"
-                          value={sub.bonusEndurance ?? 0}
+                          value={sub.bonusEndurance ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusEndurance: val };
@@ -880,10 +875,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
                         <Input
-                          type="number"
-                          value={sub.bonusPrecision ?? 0}
+                          value={sub.bonusPrecision ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusPrecision: val };
@@ -896,10 +890,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
                         <Input
-                          type="number"
-                          value={sub.bonusWillpower ?? 0}
+                          value={sub.bonusWillpower ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusWillpower: val };
@@ -912,10 +905,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                       <div>
                         <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
                         <Input
-                          type="number"
-                          value={sub.bonusCharisma ?? 0}
+                          value={sub.bonusCharisma ?? ""}
                           onChange={e => {
-                            const val = Number(e.target.value);
+                            const val = e.target.value;
                             setSubAbilities(prev => {
                               const copy = [...prev];
                               copy[subIdx] = { ...copy[subIdx], bonusCharisma: val };
@@ -935,10 +927,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
                             <Input
-                              type="number"
-                              value={sub.hpAdd ?? 0}
+                              value={sub.hpAdd ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], hpAdd: val };
@@ -952,10 +943,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
                             <Input
-                              type="number"
-                              value={sub.hpBuff ?? 0}
+                              value={sub.hpBuff ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], hpBuff: val };
@@ -974,10 +964,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
                             <Input
-                              type="number"
-                              value={sub.manaAdd ?? 0}
+                              value={sub.manaAdd ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], manaAdd: val };
@@ -991,10 +980,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
                             <Input
-                              type="number"
-                              value={sub.manaBuff ?? 0}
+                              value={sub.manaBuff ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], manaBuff: val };
@@ -1013,10 +1001,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
                             <Input
-                              type="number"
-                              value={sub.dtAdd ?? 0}
+                              value={sub.dtAdd ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], dtAdd: val };
@@ -1030,10 +1017,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                           <div>
                             <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
                             <Input
-                              type="number"
-                              value={sub.dtBuff ?? 0}
+                              value={sub.dtBuff ?? ""}
                               onChange={e => {
-                                const val = Number(e.target.value);
+                                const val = e.target.value;
                                 setSubAbilities(prev => {
                                   const copy = [...prev];
                                   copy[subIdx] = { ...copy[subIdx], dtBuff: val };
@@ -1051,10 +1037,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                         <div>
                           <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
                           <Input
-                            type="number"
-                            value={sub.bonusInitiative ?? 0}
+                            value={sub.bonusInitiative ?? ""}
                             onChange={e => {
-                              const val = Number(e.target.value);
+                              const val = e.target.value;
                               setSubAbilities(prev => {
                                 const copy = [...prev];
                                 copy[subIdx] = { ...copy[subIdx], bonusInitiative: val };

@@ -40,22 +40,22 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
   const [usageType, setUsageType] = useState<"standard" | "one-time" | "rechargeable">("standard");
   const [maxCharges, setMaxCharges] = useState<number>(0);
 
-  // Stat Modifiers
-  const [bonusPower, setBonusPower] = useState<number>(0);
-  const [bonusVitality, setBonusVitality] = useState<number>(0);
-  const [bonusSpirit, setBonusSpirit] = useState<number>(0);
-  const [bonusAgility, setBonusAgility] = useState<number>(0);
-  const [bonusEndurance, setBonusEndurance] = useState<number>(0);
-  const [bonusPrecision, setBonusPrecision] = useState<number>(0);
-  const [bonusWillpower, setBonusWillpower] = useState<number>(0);
-  const [bonusCharisma, setBonusCharisma] = useState<number>(0);
+  // Stat Modifiers (support numbers or formula strings like '2+wil')
+  const [bonusPower, setBonusPower] = useState<string | number>("");
+  const [bonusVitality, setBonusVitality] = useState<string | number>("");
+  const [bonusSpirit, setBonusSpirit] = useState<string | number>("");
+  const [bonusAgility, setBonusAgility] = useState<string | number>("");
+  const [bonusEndurance, setBonusEndurance] = useState<string | number>("");
+  const [bonusPrecision, setBonusPrecision] = useState<string | number>("");
+  const [bonusWillpower, setBonusWillpower] = useState<string | number>("");
+  const [bonusCharisma, setBonusCharisma] = useState<string | number>("");
 
-  const [hpAdd, setHpAdd] = useState<number>(0);
-  const [hpBuff, setHpBuff] = useState<number>(0);
-  const [manaAdd, setManaAdd] = useState<number>(0);
-  const [manaBuff, setManaBuff] = useState<number>(0);
-  const [dtAdd, setDtAdd] = useState<number>(0);
-  const [dtBuff, setDtBuff] = useState<number>(0);
+  const [hpAdd, setHpAdd] = useState<string | number>("");
+  const [hpBuff, setHpBuff] = useState<string | number>("");
+  const [manaAdd, setManaAdd] = useState<string | number>("");
+  const [manaBuff, setManaBuff] = useState<string | number>("");
+  const [dtAdd, setDtAdd] = useState<string | number>("");
+  const [dtBuff, setDtBuff] = useState<string | number>("");
 
   useEffect(() => {
     if (isOpen) {
@@ -72,20 +72,20 @@ export function EditItemAbilityDialog({ isOpen, onOpenChange, characterId, equip
         setAssignedToQuickRolls(!!initialData.assignedToQuickRolls);
         setResistances(initialData.resistances || "");
         setImmunities(initialData.immunities || "");
-        setBonusPower(initialData.bonusPower || 0);
-        setBonusVitality(initialData.bonusVitality || 0);
-        setBonusSpirit(initialData.bonusSpirit || 0);
-        setBonusAgility(initialData.bonusAgility || 0);
-        setBonusEndurance(initialData.bonusEndurance || 0);
-        setBonusPrecision(initialData.bonusPrecision || 0);
-        setBonusWillpower(initialData.bonusWillpower || 0);
-        setBonusCharisma(initialData.bonusCharisma || 0);
-        setHpAdd(initialData.hpAdd || 0);
-        setHpBuff(initialData.hpBuff || 0);
-        setManaAdd(initialData.manaAdd || 0);
-        setManaBuff(initialData.manaBuff || 0);
-        setDtAdd(initialData.dtAdd || 0);
-        setDtBuff(initialData.dtBuff || 0);
+        setBonusPower(initialData.bonusPower ?? "");
+        setBonusVitality(initialData.bonusVitality ?? "");
+        setBonusSpirit(initialData.bonusSpirit ?? "");
+        setBonusAgility(initialData.bonusAgility ?? "");
+        setBonusEndurance(initialData.bonusEndurance ?? "");
+        setBonusPrecision(initialData.bonusPrecision ?? "");
+        setBonusWillpower(initialData.bonusWillpower ?? "");
+        setBonusCharisma(initialData.bonusCharisma ?? "");
+        setHpAdd(initialData.hpAdd ?? "");
+        setHpBuff(initialData.hpBuff ?? "");
+        setManaAdd(initialData.manaAdd ?? "");
+        setManaBuff(initialData.manaBuff ?? "");
+        setDtAdd(initialData.dtAdd ?? "");
+        setDtBuff(initialData.dtBuff ?? "");
         
         // Load usage
         setUsageType((initialData.usageType as any) || "standard");

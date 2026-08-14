@@ -178,42 +178,58 @@ export interface SubAbility {
   rollFormula?: string;
   linkedStats?: string[];
   assignedToQuickRolls?: boolean;
-  bonusPower?: number;
-  bonusVitality?: number;
-  bonusSpirit?: number;
-  bonusAgility?: number;
-  bonusEndurance?: number;
-  bonusPrecision?: number;
-  bonusWillpower?: number;
-  bonusCharisma?: number;
-  hpAdd?: number;
-  hpBuff?: number;
-  manaAdd?: number;
-  manaBuff?: number;
-  dtAdd?: number;
-  dtBuff?: number;
-  bonusInitiative?: number;
+  bonusPower?: number | string;
+  bonusVitality?: number | string;
+  bonusSpirit?: number | string;
+  bonusAgility?: number | string;
+  bonusEndurance?: number | string;
+  bonusPrecision?: number | string;
+  bonusWillpower?: number | string;
+  bonusCharisma?: number | string;
+  hpAdd?: number | string;
+  hpBuff?: number | string;
+  manaAdd?: number | string;
+  manaBuff?: number | string;
+  dtAdd?: number | string;
+  dtBuff?: number | string;
+  bonusInitiative?: number | string;
   resistances?: string;
   immunities?: string;
 }
 
+export function parseFormulaOrNum(val: number | string | undefined | null, vars: Record<string, number>): number {
+  if (val === undefined || val === null || val === "") return 0;
+  if (typeof val === "number") return val;
+  const str = String(val).trim();
+  if (!str) return 0;
+  if (/^-?\d+$/.test(str)) return parseInt(str, 10);
+  return evaluateFormula(str, vars);
+}
+
 export function hasStatModifiers(ability: Partial<Ability> | Partial<SubAbility>): boolean {
+  const checkVal = (v: any) => {
+    if (v === undefined || v === null) return false;
+    if (typeof v === "number") return v !== 0;
+    if (typeof v === "string") return v.trim().length > 0 && v.trim() !== "0";
+    return false;
+  };
+
   return !!(
-    (ability.bonusPower && ability.bonusPower !== 0) ||
-    (ability.bonusVitality && ability.bonusVitality !== 0) ||
-    (ability.bonusSpirit && ability.bonusSpirit !== 0) ||
-    (ability.bonusAgility && ability.bonusAgility !== 0) ||
-    (ability.bonusEndurance && ability.bonusEndurance !== 0) ||
-    (ability.bonusPrecision && ability.bonusPrecision !== 0) ||
-    (ability.bonusWillpower && ability.bonusWillpower !== 0) ||
-    (ability.bonusCharisma && ability.bonusCharisma !== 0) ||
-    (ability.hpAdd && ability.hpAdd !== 0) ||
-    (ability.hpBuff && ability.hpBuff !== 0) ||
-    (ability.manaAdd && ability.manaAdd !== 0) ||
-    (ability.manaBuff && ability.manaBuff !== 0) ||
-    (ability.dtAdd && ability.dtAdd !== 0) ||
-    (ability.dtBuff && ability.dtBuff !== 0) ||
-    (ability.bonusInitiative && ability.bonusInitiative !== 0) ||
+    checkVal(ability.bonusPower) ||
+    checkVal(ability.bonusVitality) ||
+    checkVal(ability.bonusSpirit) ||
+    checkVal(ability.bonusAgility) ||
+    checkVal(ability.bonusEndurance) ||
+    checkVal(ability.bonusPrecision) ||
+    checkVal(ability.bonusWillpower) ||
+    checkVal(ability.bonusCharisma) ||
+    checkVal(ability.hpAdd) ||
+    checkVal(ability.hpBuff) ||
+    checkVal(ability.manaAdd) ||
+    checkVal(ability.manaBuff) ||
+    checkVal(ability.dtAdd) ||
+    checkVal(ability.dtBuff) ||
+    checkVal(ability.bonusInitiative) ||
     (ability.resistances && ability.resistances.trim().length > 0) ||
     (ability.immunities && ability.immunities.trim().length > 0)
   );
@@ -246,21 +262,21 @@ export interface Ability {
   primaryStat?: string;
   evolutionModifiers?: EvolutionModifier[];
   subAbilities?: SubAbility[];
-  bonusPower?: number;
-  bonusVitality?: number;
-  bonusSpirit?: number;
-  bonusAgility?: number;
-  bonusEndurance?: number;
-  bonusPrecision?: number;
-  bonusWillpower?: number;
-  bonusCharisma?: number;
-  hpAdd?: number;
-  hpBuff?: number;
-  manaAdd?: number;
-  manaBuff?: number;
-  dtAdd?: number;
-  dtBuff?: number;
-  bonusInitiative?: number;
+  bonusPower?: number | string;
+  bonusVitality?: number | string;
+  bonusSpirit?: number | string;
+  bonusAgility?: number | string;
+  bonusEndurance?: number | string;
+  bonusPrecision?: number | string;
+  bonusWillpower?: number | string;
+  bonusCharisma?: number | string;
+  hpAdd?: number | string;
+  hpBuff?: number | string;
+  manaAdd?: number | string;
+  manaBuff?: number | string;
+  dtAdd?: number | string;
+  dtBuff?: number | string;
+  bonusInitiative?: number | string;
   essenceId?: number | null;
   isInnatePassive?: boolean;
   resistances?: string;
@@ -502,28 +518,62 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     }
   }
 
+  // Calculate equipped armor DT bonus
+  const armorDtBonus = equippedList.reduce((sum, item) => sum + (item.dtBonus || 0), 0);
+
+  // Helper to build formula evaluation variables map
+  const buildVars = (sMap: Record<string, number>) => ({
+    power: sMap.power || 0,
+    pow: sMap.power || 0,
+    vitality: sMap.vitality || 0,
+    vit: sMap.vitality || 0,
+    spirit: sMap.spirit || 0,
+    spi: sMap.spirit || 0,
+    agility: sMap.agility || 0,
+    agi: sMap.agility || 0,
+    endurance: sMap.endurance || 0,
+    end: sMap.endurance || 0,
+    precision: sMap.precision || 0,
+    pre: sMap.precision || 0,
+    willpower: sMap.willpower || 0,
+    wil: sMap.willpower || 0,
+    charisma: sMap.charisma || 0,
+    cha: sMap.charisma || 0,
+    powr: getModifierForStat(sMap.power || 0, char.rank),
+    vitr: getModifierForStat(sMap.vitality || 0, char.rank),
+    spir: getModifierForStat(sMap.spirit || 0, char.rank),
+    agir: getModifierForStat(sMap.agility || 0, char.rank),
+    endr: getModifierForStat(sMap.endurance || 0, char.rank),
+    prer: getModifierForStat(sMap.precision || 0, char.rank),
+    wilr: getModifierForStat(sMap.willpower || 0, char.rank),
+    char: getModifierForStat(sMap.charisma || 0, char.rank),
+    dtbonus: (char.dtBonus || 0) + armorDtBonus,
+  });
+
   // Add active ability & sub-ability stat bonuses
   const activeAbilities = abilities.filter(a => a.active === true);
   for (const ability of activeAbilities) {
-    if (ability.bonusPower) stats.power += ability.bonusPower;
-    if (ability.bonusVitality) stats.vitality += ability.bonusVitality;
-    if (ability.bonusSpirit) stats.spirit += ability.bonusSpirit;
-    if (ability.bonusAgility) stats.agility += ability.bonusAgility;
-    if (ability.bonusEndurance) stats.endurance += ability.bonusEndurance;
-    if (ability.bonusPrecision) stats.precision += ability.bonusPrecision;
-    if (ability.bonusWillpower) stats.willpower += ability.bonusWillpower;
-    if (ability.bonusCharisma) stats.charisma += ability.bonusCharisma;
+    const curVars = buildVars(stats);
+    if (ability.bonusPower) stats.power += parseFormulaOrNum(ability.bonusPower, curVars);
+    if (ability.bonusVitality) stats.vitality += parseFormulaOrNum(ability.bonusVitality, curVars);
+    if (ability.bonusSpirit) stats.spirit += parseFormulaOrNum(ability.bonusSpirit, curVars);
+    if (ability.bonusAgility) stats.agility += parseFormulaOrNum(ability.bonusAgility, curVars);
+    if (ability.bonusEndurance) stats.endurance += parseFormulaOrNum(ability.bonusEndurance, curVars);
+    if (ability.bonusPrecision) stats.precision += parseFormulaOrNum(ability.bonusPrecision, curVars);
+    if (ability.bonusWillpower) stats.willpower += parseFormulaOrNum(ability.bonusWillpower, curVars);
+    if (ability.bonusCharisma) stats.charisma += parseFormulaOrNum(ability.bonusCharisma, curVars);
 
     if (ability.subAbilities && ability.subAbilities.length > 0) {
       for (const sub of ability.subAbilities) {
-        if (sub.bonusPower) stats.power += sub.bonusPower;
-        if (sub.bonusVitality) stats.vitality += sub.bonusVitality;
-        if (sub.bonusSpirit) stats.spirit += sub.bonusSpirit;
-        if (sub.bonusAgility) stats.agility += sub.bonusAgility;
-        if (sub.bonusEndurance) stats.endurance += sub.bonusEndurance;
-        if (sub.bonusPrecision) stats.precision += sub.bonusPrecision;
-        if (sub.bonusWillpower) stats.willpower += sub.bonusWillpower;
-        if (sub.bonusCharisma) stats.charisma += sub.bonusCharisma;
+        const subVars = buildVars(stats);
+        if (sub.bonusPower) stats.power += parseFormulaOrNum(sub.bonusPower, subVars);
+        if (sub.bonusVitality) stats.vitality += parseFormulaOrNum(sub.bonusVitality, subVars);
+        if (sub.bonusSpirit) stats.spirit += parseFormulaOrNum(sub.bonusSpirit, subVars);
+        if (sub.bonusAgility) stats.agility += parseFormulaOrNum(sub.bonusAgility, subVars);
+        if (sub.bonusEndurance) stats.endurance += parseFormulaOrNum(sub.bonusEndurance, subVars);
+        if (sub.bonusPrecision) stats.precision += parseFormulaOrNum(sub.bonusPrecision, subVars);
+        if (sub.bonusWillpower) stats.willpower += parseFormulaOrNum(sub.bonusWillpower, subVars);
+        if (sub.bonusCharisma) stats.charisma += parseFormulaOrNum(sub.bonusCharisma, subVars);
       }
     }
   }
@@ -540,35 +590,14 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     diceLabels[stat] = getDiceLabel(val);
   }
 
-  // Calculate equipped armor DT bonus
-  const armorDtBonus = equippedList.reduce((sum, item) => sum + (item.dtBonus || 0), 0);
-
   // Compute derived maximums using variables
-  const variables: Record<string, number> = {
-    power: stats.power || 0,
-    pow: stats.power || 0,
-    vitality: stats.vitality || 0,
-    vit: stats.vitality || 0,
-    spirit: stats.spirit || 0,
-    spi: stats.spirit || 0,
-    agility: stats.agility || 0,
-    agi: stats.agility || 0,
-    endurance: stats.endurance || 0,
-    end: stats.endurance || 0,
-    precision: stats.precision || 0,
-    pre: stats.precision || 0,
-    willpower: stats.willpower || 0,
-    wil: stats.willpower || 0,
-    charisma: stats.charisma || 0,
-    cha: stats.charisma || 0,
-    dtbonus: (char.dtBonus || 0) + armorDtBonus,
-  };
+  const variables = buildVars(stats);
 
-  // Sum active ability & item resource bonuses
-  const abilityHpBonus = activeAbilities.reduce((sum, ab) => sum + (ab.hpBuff || 0), 0);
-  const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + (ab.manaBuff || 0), 0);
-  const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + (ab.dtBuff || 0), 0);
-  const abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + (ab.bonusInitiative || 0), 0);
+  // Sum active ability & item resource bonuses (evaluating formulas like 2+wil)
+  const abilityHpBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff || ab.hpAdd, variables), 0);
+  const abilityManaBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff || ab.manaAdd, variables), 0);
+  const abilityDtBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff || ab.dtAdd, variables), 0);
+  const abilityInitiativeBonus = activeAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.bonusInitiative, variables), 0);
   const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + (eq.bonusInitiative || 0), 0);
 
   const maxHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
