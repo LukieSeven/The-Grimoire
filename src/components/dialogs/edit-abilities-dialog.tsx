@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Edit2, Trash2, Zap, Plus } from "lucide-react";
+import { Edit2, Trash2, Zap, Plus, ChevronRight } from "lucide-react";
 import { Ability, SubAbility, EvolutionModifier, AbilityEffect, AbilityTrigger, EVOLUTION_THRESHOLDS_TABLE, calculateAbilityEvolutions } from "@/lib/storage";
 
 interface Props {
@@ -81,6 +81,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
   const [dtBuff, setDtBuff] = useState<string | number>("");
   const [bonusInitiative, setBonusInitiative] = useState<string | number>("");
 
+  const [expandedEffects, setExpandedEffects] = useState<Record<string | number, boolean>>({});
+  const [expandedTriggers, setExpandedTriggers] = useState<Record<string | number, boolean>>({});
+
   const resetForm = () => {
     setName("");
     setNickname("");
@@ -97,6 +100,8 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setAbilityEffects([]);
     setTriggers([]);
     setExpandedMods({});
+    setExpandedEffects({});
+    setExpandedTriggers({});
     setLinkedStats([]);
     setAssignedToQuickRolls(false);
     setAssignedToMechanicsTracker(false);
@@ -143,6 +148,18 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
     setSubAbilities(ability.subAbilities ? [...ability.subAbilities] : []);
     setAbilityEffects(ability.abilityEffects ? [...ability.abilityEffects] : []);
     setTriggers(ability.triggers ? [...ability.triggers] : []);
+
+    const initEffs: Record<string | number, boolean> = {};
+    (ability.abilityEffects || []).forEach((e: any, i: number) => {
+      initEffs[e.id || i] = false;
+    });
+    setExpandedEffects(initEffs);
+
+    const initTrigs: Record<string | number, boolean> = {};
+    (ability.triggers || []).forEach((t: any, i: number) => {
+      initTrigs[t.id || i] = false;
+    });
+    setExpandedTriggers(initTrigs);
     setLinkedStats(ability.linkedStats || (ability.linkedStat ? [ability.linkedStat] : []));
     setAssignedToQuickRolls(!!ability.assignedToQuickRolls);
     setAssignedToMechanicsTracker(!!ability.assignedToMechanicsTracker);
@@ -567,114 +584,146 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
             {/* Ability Effects Section */}
             <div className="space-y-3 border-t border-border/30 pt-3">
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Effects</label>
-              {abilityEffects.map((eff, effIdx) => (
-                <div key={eff.id || effIdx} className="bg-amber-500/5 border border-amber-500/20 p-3 space-y-3 rounded-none">
-                  <div className="flex items-center justify-between">
-                    <span className="font-serif text-xs font-bold text-amber-400 uppercase tracking-wider">
-                      Ability Effect #{effIdx + 1}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAbilityEffects(prev => prev.filter((_, i) => i !== effIdx))}
-                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+              {abilityEffects.map((eff, effIdx) => {
+                const effKey = eff.id || effIdx;
+                const isEffOpen = expandedEffects[effKey] !== false;
+                const headerTitle = eff.name?.trim() ? eff.name.trim() : `Ability Effect #${effIdx + 1}`;
+
+                return (
+                  <div key={effKey} className="bg-amber-500/5 border border-amber-500/20 rounded-none overflow-hidden text-xs">
+                    {/* Collapsible Header */}
+                    <div
+                      onClick={() => setExpandedEffects(prev => ({ ...prev, [effKey]: !isEffOpen }))}
+                      className="flex items-center justify-between p-2.5 bg-amber-500/10 hover:bg-amber-500/20 cursor-pointer select-none border-b border-amber-500/20 flex-wrap gap-2"
                     >
-                      <Trash2 className="w-3 h-3 mr-1" /> Remove Effect
-                    </Button>
-                  </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <ChevronRight className={`w-4 h-4 text-amber-400 transition-transform duration-200 ${isEffOpen ? "rotate-90" : ""}`} />
+                        <span className="font-serif text-xs font-bold text-amber-300 uppercase tracking-wider">
+                          {headerTitle}
+                        </span>
+                        {eff.category && (
+                          <Badge className="bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[8px] font-bold uppercase rounded-none px-1.5 py-0.5">
+                            {eff.category}
+                          </Badge>
+                        )}
+                        {eff.duration && (
+                          <Badge variant="outline" className="text-[9px] font-mono border-amber-500/30 text-amber-200 rounded-none bg-background/50">
+                            {eff.duration}
+                          </Badge>
+                        )}
+                      </div>
 
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Effect Name</label>
-                      <Input
-                        value={eff.name || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setAbilityEffects(prev => {
-                            const copy = [...prev];
-                            copy[effIdx] = { ...copy[effIdx], name: val };
-                            return copy;
-                          });
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setAbilityEffects(prev => prev.filter((_, i) => i !== effIdx));
                         }}
-                        placeholder="Effect name..."
-                        className="bg-background rounded-none font-bold text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Category</label>
-                      <select
-                        value={eff.category || "debuff"}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setAbilityEffects(prev => {
-                            const copy = [...prev];
-                            copy[effIdx] = { ...copy[effIdx], category: val };
-                            return copy;
-                          });
-                        }}
-                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                        className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
                       >
-                        <option value="debuff">Debuff</option>
-                        <option value="buff">Buff</option>
-                        <option value="dot">DoT</option>
-                        <option value="mark">Mark</option>
-                        <option value="status">Status</option>
-                      </select>
+                        <Trash2 className="w-3 h-3 mr-1" /> Remove Effect
+                      </Button>
                     </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Duration</label>
-                      <Input
-                        value={eff.duration || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setAbilityEffects(prev => {
-                            const copy = [...prev];
-                            copy[effIdx] = { ...copy[effIdx], duration: val };
-                            return copy;
-                          });
-                        }}
-                        placeholder="e.g. 2 rounds"
-                        className="bg-background rounded-none text-xs font-mono"
-                      />
-                    </div>
-                  </div>
 
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Effect Description / Rules</label>
-                    <Textarea
-                      value={eff.description || ""}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setAbilityEffects(prev => {
-                          const copy = [...prev];
-                          copy[effIdx] = { ...copy[effIdx], description: val };
-                          return copy;
-                        });
-                      }}
-                      placeholder="Describe the effect rules and passives..."
-                      className="bg-background min-h-[100px] rounded-none font-serif text-sm"
-                    />
-                  </div>
+                    {/* Collapsible Drawer Body */}
+                    {isEffOpen && (
+                      <div className="p-3 space-y-3 animate-in fade-in duration-200">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Effect Name</label>
+                            <Input
+                              value={eff.name || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setAbilityEffects(prev => {
+                                  const copy = [...prev];
+                                  copy[effIdx] = { ...copy[effIdx], name: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="e.g. Cinderbrand"
+                              className="bg-background rounded-none font-bold text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Category</label>
+                            <select
+                              value={eff.category || "debuff"}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setAbilityEffects(prev => {
+                                  const copy = [...prev];
+                                  copy[effIdx] = { ...copy[effIdx], category: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                            >
+                              <option value="debuff">Debuff</option>
+                              <option value="buff">Buff</option>
+                              <option value="dot">DoT</option>
+                              <option value="mark">Mark</option>
+                              <option value="status">Status</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Duration</label>
+                            <Input
+                              value={eff.duration || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setAbilityEffects(prev => {
+                                  const copy = [...prev];
+                                  copy[effIdx] = { ...copy[effIdx], duration: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="e.g. 2 rounds"
+                              className="bg-background rounded-none text-xs font-mono"
+                            />
+                          </div>
+                        </div>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <Checkbox
-                      id={`eff-mechanics-${effIdx}`}
-                      checked={!!eff.assignedToMechanicsTracker}
-                      onCheckedChange={chk => {
-                        setAbilityEffects(prev => {
-                          const copy = [...prev];
-                          copy[effIdx] = { ...copy[effIdx], assignedToMechanicsTracker: !!chk };
-                          return copy;
-                        });
-                      }}
-                    />
-                    <label htmlFor={`eff-mechanics-${effIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
-                      Mechanics Tracker
-                    </label>
+                        <div>
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Effect Description / Rules</label>
+                          <Textarea
+                            value={eff.description || ""}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setAbilityEffects(prev => {
+                                const copy = [...prev];
+                                copy[effIdx] = { ...copy[effIdx], description: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="Describe the effect rules and passives..."
+                            className="bg-background min-h-[100px] rounded-none font-serif text-sm"
+                          />
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-1">
+                          <Checkbox
+                            id={`eff-mechanics-${effIdx}`}
+                            checked={!!eff.assignedToMechanicsTracker}
+                            onCheckedChange={chk => {
+                              setAbilityEffects(prev => {
+                                const copy = [...prev];
+                                copy[effIdx] = { ...copy[effIdx], assignedToMechanicsTracker: !!chk };
+                                return copy;
+                              });
+                            }}
+                          />
+                          <label htmlFor={`eff-mechanics-${effIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                            Mechanics Tracker
+                          </label>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               <Button
                 type="button"
@@ -690,6 +739,7 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                     assignedToMechanicsTracker: false,
                   };
                   setAbilityEffects(prev => [...prev, newEff]);
+                  setExpandedEffects(prev => ({ ...prev, [newEff.id]: true }));
                 }}
                 className="w-full h-8 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold my-2"
               >
@@ -1288,349 +1338,384 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
             {/* Ability Triggers Section */}
             <div className="space-y-3 pt-2 border-t border-border/30">
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ability Triggers</label>
-              {triggers.map((trig, trigIdx) => (
-                <div key={trig.id || trigIdx} className="bg-cyan-500/5 border border-cyan-500/20 p-3 space-y-3 rounded-none">
-                  <div className="flex items-center justify-between">
-                    <span className="font-serif text-xs font-bold text-cyan-400 uppercase tracking-wider">
-                      Ability Trigger #{trigIdx + 1}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTriggers(prev => prev.filter((_, i) => i !== trigIdx))}
-                      className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+              {triggers.map((trig, trigIdx) => {
+                const trigKey = trig.id || trigIdx;
+                const isTrigOpen = expandedTriggers[trigKey] !== false;
+
+                const resName = trig.resource ? String(trig.resource).toUpperCase() : "HP";
+                const opSymbol = trig.operator === "below_percent" ? `< ${trig.threshold ?? 50}%`
+                  : trig.operator === "below_value" ? `<= ${trig.threshold ?? 0}`
+                  : trig.operator === "depleted" ? `= 0`
+                  : trig.operator === "above_percent" ? `>= ${trig.threshold ?? 50}%`
+                  : `= Max`;
+                const condText = `${resName} ${opSymbol}`;
+                const headerTitle = trig.name?.trim() ? `${trig.name.trim()} (${condText})` : condText;
+
+                return (
+                  <div key={trigKey} className="bg-cyan-500/5 border border-cyan-500/20 rounded-none overflow-hidden text-xs">
+                    {/* Collapsible Header */}
+                    <div
+                      onClick={() => setExpandedTriggers(prev => ({ ...prev, [trigKey]: !isTrigOpen }))}
+                      className="flex items-center justify-between p-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 cursor-pointer select-none border-b border-cyan-500/20 flex-wrap gap-2"
                     >
-                      <Trash2 className="w-3 h-3 mr-1" /> Remove Trigger
-                    </Button>
-                  </div>
-
-                  {/* Trigger Name & Nickname */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Trigger Name</label>
-                      <Input
-                        value={trig.name || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], name: val };
-                            return copy;
-                          });
-                        }}
-                        placeholder="Trigger name..."
-                        className="bg-background rounded-none font-bold text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Nickname</label>
-                      <Input
-                        value={trig.nickname || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], nickname: val };
-                            return copy;
-                          });
-                        }}
-                        placeholder="Short nickname..."
-                        className="bg-background rounded-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* 1-Line Threshold Builder */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Resource</label>
-                      <select
-                        value={trig.resource || "hp"}
-                        onChange={e => {
-                          const val = e.target.value as any;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], resource: val };
-                            return copy;
-                          });
-                        }}
-                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
-                      >
-                        <option value="hp">Health (HP)</option>
-                        <option value="mana">Mana</option>
-                        <option value="dt">DT</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Operator</label>
-                      <select
-                        value={trig.operator || "below_percent"}
-                        onChange={e => {
-                          const val = e.target.value as any;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], operator: val };
-                            return copy;
-                          });
-                        }}
-                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground font-mono"
-                      >
-                        <option value="below_percent">&lt; %</option>
-                        <option value="below_value">&lt;= Val</option>
-                        <option value="depleted">= 0</option>
-                        <option value="above_percent">&gt;= %</option>
-                        <option value="full">= Max</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Threshold Value</label>
-                      <Input
-                        type="number"
-                        value={trig.threshold ?? 50}
-                        onChange={e => {
-                          const val = Number(e.target.value);
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], threshold: val };
-                            return copy;
-                          });
-                        }}
-                        className="bg-background rounded-none font-mono text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Point to Target & Trigger Action Selectors */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Point to Existing Target (Optional)</label>
-                      <select
-                        value={trig.linkedTargetId || ""}
-                        onChange={e => {
-                          const val = e.target.value;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            if (!val) {
-                              copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: "none", linkedTargetId: "" };
-                            } else {
-                              const subMatch = subAbilities.find(s => s.id === val);
-                              const effMatch = abilityEffects.find(ef => ef.id === val);
-                              const modMatch = evolutionModifiers.find(m => m.id === val);
-                              let tType: any = "none";
-                              if (subMatch) tType = "sub-ability";
-                              else if (effMatch) tType = "effect";
-                              else if (modMatch) tType = "modifier";
-
-                              copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: tType, linkedTargetId: val };
-                            }
-                            return copy;
-                          });
-                        }}
-                        className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
-                      >
-                        <option value="">None / Custom</option>
-                        {subAbilities.map((s, idx) => (
-                          <option key={s.id || idx} value={s.id}>Sub-Ability: {s.name || `Sub #${idx + 2}`}</option>
-                        ))}
-                        {abilityEffects.map((ef, idx) => (
-                          <option key={ef.id || idx} value={ef.id}>Ability Effect: {ef.name || `Effect #${idx + 1}`}</option>
-                        ))}
-                        {evolutionModifiers.map((m, idx) => (
-                          <option key={m.id || idx} value={m.id}>Ability Mod: {m.name || `Mod #${idx + 1}`}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold uppercase text-cyan-400 block mb-1">Trigger Effect Action</label>
-                      <select
-                        value={trig.triggerAction || "trigger_attached"}
-                        onChange={e => {
-                          const val = e.target.value as any;
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], triggerAction: val };
-                            return copy;
-                          });
-                        }}
-                        className="w-full h-9 rounded-none border border-cyan-500/40 bg-background px-2 text-xs font-serif text-cyan-300 font-bold"
-                      >
-                        <option value="trigger_attached">Trigger attached Ability</option>
-                        <option value="update_attached">Update attached Ability</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Conditional Complete Drop-In Replacement Ability Fields */}
-                  {trig.triggerAction === "update_attached" && (
-                    <div className="bg-purple-950/30 border border-purple-500/40 p-3 space-y-3 rounded-none animate-in fade-in duration-200">
-                      <span className="text-[11px] font-serif font-bold text-purple-300 uppercase tracking-wider block border-b border-purple-500/30 pb-1">
-                        ⚡ Complete Drop-In Replacement Ability (Active When Triggered)
-                      </span>
-
-                      <div className="grid grid-cols-3 gap-2">
-                        <div className="col-span-2">
-                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Ability Name</label>
-                          <Input
-                            value={trig.updatedName || ""}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setTriggers(prev => {
-                                const copy = [...prev];
-                                copy[trigIdx] = { ...copy[trigIdx], updatedName: val };
-                                return copy;
-                              });
-                            }}
-                            placeholder="e.g. Flame Stator: Surge Form"
-                            className="bg-background rounded-none font-bold text-xs h-8"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement MP Cost</label>
-                          <Input
-                            type="number"
-                            value={trig.updatedCost ?? ""}
-                            onChange={e => {
-                              const val = e.target.value === "" ? undefined : Number(e.target.value);
-                              setTriggers(prev => {
-                                const copy = [...prev];
-                                copy[trigIdx] = { ...copy[trigIdx], updatedCost: val };
-                                return copy;
-                              });
-                            }}
-                            placeholder="e.g. 0"
-                            className="bg-background rounded-none font-mono text-xs h-8"
-                          />
-                        </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <ChevronRight className={`w-4 h-4 text-cyan-400 transition-transform duration-200 ${isTrigOpen ? "rotate-90" : ""}`} />
+                        <span className="font-serif text-xs font-bold text-cyan-300 uppercase tracking-wider">
+                          ⚡ {headerTitle}
+                        </span>
+                        {trig.triggerAction === "update_attached" && (
+                          <Badge className="bg-purple-500/20 border border-purple-400 text-purple-300 text-[8px] font-bold uppercase rounded-none px-1.5 py-0.5">
+                            Update Ability
+                          </Badge>
+                        )}
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTriggers(prev => prev.filter((_, i) => i !== trigIdx));
+                        }}
+                        className="h-6 text-[10px] text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3 mr-1" /> Remove Trigger
+                      </Button>
+                    </div>
+
+                    {/* Collapsible Drawer Body */}
+                    {isTrigOpen && (
+                      <div className="p-3 space-y-3 animate-in fade-in duration-200">
+                        {/* Trigger Name & Nickname */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="col-span-2">
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Trigger Name</label>
+                            <Input
+                              value={trig.name || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], name: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Trigger name..."
+                              className="bg-background rounded-none font-bold text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Nickname</label>
+                            <Input
+                              value={trig.nickname || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], nickname: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Short nickname..."
+                              className="bg-background rounded-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* 1-Line Threshold Builder */}
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Resource</label>
+                            <select
+                              value={trig.resource || "hp"}
+                              onChange={e => {
+                                const val = e.target.value as any;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], resource: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                            >
+                              <option value="hp">Health (HP)</option>
+                              <option value="mana">Mana</option>
+                              <option value="dt">DT</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Operator</label>
+                            <select
+                              value={trig.operator || "below_percent"}
+                              onChange={e => {
+                                const val = e.target.value as any;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], operator: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground font-mono"
+                            >
+                              <option value="below_percent">&lt; %</option>
+                              <option value="below_value">&lt;= Val</option>
+                              <option value="depleted">= 0</option>
+                              <option value="above_percent">&gt;= %</option>
+                              <option value="full">= Max</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Threshold Value</label>
+                            <Input
+                              type="number"
+                              value={trig.threshold ?? 50}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], threshold: val };
+                                  return copy;
+                                });
+                              }}
+                              className="bg-background rounded-none font-mono text-xs"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Point to Target & Trigger Action Selectors */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-muted-foreground block mb-1">Point to Existing Target (Optional)</label>
+                            <select
+                              value={trig.linkedTargetId || ""}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  if (!val) {
+                                    copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: "none", linkedTargetId: "" };
+                                  } else {
+                                    const subMatch = subAbilities.find(s => s.id === val);
+                                    const effMatch = abilityEffects.find(ef => ef.id === val);
+                                    const modMatch = evolutionModifiers.find(m => m.id === val);
+                                    let tType: any = "none";
+                                    if (subMatch) tType = "sub-ability";
+                                    else if (effMatch) tType = "effect";
+                                    else if (modMatch) tType = "modifier";
+
+                                    copy[trigIdx] = { ...copy[trigIdx], linkedTargetType: tType, linkedTargetId: val };
+                                  }
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-9 rounded-none border border-border/60 bg-background px-2 text-xs font-serif text-foreground"
+                            >
+                              <option value="">None / Custom</option>
+                              {subAbilities.map((s, idx) => (
+                                <option key={s.id || idx} value={s.id}>Sub-Ability: {s.name || `Sub #${idx + 2}`}</option>
+                              ))}
+                              {abilityEffects.map((ef, idx) => (
+                                <option key={ef.id || idx} value={ef.id}>Ability Effect: {ef.name || `Effect #${idx + 1}`}</option>
+                              ))}
+                              {evolutionModifiers.map((m, idx) => (
+                                <option key={m.id || idx} value={m.id}>Ability Mod: {m.name || `Mod #${idx + 1}`}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold uppercase text-cyan-400 block mb-1">Trigger Effect Action</label>
+                            <select
+                              value={trig.triggerAction || "trigger_attached"}
+                              onChange={e => {
+                                const val = e.target.value as any;
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], triggerAction: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full h-9 rounded-none border border-cyan-500/40 bg-background px-2 text-xs font-serif text-cyan-300 font-bold"
+                            >
+                              <option value="trigger_attached">Trigger attached Ability</option>
+                              <option value="update_attached">Update attached Ability</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Conditional Complete Drop-In Replacement Ability Fields */}
+                        {trig.triggerAction === "update_attached" && (
+                          <div className="bg-purple-950/30 border border-purple-500/40 p-3 space-y-3 rounded-none animate-in fade-in duration-200">
+                            <span className="text-[11px] font-serif font-bold text-purple-300 uppercase tracking-wider block border-b border-purple-500/30 pb-1">
+                              ⚡ Complete Drop-In Replacement Ability (Active When Triggered)
+                            </span>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-2">
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Ability Name</label>
+                                <Input
+                                  value={trig.updatedName || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedName: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. Flame Stator: Surge Form"
+                                  className="bg-background rounded-none font-bold text-xs h-8"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement MP Cost</label>
+                                <Input
+                                  type="number"
+                                  value={trig.updatedCost ?? ""}
+                                  onChange={e => {
+                                    const val = e.target.value === "" ? undefined : Number(e.target.value);
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedCost: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. 0"
+                                  className="bg-background rounded-none font-mono text-xs h-8"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Formula</label>
+                                <Input
+                                  value={trig.updatedRollFormula || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedRollFormula: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. 3d12 + SPI"
+                                  className="bg-background rounded-none font-mono text-xs h-8"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Range</label>
+                                <Input
+                                  value={trig.updatedRange || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedRange: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. 30 ft"
+                                  className="bg-background rounded-none text-xs h-8"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Speed</label>
+                                <Input
+                                  value={trig.updatedSpeed || ""}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setTriggers(prev => {
+                                      const copy = [...prev];
+                                      copy[trigIdx] = { ...copy[trigIdx], updatedSpeed: val };
+                                      return copy;
+                                    });
+                                  }}
+                                  placeholder="e.g. Instant Action"
+                                  className="bg-background rounded-none text-xs h-8"
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Description / Base Effect</label>
+                              <Textarea
+                                value={trig.updatedDescription || ""}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setTriggers(prev => {
+                                    const copy = [...prev];
+                                    copy[trigIdx] = { ...copy[trigIdx], updatedDescription: val };
+                                    return copy;
+                                  });
+                                }}
+                                placeholder="Describe the complete replacement effects of this ability when triggered..."
+                                className="bg-background min-h-[90px] rounded-none font-serif text-xs"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Description textarea */}
                         <div>
-                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Formula</label>
-                          <Input
-                            value={trig.updatedRollFormula || ""}
+                          <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Trigger Description / Effect</label>
+                          <Textarea
+                            value={trig.description || ""}
                             onChange={e => {
                               const val = e.target.value;
                               setTriggers(prev => {
                                 const copy = [...prev];
-                                copy[trigIdx] = { ...copy[trigIdx], updatedRollFormula: val };
+                                copy[trigIdx] = { ...copy[trigIdx], description: val };
                                 return copy;
                               });
                             }}
-                            placeholder="e.g. 3d12 + SPI"
-                            className="bg-background rounded-none font-mono text-xs h-8"
+                            placeholder="Describe what happens when this trigger fires..."
+                            className="bg-background min-h-[100px] rounded-none font-serif text-sm"
                           />
                         </div>
-                        <div>
-                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Range</label>
-                          <Input
-                            value={trig.updatedRange || ""}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setTriggers(prev => {
-                                const copy = [...prev];
-                                copy[trigIdx] = { ...copy[trigIdx], updatedRange: val };
-                                return copy;
-                              });
-                            }}
-                            placeholder="e.g. 30 ft"
-                            className="bg-background rounded-none text-xs h-8"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Speed</label>
-                          <Input
-                            value={trig.updatedSpeed || ""}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setTriggers(prev => {
-                                const copy = [...prev];
-                                copy[trigIdx] = { ...copy[trigIdx], updatedSpeed: val };
-                                return copy;
-                              });
-                            }}
-                            placeholder="e.g. Instant Action"
-                            className="bg-background rounded-none text-xs h-8"
-                          />
+
+                        {/* Options Toggles */}
+                        <div className="flex items-center gap-4 pt-1 flex-wrap">
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`trig-quickroll-${trigIdx}`}
+                              checked={!!trig.assignedToQuickRolls}
+                              onCheckedChange={chk => {
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], assignedToQuickRolls: !!chk };
+                                  return copy;
+                                });
+                              }}
+                            />
+                            <label htmlFor={`trig-quickroll-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                              Assign Trigger to Quick Rolls / Hotbar
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              id={`trig-mechanics-${trigIdx}`}
+                              checked={!!trig.assignedToMechanicsTracker}
+                              onCheckedChange={chk => {
+                                setTriggers(prev => {
+                                  const copy = [...prev];
+                                  copy[trigIdx] = { ...copy[trigIdx], assignedToMechanicsTracker: !!chk };
+                                  return copy;
+                                });
+                              }}
+                            />
+                            <label htmlFor={`trig-mechanics-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
+                              Mechanics Tracker
+                            </label>
+                          </div>
                         </div>
                       </div>
-
-                      <div>
-                        <label className="text-[9px] font-bold uppercase text-purple-300 block mb-1">Replacement Description / Base Effect</label>
-                        <Textarea
-                          value={trig.updatedDescription || ""}
-                          onChange={e => {
-                            const val = e.target.value;
-                            setTriggers(prev => {
-                              const copy = [...prev];
-                              copy[trigIdx] = { ...copy[trigIdx], updatedDescription: val };
-                              return copy;
-                            });
-                          }}
-                          placeholder="Describe the complete replacement effects of this ability when triggered..."
-                          className="bg-background min-h-[90px] rounded-none font-serif text-xs"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Description textarea */}
-                  <div>
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Trigger Description / Effect</label>
-                    <Textarea
-                      value={trig.description || ""}
-                      onChange={e => {
-                        const val = e.target.value;
-                        setTriggers(prev => {
-                          const copy = [...prev];
-                          copy[trigIdx] = { ...copy[trigIdx], description: val };
-                          return copy;
-                        });
-                      }}
-                      placeholder="Describe what happens when this trigger fires..."
-                      className="bg-background min-h-[100px] rounded-none font-serif text-sm"
-                    />
+                    )}
                   </div>
-
-                  {/* Options Toggles */}
-                  <div className="flex items-center gap-4 pt-1 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`trig-quickroll-${trigIdx}`}
-                        checked={!!trig.assignedToQuickRolls}
-                        onCheckedChange={chk => {
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], assignedToQuickRolls: !!chk };
-                            return copy;
-                          });
-                        }}
-                      />
-                      <label htmlFor={`trig-quickroll-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
-                        Assign Trigger to Quick Rolls / Hotbar
-                      </label>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id={`trig-mechanics-${trigIdx}`}
-                        checked={!!trig.assignedToMechanicsTracker}
-                        onCheckedChange={chk => {
-                          setTriggers(prev => {
-                            const copy = [...prev];
-                            copy[trigIdx] = { ...copy[trigIdx], assignedToMechanicsTracker: !!chk };
-                            return copy;
-                          });
-                        }}
-                      />
-                      <label htmlFor={`trig-mechanics-${trigIdx}`} className="text-xs font-serif text-muted-foreground cursor-pointer select-none">
-                        Mechanics Tracker
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               <Button
                 type="button"
@@ -1647,6 +1732,7 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                     assignedToMechanicsTracker: false,
                   };
                   setTriggers(prev => [...prev, newTrig]);
+                  setExpandedTriggers(prev => ({ ...prev, [newTrig.id]: true }));
                 }}
                 className="w-full h-8 bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
               >
