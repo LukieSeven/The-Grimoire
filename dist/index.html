@@ -23,15 +23,16 @@
           var decoded = l.search.slice(1).split('&').map(function(s) {
             return s.replace(/~and~/g, '&')
           }).join('?');
+          var basePath = l.pathname.endsWith('/') ? l.pathname.slice(0, -1) : l.pathname;
           window.history.replaceState(null, null,
-              l.pathname.slice(0, -1) + decoded + l.hash
+              basePath + decoded + l.hash
           );
         }
       }(window.location));
     </script>
     <!-- End Single Page Apps for GitHub Pages -->
-    <script type="module" crossorigin src="/The-Grimoire/assets/index-CydfRA4r.js"></script>
-    <link rel="stylesheet" crossorigin href="/The-Grimoire/assets/index-BDNYC5G8.css">
+    <script type="module" crossorigin src="/The-Grimoire/assets/index-CCEf9Dim.js"></script>
+    <link rel="stylesheet" crossorigin href="/The-Grimoire/assets/index-ze-T2Kjp.css">
   </head>
   <body>
     <div id="root"></div>
