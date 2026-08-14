@@ -441,6 +441,95 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
               </div>
             </div>
 
+            {/* Stat & Resource Bonuses (Granted While Active) */}
+            <div className="border-t border-border/20 pt-3 space-y-2">
+              <h5 className="font-serif font-bold text-primary text-xs uppercase tracking-wider">Stat Modifiers (Granted while active)</h5>
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
+                  <Input type="number" value={bonusPower} onChange={e => setBonusPower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
+                  <Input type="number" value={bonusVitality} onChange={e => setBonusVitality(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
+                  <Input type="number" value={bonusSpirit} onChange={e => setBonusSpirit(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
+                  <Input type="number" value={bonusAgility} onChange={e => setBonusAgility(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
+                  <Input type="number" value={bonusEndurance} onChange={e => setBonusEndurance(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
+                  <Input type="number" value={bonusPrecision} onChange={e => setBonusPrecision(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
+                  <Input type="number" value={bonusWillpower} onChange={e => setBonusWillpower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
+                  <Input type="number" value={bonusCharisma} onChange={e => setBonusCharisma(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
+                </div>
+              </div>
+
+              {/* Vitals Modifiers Grid */}
+              <div className="grid grid-cols-4 gap-3 pt-2">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input type="number" value={hpAdd} onChange={e => setHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input type="number" value={hpBuff} onChange={e => setHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input type="number" value={manaAdd} onChange={e => setManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input type="number" value={manaBuff} onChange={e => setManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+                  <div className="grid grid-cols-2 gap-1">
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                      <Input type="number" value={dtAdd} onChange={e => setDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                    <div>
+                      <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                      <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
+                  <div>
+                    <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
+                    <Input type="number" value={bonusInitiative} onChange={e => setBonusInitiative(Number(e.target.value))} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Description textarea */}
             <div>
               <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
@@ -684,6 +773,282 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                     </div>
                   </div>
 
+                  {/* Stat & Resource Bonuses (Granted While Active) */}
+                  <div className="border-t border-border/20 pt-3 space-y-2">
+                    <h5 className="font-serif font-bold text-primary text-xs uppercase tracking-wider">Stat Modifiers (Granted while active)</h5>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusPower ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusPower: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusVitality ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusVitality: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusSpirit ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusSpirit: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusAgility ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusAgility: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusEndurance ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusEndurance: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusPrecision ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusPrecision: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusWillpower ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusWillpower: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
+                        <Input
+                          type="number"
+                          value={sub.bonusCharisma ?? 0}
+                          onChange={e => {
+                            const val = Number(e.target.value);
+                            setSubAbilities(prev => {
+                              const copy = [...prev];
+                              copy[subIdx] = { ...copy[subIdx], bonusCharisma: val };
+                              return copy;
+                            });
+                          }}
+                          className="bg-background font-mono h-7 text-xs rounded-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Vitals Modifiers Grid */}
+                    <div className="grid grid-cols-4 gap-3 pt-2">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                            <Input
+                              type="number"
+                              value={sub.hpAdd ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], hpAdd: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Add"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                            <Input
+                              type="number"
+                              value={sub.hpBuff ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], hpBuff: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Buff"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                            <Input
+                              type="number"
+                              value={sub.manaAdd ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], manaAdd: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Add"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                            <Input
+                              type="number"
+                              value={sub.manaBuff ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], manaBuff: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Buff"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
+                        <div className="grid grid-cols-2 gap-1">
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
+                            <Input
+                              type="number"
+                              value={sub.dtAdd ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], dtAdd: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Add"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
+                            <Input
+                              type="number"
+                              value={sub.dtBuff ?? 0}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                setSubAbilities(prev => {
+                                  const copy = [...prev];
+                                  copy[subIdx] = { ...copy[subIdx], dtBuff: val };
+                                  return copy;
+                                });
+                              }}
+                              placeholder="Buff"
+                              className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
+                        <div>
+                          <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
+                          <Input
+                            type="number"
+                            value={sub.bonusInitiative ?? 0}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              setSubAbilities(prev => {
+                                const copy = [...prev];
+                                copy[subIdx] = { ...copy[subIdx], bonusInitiative: val };
+                                return copy;
+                              });
+                            }}
+                            placeholder="Bonus"
+                            className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Description textarea */}
                   <div>
                     <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description / Base Effect</label>
@@ -886,96 +1251,6 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                 </div>
               );
             })()}
-
-            {/* Stat & Resource Bonuses */}
-            <div className="border-t border-border/20 pt-3 space-y-2">
-              <h5 className="font-serif font-bold text-primary text-sm">Stat Modifiers (Granted while active)</h5>
-              <div className="grid grid-cols-4 gap-2">
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Power</label>
-                  <Input type="number" value={bonusPower} onChange={e => setBonusPower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Vitality</label>
-                  <Input type="number" value={bonusVitality} onChange={e => setBonusVitality(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Spirit</label>
-                  <Input type="number" value={bonusSpirit} onChange={e => setBonusSpirit(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Agility</label>
-                  <Input type="number" value={bonusAgility} onChange={e => setBonusAgility(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Endurance</label>
-                  <Input type="number" value={bonusEndurance} onChange={e => setBonusEndurance(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Precision</label>
-                  <Input type="number" value={bonusPrecision} onChange={e => setBonusPrecision(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Willpower</label>
-                  <Input type="number" value={bonusWillpower} onChange={e => setBonusWillpower(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground uppercase block mb-0.5">Charisma</label>
-                  <Input type="number" value={bonusCharisma} onChange={e => setBonusCharisma(Number(e.target.value))} className="bg-background font-mono h-7 text-xs rounded-none" />
-                </div>
-              </div>
-            </div>
-
-            {/* Vitals Modifiers Grid */}
-            <div className="grid grid-cols-4 gap-3 border-t border-border/20 pt-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">HP</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={hpAdd} onChange={e => setHpAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={hpBuff} onChange={e => setHpBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Mana</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={manaAdd} onChange={e => setManaAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={manaBuff} onChange={e => setManaBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">DT</label>
-                <div className="grid grid-cols-2 gap-1">
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Add</label>
-                    <Input type="number" value={dtAdd} onChange={e => setDtAdd(Number(e.target.value))} placeholder="Add" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                  <div>
-                    <label className="text-[8px] text-muted-foreground block mb-0.5">Buff</label>
-                    <Input type="number" value={dtBuff} onChange={e => setDtBuff(Number(e.target.value))} placeholder="Buff" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Initiative</label>
-                <div>
-                  <label className="text-[8px] text-muted-foreground block mb-0.5">Bonus</label>
-                  <Input type="number" value={bonusInitiative} onChange={e => setBonusInitiative(Number(e.target.value))} placeholder="Bonus" className="bg-background font-mono h-7 text-[10px] rounded-none text-center p-0.5" />
-                </div>
-              </div>
-            </div>
-
             <div className="flex items-center gap-2 pt-1">
               <Checkbox 
                 id="quick_roll" 
