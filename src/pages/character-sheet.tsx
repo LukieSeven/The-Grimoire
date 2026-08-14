@@ -3062,7 +3062,9 @@ export default function CharacterSheet() {
             {activeFavorites.map((fav, index) => {
               if (fav) {
                 const details = getSlotDetails(fav);
-                const isSlotActive = (fav.type === "ability" || fav.type === "sub-ability") && !!abilities.find(a => a.id === Number(fav.targetId))?.active;
+                const targetAb = (fav.type === "ability" || fav.type === "sub-ability") ? abilities.find(a => a.id === Number(fav.targetId)) : null;
+                const isToggleable = targetAb ? hasStatModifiers(targetAb) : false;
+                const isSlotActive = targetAb ? !!targetAb.active : false;
 
                 return (
                   <div 
@@ -3073,7 +3075,7 @@ export default function CharacterSheet() {
                         ? "bg-primary/20 border-2 border-primary shadow-md shadow-primary/30 ring-1 ring-primary/50" 
                         : "bg-background/60 hover:bg-accent/40 border border-primary/45 hover:border-primary"
                     }`}
-                    title={`Favorite #${index + 1}: ${fav.label}${isSlotActive ? " (ACTIVE)" : ""}`}
+                    title={`Favorite #${index + 1}: ${fav.label}${isToggleable ? (isSlotActive ? " (ACTIVE)" : " (INACTIVE)") : ""}`}
                   >
                     {/* Actions Panel */}
                     <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -3093,16 +3095,22 @@ export default function CharacterSheet() {
                       </button>
                     </div>
 
-                    {/* Header slot ID + Type badge */}
+                    {/* Header slot ID + Type badge or Active/Inactive blurb */}
                     <div className="flex justify-between items-center w-full pr-8">
                       <span className="text-[8px] font-mono text-muted-foreground/75 font-semibold">#{index + 1}</span>
-                      <span className={`text-[7px] font-mono font-bold uppercase tracking-wider border px-1 py-0.25 rounded ${
-                        isSlotActive
-                          ? "bg-primary text-primary-foreground border-primary font-black"
-                          : "text-primary border-primary/20 bg-primary/5"
-                      }`}>
-                        {isSlotActive ? "ACTIVE" : (fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "sub-ability" ? "Sub-Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat")}
-                      </span>
+                      {isToggleable ? (
+                        <span className={`text-[7px] font-mono uppercase tracking-wider border px-1 py-0.25 rounded font-black ${
+                          isSlotActive
+                            ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                            : "bg-background/80 text-muted-foreground border-border/50"
+                        }`}>
+                          {isSlotActive ? "ACTIVE" : "INACTIVE"}
+                        </span>
+                      ) : (
+                        <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-primary border border-primary/20 px-1 py-0.25 rounded bg-primary/5">
+                          {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "sub-ability" ? "Sub-Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
+                        </span>
+                      )}
                     </div>
 
                     {/* Name Row */}
