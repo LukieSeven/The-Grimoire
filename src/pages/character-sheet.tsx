@@ -1407,51 +1407,13 @@ export default function CharacterSheet() {
       char: autoModifiers.charisma || 0,
     };
 
-    const valHpAdd = parseFormulaOrNum(ability.hpAdd, evalVars);
-    const valManaAdd = parseFormulaOrNum(ability.manaAdd, evalVars);
-    const valDtAdd = parseFormulaOrNum(ability.dtAdd, evalVars);
-
-    if (valHpAdd > 0) {
-      const curHp = hp ?? character.currentHp;
-      const nextHp = Math.min(maxHp, curHp + valHpAdd);
-      setHp(nextHp);
-      updates.currentHp = nextHp;
-      changes.push(`+${valHpAdd} HP`);
-      createRoll.mutate({ id, data: { diceType: "hp-log", modifier: nextHp - curHp, label: `${ability.name} Heal` } });
-    }
-    if (valManaAdd > 0) {
-      const nextM = Math.min(maxMana, nextMana + valManaAdd);
-      setMana(nextM);
-      updates.currentMana = nextM;
-      changes.push(`+${valManaAdd} MP`);
-      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: nextM - nextMana, label: `${ability.name} Restore` } });
-    }
-    if (valDtAdd > 0) {
-      const curDt = currentDt ?? character.currentDt;
-      const nextDt = Math.min(maxDt, curDt + valDtAdd);
-      setCurrentDt(nextDt);
-      updates.currentDt = nextDt;
-      changes.push(`+${valDtAdd} DT`);
-      createRoll.mutate({ id, data: { diceType: "dt-log", modifier: nextDt - curDt, label: `${ability.name} Shield` } });
-    }
-
-    // Toggle active state for stat-modifying abilities
+    // Toggle active state for stat-modifying or pool-modifying abilities
     const parentAb = abilities.find(a => a.id === ability.id);
     if (parentAb && hasStatModifiers(ability)) {
-      if (parentAb.active) {
-        // If already active, deactivating it DOES NOT roll again
-        toggleAbilityActive(parentAb);
-        return;
-      } else {
-        // If unactive, set to active and proceed with rolls
-        toggleAbilityActive(parentAb);
-      }
-    }
-
-    updateChar.mutate({ id, data: updates });
-
-    if (changes.length > 0) {
-      toast.success(`${ability.name} activated! Restored ${changes.join(", ")}.`);
+      toggleAbilityActive(parentAb);
+      if (parentAb.active) return; // Deactivating does not roll formula
+    } else if (Object.keys(updates).length > 0) {
+      updateChar.mutate({ id, data: updates });
     }
 
     if (effectiveRollFormula) {
@@ -2651,16 +2613,12 @@ export default function CharacterSheet() {
                       /
                       <span>{baseMaxDt}</span>
                       {(() => {
-                        const statBoost = maxDt - baseMaxDt;
-                        const totalBonus = statBoost + abilityDtBonus;
+                        const totalBonus = maxDt - baseMaxDt;
                         if (totalBonus <= 0) return null;
-                        const breakdownParts: string[] = [];
-                        if (statBoost > 0) breakdownParts.push(`Armor / Stat Boost: +${statBoost}`);
-                        if (abilityDtBonus > 0) breakdownParts.push(`Active Buff: +${abilityDtBonus}`);
                         return (
                           <span 
                             className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
-                            title={breakdownParts.join(" | ")}
+                            title={`Active Bonus: +${totalBonus}`}
                           >
                             [+{totalBonus}]
                           </span>
@@ -2668,7 +2626,7 @@ export default function CharacterSheet() {
                       })()}
                     </span>
                   </div>
-                  <ResourceBar current={currentDt ?? character.currentDt} max={baseMaxDt + (maxDt - baseMaxDt) + abilityDtBonus} color="#eab308" />
+                  <ResourceBar current={currentDt ?? character.currentDt} max={maxDt} color="#eab308" />
                   
                   {/* dt quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
@@ -2772,16 +2730,12 @@ export default function CharacterSheet() {
                       /
                       <span>{baseMaxHp}</span>
                       {(() => {
-                        const statBoost = maxHp - baseMaxHp;
-                        const totalBonus = statBoost + abilityHpBonus;
+                        const totalBonus = maxHp - baseMaxHp;
                         if (totalBonus <= 0) return null;
-                        const breakdownParts: string[] = [];
-                        if (statBoost > 0) breakdownParts.push(`Stat Boost: +${statBoost}`);
-                        if (abilityHpBonus > 0) breakdownParts.push(`Active Buff: +${abilityHpBonus}`);
                         return (
                           <span 
                             className="text-[10px] text-amber-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(245,158,11,0.4)] cursor-help" 
-                            title={breakdownParts.join(" | ")}
+                            title={`Active Bonus: +${totalBonus}`}
                           >
                             [+{totalBonus}]
                           </span>
@@ -2789,7 +2743,7 @@ export default function CharacterSheet() {
                       })()}
                     </span>
                   </div>
-                  <ResourceBar current={hp ?? character.currentHp} max={baseMaxHp + (maxHp - baseMaxHp) + abilityHpBonus} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
+                  <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
                   
                   {/* hp quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
@@ -2893,16 +2847,12 @@ export default function CharacterSheet() {
                       /
                       <span>{baseMaxMana}</span>
                       {(() => {
-                        const statBoost = maxMana - baseMaxMana;
-                        const totalBonus = statBoost + abilityManaBonus;
+                        const totalBonus = maxMana - baseMaxMana;
                         if (totalBonus <= 0) return null;
-                        const breakdownParts: string[] = [];
-                        if (statBoost > 0) breakdownParts.push(`Stat Boost: +${statBoost}`);
-                        if (abilityManaBonus > 0) breakdownParts.push(`Active Buff: +${abilityManaBonus}`);
                         return (
                           <span 
                             className="text-[10px] text-cyan-400 font-bold ml-1 font-mono drop-shadow-[0_0_5px_rgba(34,211,238,0.4)] cursor-help" 
-                            title={breakdownParts.join(" | ")}
+                            title={`Active Bonus: +${totalBonus}`}
                           >
                             [+{totalBonus}]
                           </span>
@@ -2910,7 +2860,7 @@ export default function CharacterSheet() {
                       })()}
                     </span>
                   </div>
-                  <ResourceBar current={mana ?? character.currentMana} max={baseMaxMana + (maxMana - baseMaxMana) + abilityManaBonus} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
+                  <ResourceBar current={mana ?? character.currentMana} max={maxMana} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
                   
                   {/* mana quick actions: add/remove/buff */}
                   <div className="space-y-2 mt-1">
