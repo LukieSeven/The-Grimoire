@@ -483,7 +483,7 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
               }
 
               return (
-                <div className="border-t border-amber-900/30 pt-3 space-y-2 bg-amber-950/10 p-3 border border-amber-900/40">
+                <div className="border-t border-border/30 pt-3 space-y-2 bg-primary/5 p-3 border border-primary/20">
                   <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                     {Array.from({ length: evolRes.earnedSlotCount }).map((_, slotIdx) => {
                       const slotMeta = EVOLUTION_THRESHOLDS_TABLE[slotIdx];
@@ -498,15 +498,15 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                           {/* Row Header (Click to expand/collapse) */}
                           <div
                             onClick={() => setExpandedMods(prev => ({ ...prev, [slotIdx]: !isOpen }))}
-                            className="flex items-center justify-between p-2 bg-amber-950/30 hover:bg-amber-900/40 cursor-pointer select-none border-b border-border/30"
+                            className="flex items-center justify-between p-2 bg-primary/10 hover:bg-primary/20 cursor-pointer select-none border-b border-border/30"
                           >
                             <div className="flex items-center gap-2">
-                              <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[10px] font-bold font-mono rounded-none px-1.5 py-0.5">
+                              <Badge className="bg-primary/15 text-primary border border-primary/40 text-[10px] font-bold font-mono rounded-none px-1.5 py-0.5">
                                 {slotMeta.rankLabel}
                               </Badge>
-                              <span className="font-serif text-xs font-bold text-amber-200">{titleText}</span>
+                              <span className="font-serif text-xs font-bold text-primary">{titleText}</span>
                             </div>
-                            <svg className={`w-3.5 h-3.5 text-amber-400/80 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
+                            <svg className={`w-3.5 h-3.5 text-primary/80 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
                           </div>
 
                           {/* Expandable Body */}

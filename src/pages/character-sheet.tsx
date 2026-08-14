@@ -3991,7 +3991,7 @@ export default function CharacterSheet() {
                           <div className="space-y-1.5 flex-1 pr-4">
                             <div className="flex items-center gap-2 flex-wrap">
                               {/* Read-Only Rank Marker Badge */}
-                              <div className="flex items-center gap-1 border border-amber-700/50 px-2 py-0.5 rounded-none bg-amber-950/40 text-[10px] font-bold text-amber-300 font-mono shadow-sm">
+                              <div className="flex items-center gap-1 border border-primary/30 px-2 py-0.5 rounded-none bg-primary/10 text-[10px] font-bold text-primary font-mono shadow-sm">
                                 <span>Rank: {rankInfo.label}</span>
                               </div>
 
@@ -4079,17 +4079,17 @@ export default function CharacterSheet() {
 
                             {/* Active Evolution Modifiers section — Header title & Zap icon COMPLETELY PURGED */}
                             {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (
-                              <div className="space-y-1.5 mt-2 pt-2 border-t border-amber-900/30">
+                              <div className="space-y-1.5 mt-2 pt-2 border-t border-border/30">
                                 {evolData.activeModifiers.map((mod, idx) => (
-                                  <div key={mod.id || idx} className="text-xs bg-amber-950/20 border border-amber-900/40 p-2 space-y-1 rounded-none">
+                                  <div key={mod.id || idx} className="text-xs bg-primary/5 border border-primary/25 p-2 space-y-1 rounded-none">
                                     <div className="flex items-center gap-2">
-                                      <Badge className="bg-amber-950 text-amber-400 border border-amber-700/50 text-[9px] font-bold font-mono rounded-none px-1.5 py-0.5">
+                                      <Badge className="bg-primary/15 text-primary border border-primary/40 text-[9px] font-bold font-mono rounded-none px-1.5 py-0.5">
                                         {mod.rankLabel}
                                       </Badge>
-                                      {mod.name && <span className="font-serif font-bold text-amber-200">{mod.name}</span>}
+                                      {mod.name && <span className="font-serif font-bold text-primary">{mod.name}</span>}
                                     </div>
                                     {mod.effect && (
-                                      <p className="text-xs text-amber-100/90 font-serif leading-relaxed pl-0.5">{mod.effect}</p>
+                                      <p className="text-xs text-foreground/90 font-serif leading-relaxed pl-0.5">{mod.effect}</p>
                                     )}
                                   </div>
                                 ))}
