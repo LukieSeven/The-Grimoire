@@ -501,9 +501,9 @@ export function EditAbilitiesDialog({ characterId, abilities }: Props) {
                             className="flex items-center justify-between p-2 bg-primary/10 hover:bg-primary/20 cursor-pointer select-none border-b border-border/30"
                           >
                             <div className="flex items-center gap-2">
-                              <Badge className="bg-primary/15 text-primary border border-primary/40 text-[10px] font-bold font-mono rounded-none px-1.5 py-0.5">
+                              <div className="bg-primary/20 text-primary border border-primary/40 text-[10px] font-bold font-mono px-2 py-0.5 rounded-none">
                                 {slotMeta.rankLabel}
-                              </Badge>
+                              </div>
                               <span className="font-serif text-xs font-bold text-primary">{titleText}</span>
                             </div>
                             <svg className={`w-3.5 h-3.5 text-primary/80 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>

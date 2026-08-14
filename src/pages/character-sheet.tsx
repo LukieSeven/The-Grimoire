@@ -179,14 +179,8 @@ function compressImage(file: File, maxW: number, maxH: number): Promise<string> 
 
 const RANKS_ORDER = ["Iron", "Bronze", "Silver", "Gold", "Diamond"];
 
-function getRankStyle(rank?: string): string {
-  const r = (rank || "Iron").trim().toLowerCase();
-  if (r === "bronze") return "bg-amber-950/80 border-amber-700/80 text-amber-400 shadow-[0_0_8px_rgba(217,119,6,0.2)]";
-  if (r === "silver") return "bg-slate-900/80 border-slate-400/80 text-slate-200 shadow-[0_0_8px_rgba(226,232,240,0.2)]";
-  if (r === "gold") return "bg-yellow-950/80 border-yellow-500/80 text-yellow-300 shadow-[0_0_10px_rgba(234,179,8,0.25)]";
-  if (r === "diamond") return "bg-cyan-950/80 border-cyan-400/90 text-cyan-200 shadow-[0_0_12px_rgba(34,211,238,0.3)]";
-  // Default Iron (dull grey)
-  return "bg-stone-900/80 border-stone-600/70 text-stone-300";
+function getRankStyle(_rank?: string): string {
+  return "bg-primary/10 border-primary/40 text-primary shadow-sm";
 }
 
 function canRankUp(currentRank?: string): boolean {
@@ -4081,11 +4075,11 @@ export default function CharacterSheet() {
                             {!evolData.isDormant && evolData.earnedSlotCount > 0 && evolData.activeModifiers.length > 0 && (
                               <div className="space-y-1.5 mt-2 pt-2 border-t border-border/30">
                                 {evolData.activeModifiers.map((mod, idx) => (
-                                  <div key={mod.id || idx} className="text-xs bg-primary/5 border border-primary/25 p-2 space-y-1 rounded-none">
+                                  <div key={mod.id || idx} className="text-xs bg-primary/5 border border-primary/40 p-2.5 space-y-1 rounded-none">
                                     <div className="flex items-center gap-2">
-                                      <Badge className="bg-primary/15 text-primary border border-primary/40 text-[9px] font-bold font-mono rounded-none px-1.5 py-0.5">
+                                      <div className="bg-primary/20 text-primary border border-primary/40 text-[9px] font-bold font-mono px-2 py-0.5 rounded-none">
                                         {mod.rankLabel}
-                                      </Badge>
+                                      </div>
                                       {mod.name && <span className="font-serif font-bold text-primary">{mod.name}</span>}
                                     </div>
                                     {mod.effect && (
