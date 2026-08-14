@@ -5308,33 +5308,53 @@ export default function CharacterSheet() {
                               const trainingKey = `${stat.key}Training`;
                               const trainVal = ((fam as any)[trainingKey] as number) || 0;
                               return (
-                                <div key={stat.key} className="bg-card/60 border border-border/30 p-1 rounded-none text-center flex flex-col justify-between">
-                                  {/* Compact Training Control Row above stat */}
-                                  <div className="flex items-center justify-between gap-0.5 text-[8px] text-muted-foreground font-mono bg-background/50 px-1 py-0.5 mb-1 border-b border-border/20 select-none">
-                                    <button 
-                                      type="button" 
-                                      onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "down"); }}
-                                      className="hover:text-foreground hover:bg-accent/40 w-3.5 h-3.5 flex items-center justify-center font-bold cursor-pointer rounded-sm"
-                                      title="Decrease Training"
-                                    >-</button>
-                                    <span className="text-[7.5px] font-bold text-amber-400/90">{trainVal}/{val}</span>
-                                    <button 
-                                      type="button" 
-                                      onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "up"); }}
-                                      className="hover:text-foreground hover:bg-accent/40 w-3.5 h-3.5 flex items-center justify-center font-bold cursor-pointer rounded-sm"
-                                      title="Increase Training"
-                                    >+</button>
-                                  </div>
+                                <div key={stat.key} className="bg-card/60 border border-border/30 p-1.5 rounded-none flex flex-col justify-between space-y-1">
                                   {/* Stat Roll Button */}
                                   <button
                                     type="button"
                                     onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, val)}
-                                    className="hover:border-primary transition-all cursor-pointer text-center w-full py-0.5"
+                                    className="hover:border-primary transition-all cursor-pointer text-center w-full"
                                   >
-                                    <div className="text-[8px] font-bold uppercase text-muted-foreground">{stat.label}</div>
-                                    <div className="text-sm font-bold font-serif text-primary">{val}</div>
+                                    <div className="text-[8px] font-bold uppercase text-muted-foreground tracking-wider">{stat.label}</div>
+                                    <div className="text-base font-bold font-serif text-primary leading-tight">{val}</div>
                                     <div className="text-[8px] font-mono text-muted-foreground">({mod >= 0 ? `+${mod}` : mod})</div>
                                   </button>
+
+                                  {/* Stat Training Bar matching Character Sheet styling */}
+                                  <div className="border-t border-border/20 pt-1 flex flex-col gap-0.5 select-none">
+                                    <div className="flex justify-between items-center text-[7.5px] font-mono">
+                                      <span className="text-muted-foreground/80 uppercase text-[7px]">Train</span>
+                                      <span className="text-primary font-bold">{trainVal}/{val}</span>
+                                    </div>
+                                    <div className="flex gap-1 items-center">
+                                      <div className="flex-1 bg-accent/40 h-1 rounded-none overflow-hidden">
+                                        <div
+                                          className="bg-primary h-full rounded-none transition-all"
+                                          style={{ width: `${Math.min(100, (trainVal / val) * 100)}%` }}
+                                        />
+                                      </div>
+                                      
+                                      {/* +/- Grouped enclosed border buttons */}
+                                      <div className="flex border border-border/50">
+                                        <button
+                                          type="button"
+                                          className="h-3.5 w-3.5 text-[9px] font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
+                                          onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "down"); }}
+                                          disabled={trainVal === 0}
+                                        >
+                                          -
+                                        </button>
+                                        <div className="h-3.5 w-[1px] bg-border/50" />
+                                        <button
+                                          type="button"
+                                          className="h-3.5 w-3.5 text-[9px] font-bold bg-background/50 hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
+                                          onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "up"); }}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
                                 </div>
                               );
                             })}
