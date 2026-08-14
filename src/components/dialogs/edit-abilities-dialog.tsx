@@ -300,8 +300,9 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
               {mode === "list" ? "Manage Abilities" : mode === "add" ? "Shape New Ability" : "Edit Shaped Ability"}
             </span>
             {mode === "list" && (
-              <Button size="sm" onClick={handleOpenAdd} className="bg-primary text-primary-foreground font-serif rounded-none cursor-pointer">
-                + Add Ability
+              <Button size="sm" onClick={handleOpenAdd} className="bg-primary text-primary-foreground font-serif rounded-none cursor-pointer flex items-center gap-1.5 font-bold">
+                <Plus className="w-4 h-4" />
+                <span>Add Ability</span>
               </Button>
             )}
           </DialogTitle>
@@ -692,8 +693,8 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                 }}
                 className="w-full h-8 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold my-2"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Ability Effect</span>
+                <Plus className="w-4 h-4" />
+                <span>Ability Effect</span>
               </Button>
             </div>
 
@@ -1258,7 +1259,7 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                 </div>
               ))}
 
-              {/* Multi-Sequential + Sub Ability Button */}
+              {/* Multi-Sequential Sub Ability Button */}
               <Button
                 type="button"
                 variant="outline"
@@ -1279,8 +1280,8 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                 }}
                 className="w-full h-8 bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Sub Ability</span>
+                <Plus className="w-4 h-4" />
+                <span>Sub Ability</span>
               </Button>
             </div>
 
@@ -1515,8 +1516,8 @@ export function EditAbilitiesDialog({ characterId, abilities, open, onOpenChange
                 }}
                 className="w-full h-8 bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 rounded-none font-serif text-xs flex items-center justify-center gap-2 cursor-pointer font-bold"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Ability Trigger</span>
+                <Plus className="w-4 h-4" />
+                <span>Ability Trigger</span>
               </Button>
             </div>
 
