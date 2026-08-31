@@ -29,6 +29,20 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.href = import.meta.env.BASE_URL || "/";
   };
 
+  private handleClearCacheAndReload = () => {
+    try {
+      sessionStorage.clear();
+      if ("caches" in window) {
+        caches.keys().then((names) => {
+          names.forEach((name) => caches.delete(name));
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    window.location.href = import.meta.env.BASE_URL || "/";
+  };
+
   public render() {
     if (this.state.hasError) {
       return (
@@ -46,12 +60,19 @@ export class ErrorBoundary extends Component<Props, State> {
                 {this.state.error.message}
               </div>
             )}
-            <div className="pt-2 flex gap-3 justify-center">
+            <div className="pt-2 flex flex-wrap gap-3 justify-center">
               <Button
                 onClick={this.handleReload}
                 className="bg-primary text-primary-foreground font-serif text-xs px-4 py-2 rounded flex items-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Reload Grimoire
+              </Button>
+              <Button
+                variant="outline"
+                onClick={this.handleClearCacheAndReload}
+                className="border-border text-muted-foreground hover:text-foreground font-serif text-xs px-4 py-2 rounded flex items-center gap-1.5 cursor-pointer"
+              >
+                Clear Cache & Reload
               </Button>
             </div>
           </div>

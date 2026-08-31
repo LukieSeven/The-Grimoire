@@ -80,6 +80,7 @@ export interface Familiar {
   hpFormula: string;
   manaFormula: string;
   dtFormula: string;
+  speedFormula?: string;
   abilities: FamiliarAbility[];
   resistances?: string;
   immunities?: string;
@@ -120,6 +121,7 @@ export interface Character {
   manaFormula: string;
   dtFormula: string;
   initiativeFormula?: string;
+  speedFormula?: string;
   // Stat training values
   powerTraining: number;
   vitalityTraining: number;
@@ -761,6 +763,8 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   stats: Record<string, number>;
   modifiers: Record<string, number>;
   diceLabels: Record<string, string>;
+  speed: number;
+  baseSpeed: number;
   baseMaxHp: number;
   totalMaxHp: number;
   maxHp: number;
@@ -872,6 +876,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
   const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
+  const rawSpeed = Math.max(0, evaluateFormula(char.speedFormula || "Agility * 5", variables));
 
   // Compute base resource values from active abilities
   for (const ab of activeAbilities) {
@@ -995,6 +1000,8 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     stats,
     modifiers,
     diceLabels,
+    speed: rawSpeed,
+    baseSpeed: rawSpeed,
     baseMaxHp,
     totalMaxHp,
     maxHp: totalMaxHp,
@@ -1073,6 +1080,23 @@ export const storage = {
       if (c.immunities === undefined) {
         c.immunities = "";
         migrated = true;
+      }
+      // 4. speedFormula init
+      if (!c.speedFormula) {
+        c.speedFormula = "Agility * 5";
+        migrated = true;
+      }
+      if (Array.isArray(c.familiars)) {
+        c.familiars.forEach((f: any) => {
+          if (!f.speedFormula) {
+            f.speedFormula = "Agility * 5";
+            migrated = true;
+          }
+          if (!Array.isArray(f.abilities)) {
+            f.abilities = [];
+            migrated = true;
+          }
+        });
       }
     });
     if (migrated) {

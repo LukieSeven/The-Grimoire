@@ -36,6 +36,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
   const [hpFormula, setHpFormula] = useState(familiar.hpFormula || "Vitality * 8");
   const [manaFormula, setManaFormula] = useState(familiar.manaFormula || "Spirit * 5");
   const [dtFormula, setDtFormula] = useState(familiar.dtFormula || "Endurance * 1");
+  const [speedFormula, setSpeedFormula] = useState(familiar.speedFormula || "Agility * 5");
 
   // Resistances/Immunities
   const [resistances, setResistances] = useState(familiar.resistances || "");
@@ -234,6 +235,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
       hpFormula,
       manaFormula,
       dtFormula,
+      speedFormula,
       resistances,
       immunities,
       currentHp,
@@ -522,7 +524,7 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
             {/* Formulas Grid */}
             <div className="border-t border-border/20 pt-3 space-y-3">
               <h4 className="text-[10px] font-bold text-primary uppercase tracking-widest font-serif">Resource Formulas</h4>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">HP Formula</label>
                   <Input value={hpFormula} onChange={e => setHpFormula(e.target.value)} required className="bg-background font-mono text-xs rounded-none" />
@@ -534,6 +536,10 @@ export function EditFamiliarDialog({ familiar, onSave }: EditFamiliarDialogProps
                 <div>
                   <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">DT Formula</label>
                   <Input value={dtFormula} onChange={e => setDtFormula(e.target.value)} required className="bg-background font-mono text-xs rounded-none" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Speed Formula</label>
+                  <Input value={speedFormula} onChange={e => setSpeedFormula(e.target.value)} required placeholder="e.g. Agility * 5" className="bg-background font-mono text-xs rounded-none" />
                 </div>
               </div>
             </div>

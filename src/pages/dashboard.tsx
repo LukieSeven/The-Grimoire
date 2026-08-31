@@ -195,6 +195,7 @@ export default function Dashboard() {
         hpFormula: "Vitality * 10 + Endurance * 5",
         manaFormula: "Spirit * 10 + Willpower * 5",
         dtFormula: "Endurance * 2 + dtBonus",
+        speedFormula: "Agility * 5",
         powerTraining: 0,
         vitalityTraining: 0,
         spiritTraining: 0,
@@ -277,7 +278,7 @@ export default function Dashboard() {
           <img 
             src={`${import.meta.env.BASE_URL}logo.jpg`} 
             alt="The Grimoire Logo" 
-            className="w-16 h-16 rounded-lg object-cover border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.12)] flex-shrink-0"
+            className="w-16 h-16 rounded-lg object-cover border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.12)] flex-shrink-0" 
           />
           <div className="space-y-1">
             <h1 className="text-4xl sm:text-5xl font-serif font-black tracking-[0.25em] uppercase bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
@@ -742,7 +743,6 @@ export default function Dashboard() {
         </div>
 
       </div>
-
 
     </div>
   );

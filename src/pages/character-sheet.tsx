@@ -584,6 +584,8 @@ export default function CharacterSheet() {
     stats: finalStats, 
     modifiers: autoModifiers, 
     diceLabels, 
+    speed,
+    baseSpeed,
     maxHp, 
     maxMana, 
     maxDt, 
@@ -628,6 +630,8 @@ export default function CharacterSheet() {
     const baseMaxDt = Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars) + dtAddBonus);
     const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
 
+    const famSpeed = Math.max(0, evaluateFormula(fam.speedFormula || "Agility * 5", vars));
+
     return {
       baseMaxHp,
       totalMaxHp,
@@ -638,6 +642,8 @@ export default function CharacterSheet() {
       baseMaxDt,
       totalMaxDt,
       maxDt: totalMaxDt,
+      speed: famSpeed,
+      maxSpeed: famSpeed,
     };
   };
 
@@ -926,11 +932,21 @@ export default function CharacterSheet() {
         });
       }
     } else {
-      const nextTraining = Math.max(0, curTraining - 1);
-      updateFamiliarData(fam.id, {
-        ...fam,
-        [trainingKey]: nextTraining,
-      });
+      if (curTraining > 0) {
+        updateFamiliarData(fam.id, {
+          ...fam,
+          [trainingKey]: curTraining - 1,
+        });
+      } else if (baseVal > 0) {
+        const nextBaseVal = baseVal - 1;
+        const nextTraining = Math.max(0, nextBaseVal - 1);
+        updateFamiliarData(fam.id, {
+          ...fam,
+          [statKey]: nextBaseVal,
+          [trainingKey]: nextTraining,
+        });
+        toast.info(`${fam.name}'s ${statKey.toUpperCase()} decreased to ${nextBaseVal} (${nextTraining}/${nextBaseVal} Training).`);
+      }
     }
   };
 
@@ -2029,7 +2045,7 @@ export default function CharacterSheet() {
   const handleStatTrain = (statKey: string, direction: "up" | "down" = "up") => {
     const charStatValue = (character as any)[statKey] as number;
     const trainingKey = `${statKey}Training`;
-    const curTraining = (character as any)[trainingKey] as number;
+    const curTraining = ((character as any)[trainingKey] as number) || 0;
 
     if (direction === "up") {
       const nextTraining = curTraining + 1;
@@ -2047,8 +2063,21 @@ export default function CharacterSheet() {
         updateChar.mutate({ id, data: { [trainingKey]: nextTraining } });
       }
     } else {
-      const nextTraining = Math.max(0, curTraining - 1);
-      updateChar.mutate({ id, data: { [trainingKey]: nextTraining } });
+      if (curTraining > 0) {
+        updateChar.mutate({ id, data: { [trainingKey]: curTraining - 1 } });
+      } else if (charStatValue > 0) {
+        const nextVal = charStatValue - 1;
+        const nextTraining = Math.max(0, nextVal - 1);
+        updateChar.mutate({
+          id,
+          data: {
+            [statKey]: nextVal,
+            [trainingKey]: nextTraining,
+          }
+        }, {
+          onSuccess: () => toast.info(`${statKey.toUpperCase()} decreased to ${nextVal} (${nextTraining}/${nextVal} Training).`)
+        });
+      }
     }
   };
 
@@ -2069,8 +2098,21 @@ export default function CharacterSheet() {
         updateSkillMut.mutate({ id: skill.id, data: { training: nextTraining } });
       }
     } else {
-      const nextTraining = Math.max(0, skill.training - 1);
-      updateSkillMut.mutate({ id: skill.id, data: { training: nextTraining } });
+      if (skill.training > 0) {
+        updateSkillMut.mutate({ id: skill.id, data: { training: skill.training - 1 } });
+      } else if (skill.value > 0) {
+        const nextVal = skill.value - 1;
+        const nextTraining = Math.max(0, nextVal - 1);
+        updateSkillMut.mutate({
+          id: skill.id,
+          data: {
+            value: nextVal,
+            training: nextTraining,
+          }
+        }, {
+          onSuccess: () => toast.info(`${skill.name} decreased to ${nextVal} (${nextTraining}/${nextVal} Training).`)
+        });
+      }
     }
   };
 
@@ -2559,7 +2601,7 @@ export default function CharacterSheet() {
                   {/* Right: Speed Readout */}
                   <div className="text-right">
                     <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Speed</div>
-                    <div className="text-2xl font-serif text-foreground font-bold">{character.speed} ft</div>
+                    <div className="text-2xl font-serif text-foreground font-bold">{speed ?? character.speed} ft</div>
                   </div>
                 </div>
 
@@ -3579,7 +3621,7 @@ export default function CharacterSheet() {
                           <button
                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                             onClick={() => handleStatTrain(stat.key, "down")}
-                            disabled={curTraining === 0}
+                            disabled={baseValue <= 0 && curTraining === 0}
                           >
                             -
                           </button>
@@ -3698,7 +3740,7 @@ export default function CharacterSheet() {
                                           <button
                                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                                             onClick={() => handleSkillTrain(skill, "down")}
-                                            disabled={skill.training === 0}
+                                            disabled={skill.value <= 0 && skill.training === 0}
                                           >
                                             -
                                           </button>
@@ -5126,7 +5168,7 @@ export default function CharacterSheet() {
                             <div className="min-w-0">
                               <h4 className="font-serif text-base text-primary font-bold truncate">{fam.name}</h4>
                               <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5 truncate">
-                                {fam.race} · {fam.className} · {fam.speed} ft
+                                {fam.race} · {fam.className} · {fMax.speed ?? fam.speed} ft
                               </p>
                               {(fam.resistances || fam.immunities) && (
                                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground font-sans mt-1">
@@ -5434,7 +5476,7 @@ export default function CharacterSheet() {
                                           type="button"
                                           className="h-3.5 w-3.5 text-[9px] font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                                           onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "down"); }}
-                                          disabled={trainVal === 0}
+                                          disabled={val <= 0 && trainVal === 0}
                                         >
                                           -
                                         </button>

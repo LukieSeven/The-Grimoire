@@ -29,6 +29,20 @@
           );
         }
       }(window.location));
+
+      // Global asset load error trap (auto-refresh on deploy 404 cache mismatch)
+      window.addEventListener('error', function(e) {
+        var target = e.target;
+        if (target && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+          var key = 'grimoire_asset_reload_time';
+          var last = sessionStorage.getItem(key);
+          var now = Date.now();
+          if (!last || now - parseInt(last, 10) > 10000) {
+            sessionStorage.setItem(key, String(now));
+            window.location.reload();
+          }
+        }
+      }, true);
     </script>
     <!-- End Single Page Apps for GitHub Pages -->
   </head>

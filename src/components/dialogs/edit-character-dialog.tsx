@@ -40,6 +40,7 @@ export function EditCharacterDialog({ character }: Props) {
   const [manaFormula, setManaFormula] = useState(character.manaFormula || "Spirit * 10 + Willpower * 5");
   const [dtFormula, setDtFormula] = useState(character.dtFormula || "Endurance * 2 + dtBonus");
   const [initiativeFormula, setInitiativeFormula] = useState(character.initiativeFormula || "Agility");
+  const [speedFormula, setSpeedFormula] = useState(character.speedFormula || "Agility * 5");
 
   const [background, setBackground] = useState(character.background || "");
   const [backstory, setBackstory] = useState(character.backstory || "");
@@ -67,6 +68,7 @@ export function EditCharacterDialog({ character }: Props) {
       setManaFormula(character.manaFormula);
       setDtFormula(character.dtFormula);
       setInitiativeFormula(character.initiativeFormula || "Agility");
+      setSpeedFormula(character.speedFormula || "Agility * 5");
       setBackground(character.background || "");
       setBackstory(character.backstory || "");
     }
@@ -98,6 +100,7 @@ export function EditCharacterDialog({ character }: Props) {
           manaFormula,
           dtFormula,
           initiativeFormula,
+          speedFormula,
           background: background || null,
           backstory: backstory || null,
         },
@@ -209,7 +212,7 @@ export function EditCharacterDialog({ character }: Props) {
             <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
               Define standard math strings using variable tags (e.g. <code className="text-primary bg-accent px-1 rounded">Vitality</code>, <code className="text-primary bg-accent px-1 rounded">Endurance</code>, <code className="text-primary bg-accent px-1 rounded">Spirit</code>, <code className="text-primary bg-accent px-1 rounded">Willpower</code>, <code className="text-primary bg-accent px-1 rounded">dtBonus</code>).
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">HP Formula</label>
                 <Input value={hpFormula} onChange={e => setHpFormula(e.target.value)} required className="bg-background font-mono text-xs" />
@@ -225,6 +228,10 @@ export function EditCharacterDialog({ character }: Props) {
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Initiative Formula</label>
                 <Input value={initiativeFormula} onChange={e => setInitiativeFormula(e.target.value)} required placeholder="e.g. Agility" className="bg-background font-mono text-xs" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed Formula</label>
+                <Input value={speedFormula} onChange={e => setSpeedFormula(e.target.value)} required placeholder="e.g. Agility * 5" className="bg-background font-mono text-xs" />
               </div>
             </div>
           </div>
