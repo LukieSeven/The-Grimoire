@@ -36,8 +36,8 @@ export function EditCharacterDialog({ character }: Props) {
   const [charisma, setCharisma] = useState(character.charisma);
 
   // Formulas
-  const [hpFormula, setHpFormula] = useState(character.hpFormula || "Vitality * 10 + Endurance * 5");
-  const [manaFormula, setManaFormula] = useState(character.manaFormula || "Spirit * 10 + Willpower * 5");
+  const [hpFormula, setHpFormula] = useState(character.hpFormula || "1 + Vitality * 10 + Endurance * 5");
+  const [manaFormula, setManaFormula] = useState(character.manaFormula || "1 + Spirit * 10 + Willpower * 5");
   const [dtFormula, setDtFormula] = useState(character.dtFormula || "Endurance * 2 + dtBonus");
   const [initiativeFormula, setInitiativeFormula] = useState(character.initiativeFormula || "Agility");
   const [speedFormula, setSpeedFormula] = useState(character.speedFormula || "Agility * 5");

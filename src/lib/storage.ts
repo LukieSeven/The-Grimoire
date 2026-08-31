@@ -637,20 +637,25 @@ export function evaluateFormula(formula: string, variables: Record<string, numbe
   try {
     let expression = formula.toLowerCase();
 
-    // 1. If formula contains '=', strip any description on the left-hand side
-    if (expression.includes("=")) {
-      expression = expression.split("=").pop() || expression;
-    }
+    // 1. Strip leading label assignment if present (e.g. "Health - ...", "Health = ...", "Mana - ...", "HP = ...")
+    expression = expression.replace(/^[a-z_][a-z0-9_\s]*[=-]\s*/i, "");
 
-    // 2. Replace multiplication symbols '×' and 'x' with standard asterisk '*'
-    expression = expression.replace(/×/g, "*").replace(/x/g, "*");
+    // 2. Replace embedded (base = X) or base = X with X
+    expression = expression.replace(/\(\s*base\s*=\s*([0-9.]+)\s*\)/gi, "$1");
+    expression = expression.replace(/\bbase\s*=\s*([0-9.]+)/gi, "$1");
+
+    // 3. Replace multiplication symbols '×'
+    expression = expression.replace(/×/g, "*");
+
+    // Default variables include base: 1
+    const allVars: Record<string, number> = { base: 1, ...variables };
 
     // Substitute variables, sorting descending by length to prevent partial matches
-    const sortedKeys = Object.keys(variables).sort((a, b) => b.length - a.length);
+    const sortedKeys = Object.keys(allVars).sort((a, b) => b.length - a.length);
 
     // First substitute rolled suffix versions (e.g. wilr -> 12) with base stat value using word boundary RegExp to avoid partial matches
     for (const key of sortedKeys) {
-      const val = variables[key];
+      const val = allVars[key];
       const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp('\\b' + escapedKey + 'r\\b', 'g');
       expression = expression.replace(regex, String(val));
@@ -658,16 +663,19 @@ export function evaluateFormula(formula: string, variables: Record<string, numbe
 
     // Then substitute standard base stat keys (e.g. wil -> 12) using word boundary RegExp
     for (const key of sortedKeys) {
-      const val = variables[key];
+      const val = allVars[key];
       const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp('\\b' + escapedKey + '\\b', 'g');
       expression = expression.replace(regex, String(val));
     }
 
+    // Replace residual standalone 'x' (case-insensitive) used as multiplication operator (e.g. "10 x 5")
+    expression = expression.replace(/([0-9\)])\s*x\s*([0-9\(])/gi, "$1*$2");
+
     // Strip spaces now that variables replacement is done
     expression = expression.replace(/\s+/g, "");
 
-    // 3. For static pool/recalculation formulas, replace standard dice (e.g. d6, d8) with their maximum value
+    // 4. For static pool/recalculation formulas, replace standard dice (e.g. d6, d8) with their maximum value
     expression = expression.replace(/d(\d+)/g, "$1");
 
     // Security: Only allow mathematical operators, parentheses, digits, and decimals
@@ -841,6 +849,7 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
     prer: getModifierForStat(sMap.precision || 0, char.rank),
     wilr: getModifierForStat(sMap.willpower || 0, char.rank),
     char: getModifierForStat(sMap.charisma || 0, char.rank),
+    base: 1,
     dtbonus: parseFormulaOrNum(char.dtBonus, sMap) + armorDtBonus,
   });
 
@@ -872,8 +881,8 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   let abilityInitiativeBonus = 0;
   const equipmentInitiativeBonus = equippedList.reduce((sum, eq) => sum + parseFormulaOrNum(eq.bonusInitiative, variables), 0);
 
-  const rawHp = evaluateFormula(char.hpFormula || "Vitality * 10 + Endurance * 5", variables);
-  const rawMana = evaluateFormula(char.manaFormula || "Spirit * 10 + Willpower * 5", variables);
+  const rawHp = evaluateFormula(char.hpFormula || "1 + Vitality * 10 + Endurance * 5", variables);
+  const rawMana = evaluateFormula(char.manaFormula || "1 + Spirit * 10 + Willpower * 5", variables);
   const rawDt = evaluateFormula(char.dtFormula || "Endurance * 2 + dtBonus", variables);
   const rawInitiative = evaluateFormula(char.initiativeFormula || "Agility", variables);
   const rawSpeed = Math.max(0, evaluateFormula(char.speedFormula || "Agility * 5", variables));
@@ -1084,6 +1093,15 @@ export const storage = {
       // 4. speedFormula init
       if (!c.speedFormula) {
         c.speedFormula = "Agility * 5";
+        migrated = true;
+      }
+      // 5. hpFormula & manaFormula base 1 update
+      if (!c.hpFormula || c.hpFormula === "Vitality * 10 + Endurance * 5") {
+        c.hpFormula = "1 + Vitality * 10 + Endurance * 5";
+        migrated = true;
+      }
+      if (!c.manaFormula || c.manaFormula === "Spirit * 10 + Willpower * 5") {
+        c.manaFormula = "1 + Spirit * 10 + Willpower * 5";
         migrated = true;
       }
       if (Array.isArray(c.familiars)) {
@@ -2127,8 +2145,8 @@ function initializeDefaultSample(): void {
     currentMana: 50,
     background: "Captain of the Outer Walls",
     backstory: "Garrick stood guard during the Siege of Blackwood Forest, single-handedly holding the eastern gate shield line against a horde of wild mythical beasts. He lives by a simple code: shields high, protectors firm.",
-    hpFormula: "Vitality * 10 + Endurance * 5",
-    manaFormula: "Spirit * 10 + Willpower * 5",
+    hpFormula: "1 + Vitality * 10 + Endurance * 5",
+    manaFormula: "1 + Spirit * 10 + Willpower * 5",
     dtFormula: "Endurance * 2 + dtBonus",
     powerTraining: 4,
     vitalityTraining: 2,
