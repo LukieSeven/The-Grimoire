@@ -11,6 +11,7 @@ import {
   Roll,
   Note,
   getAdjustedStats,
+  getModifierForStat,
   SessionRecap,
   CodexNote,
 } from "../lib/storage";
@@ -567,25 +568,36 @@ export function useCreateRoll() {
       }
 
       function rollOnce(sides: number): { result: number; isCrit: boolean } {
-        const rolled = Math.floor(Math.pow(Math.random(), 0.8) * sides) + 1;
+        const rolled = Math.floor(Math.random() * sides) + 1;
         return { result: rolled, isCrit: rolled === sides };
       }
 
       const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
         const diceSides = getStatDiceSides(statVal);
         let sum = 0;
-        const rolls: number[] = [];
+        const rollDetails: string[] = [];
         let crit = false;
         let remainingStat = statVal;
         for (const sides of diceSides) {
-          const r = rollOnce(sides);
-          const cappedResult = Math.min(r.result, remainingStat);
+          const rolled = Math.floor(Math.random() * sides) + 1;
+          const dieTarget = Math.min(sides, remainingStat);
+
+          if (rolled === dieTarget) {
+            crit = true;
+          }
+
+          const cappedResult = Math.min(rolled, dieTarget);
           sum += cappedResult;
-          rolls.push(cappedResult);
-          if (r.isCrit) crit = true;
+
+          if (rolled > dieTarget) {
+            rollDetails.push(`${rolled}(${dieTarget})`);
+          } else {
+            rollDetails.push(`${rolled}`);
+          }
+
           remainingStat -= sides;
         }
-        const desc = diceSides.map((sides, i) => `d${sides}(${rolls[i]})`).join("+");
+        const desc = rollDetails.join("+");
         return { total: sum, desc, isCrit: crit };
       };
 
@@ -627,8 +639,6 @@ export function useCreateRoll() {
         const statsKeys = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
         const statPrefixes = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"];
 
-
-
         // A. Resolve rolled stats (e.g., wilr, willpowerr)
         for (let i = 0; i < statPrefixes.length; i++) {
           const prefix = statPrefixes[i];
@@ -642,7 +652,7 @@ export function useCreateRoll() {
           
           if (regexFull.test(expression) || regexPrefix.test(expression)) {
             const statVal = (finalStats[statKey] !== undefined ? finalStats[statKey] : 10) as number;
-            const statMod = Math.floor(statVal / 3);
+            const statMod = getModifierForStat(statVal, rollingEntity?.rank || "Iron");
             const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statVal);
             if (crit) isCrit = true;
             
@@ -650,10 +660,9 @@ export function useCreateRoll() {
             expression = expression.split(rolledFullPattern).join(String(totalRolled));
             expression = expression.split(rolledPrefixPattern).join(String(totalRolled));
             
-            const critSuffix = crit ? "!" : "";
             const breakdownText = statMod !== 0 
-              ? `${rolledSum}${critSuffix}+${statMod}`
-              : `${rolledSum}${critSuffix}`;
+              ? `${desc}+${statMod}`
+              : `${desc}`;
             const regexFullInsensitive = new RegExp(rolledFullPattern, "gi");
             const regexPrefixInsensitive = new RegExp(rolledPrefixPattern, "gi");
             breakdown = breakdown.replace(regexFullInsensitive, breakdownText);
@@ -690,10 +699,9 @@ export function useCreateRoll() {
           const r = rollOnce(sides);
           if (r.isCrit) isCrit = true;
           
-          const critSuffix = r.isCrit ? "!" : "";
           const matchStr = match[0];
           expression = expression.replace(new RegExp(matchStr, "i"), String(r.result));
-          breakdown = breakdown.replace(new RegExp(matchStr, "i"), `${r.result}${critSuffix}`);
+          breakdown = breakdown.replace(new RegExp(matchStr, "i"), String(r.result));
         }
 
         // D. Evaluate expression

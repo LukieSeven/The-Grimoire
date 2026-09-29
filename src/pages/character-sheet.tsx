@@ -1210,9 +1210,9 @@ export default function CharacterSheet() {
             });
 
             const isCustomFormula = !statValue && (/[a-zA-Z]/.test(diceType) || /[+\-*/]/.test(diceType));
+            const breakdownStr = String(data.diceType || rolled);
 
             if (wasCrit) {
-              const breakdownStr = `${rolled}!`;
               const chainMod = isCustomFormula ? 0 : modifier;
               setCritChain({
                 chainCount: 0,
@@ -1233,7 +1233,7 @@ export default function CharacterSheet() {
                   maxChainCount: -1,
                   diceType: data.diceType,
                   label: lbl,
-                  rolls: [{ label: "Roll 1", breakdown: String(rolled), total: rolled }]
+                  rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
                 });
               } else {
                 setLastRoll({
@@ -1244,7 +1244,7 @@ export default function CharacterSheet() {
                   maxChainCount: -1,
                   diceType: data.diceType,
                   label: lbl,
-                  rolls: [{ label: "Roll 1", breakdown: String(rolled), total: rolled }]
+                  rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
                 });
               }
             }
@@ -1276,7 +1276,7 @@ export default function CharacterSheet() {
             const wasCrit = (data as any).isCrit ?? false;
             const newTotal = runningDiceTotal + rolled;
             
-            const breakdownStr = rolled + (wasCrit ? "!" : "");
+            const breakdownStr = String(data.diceType || rolled);
             const rollTotal = rolled;
             const newRolls = [...prevRolls, { label: `Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
 
@@ -1652,10 +1652,11 @@ export default function CharacterSheet() {
           setTimeout(() => {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
+            const breakdownStr = String(data.diceType || rolled);
             if (wasCrit) {
-              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: `${rolled}!`, total: rolled }] });
+              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             } else {
-              setLastRoll({ rawRoll: rolled, modifier: mod, total: rolled + mod, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: String(rolled), total: rolled }] });
+              setLastRoll({ rawRoll: rolled, modifier: mod, total: rolled + mod, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             }
             setRollingDice(null);
           }, 600);
@@ -1732,10 +1733,11 @@ export default function CharacterSheet() {
               const rolled = data.result ?? 0;
               const wasCrit = (data as any).isCrit ?? false;
               const chainDie = ability.rollFormula.split("+").pop() ?? ability.rollFormula;
+              const breakdownStr = String(data.diceType || rolled);
               if (wasCrit) {
-                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: `${rolled}!`, total: rolled }] });
+                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               } else {
-                setLastRoll({ rawRoll: rolled, modifier: 0, total: rolled, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: String(rolled), total: rolled }] });
+                setLastRoll({ rawRoll: rolled, modifier: 0, total: rolled, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               }
               setRollingDice(null);
             }, 600);
