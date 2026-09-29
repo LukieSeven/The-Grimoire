@@ -561,6 +561,8 @@ export default function CharacterSheet() {
     modifier: number;
     label: string;
     lastRolledValue: number;
+    statValue?: number;
+    familiarId?: string | number;
     rolls: { label: string; breakdown: string; total: number }[];
   } | null>(null);
 
@@ -1222,6 +1224,7 @@ export default function CharacterSheet() {
                 modifier: chainMod,
                 label: lbl,
                 lastRolledValue: rolled,
+                statValue,
                 rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
               });
             } else {
@@ -1265,11 +1268,11 @@ export default function CharacterSheet() {
 
   const handleChainRoll = () => {
     if (!critChain) return;
-    const { chainDie, runningDiceTotal, modifier, label, chainCount, rolls: prevRolls } = critChain;
+    const { chainDie, runningDiceTotal, modifier, label, chainCount, statValue, familiarId, rolls: prevRolls } = critChain;
     setRollingDice("chain");
     
     createRoll.mutate(
-      { id, data: { diceType: chainDie, modifier: 0, label } },
+      { id, data: { diceType: chainDie, modifier: 0, label, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
         onSuccess: (data) => {
           setTimeout(() => {
@@ -1283,7 +1286,7 @@ export default function CharacterSheet() {
             const newRolls = [...prevRolls, { label: `Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
 
             if (wasCrit) {
-              setCritChain({ chainCount: chainCount + 1, chainDie, runningDiceTotal: newTotal, modifier, label, lastRolledValue: rolled, rolls: newRolls });
+              setCritChain({ chainCount: chainCount + 1, chainDie, runningDiceTotal: newTotal, modifier, label, lastRolledValue: rolled, statValue, familiarId, rolls: newRolls });
             } else {
               setLastRoll({ rawRoll: newTotal, modifier, total: newTotal + modifier, hadCrit: true, maxChainCount: chainCount, diceType: chainDie, label, rolls: newRolls });
               setCritChain(null);
@@ -1657,7 +1660,7 @@ export default function CharacterSheet() {
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             if (wasCrit) {
-              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             } else {
               setLastRoll({ rawRoll: rolled, modifier: mod, total: rolled + mod, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             }
@@ -1739,7 +1742,7 @@ export default function CharacterSheet() {
               const rawDiceStr = String(data.diceType || "");
               const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
               if (wasCrit) {
-                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               } else {
                 setLastRoll({ rawRoll: rolled, modifier: 0, total: rolled, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               }
@@ -3592,24 +3595,40 @@ export default function CharacterSheet() {
               const fullName = stat.key.charAt(0).toUpperCase() + stat.key.slice(1);
 
               return (
-                <Card id={`stat-card-${stat.key}`} key={stat.key} className="bg-card border-border/50 shadow-sm flex flex-col justify-between rounded-none">
+                <Card 
+                  id={`stat-card-${stat.key}`} 
+                  key={stat.key} 
+                  onClick={() => handleStatRoll(stat.key, stat.label)}
+                  className="bg-card border-border/50 hover:border-primary/60 transition-all cursor-pointer shadow-sm flex flex-col justify-between rounded-none group"
+                >
                   <CardContent className="p-3 space-y-2">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="text-xs font-serif font-extrabold text-foreground capitalize tracking-wide">{fullName}</h4>
+                        <h4 className="text-xs font-serif font-extrabold text-foreground group-hover:text-primary transition-colors capitalize tracking-wide">{fullName}</h4>
                         <p className="text-[10px] text-muted-foreground leading-snug line-clamp-1">{stat.desc}</p>
                       </div>
+                      <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary bg-background/45 rounded-none h-5 px-1 py-0">
+                        {getDiceLabel(baseValue)}
+                      </Badge>
                     </div>
 
                     <div className="flex items-baseline justify-between py-0.5">
                       <div className="flex items-baseline gap-1">
                         <span className="text-3xl font-serif font-bold text-primary">{baseValue}</span>
+                        <span className="text-[11px] font-mono text-primary/80 font-bold">
+                          +{autoModifiers[stat.key]}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono text-muted-foreground/60">{getDiceLabel(baseValue)}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-1 group-hover:text-primary transition-colors">
+                        <Dice5 className="w-3.5 h-3.5" /> Roll
+                      </span>
                     </div>
 
                     {/* Stat training tracker */}
-                    <div className="border-t border-border/20 pt-2 flex flex-col gap-1">
+                    <div 
+                      className="border-t border-border/20 pt-2 flex flex-col gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="flex justify-between items-center text-[9px] font-mono">
                         <span className="text-muted-foreground uppercase">Training Points</span>
                         <span className="text-primary font-bold">{curTraining}/{baseValue}</span>
@@ -3626,7 +3645,10 @@ export default function CharacterSheet() {
                         <div className="flex border border-border/50">
                           <button
                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
-                            onClick={() => handleStatTrain(stat.key, "down")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatTrain(stat.key, "down");
+                            }}
                             disabled={baseValue <= 0 && curTraining === 0}
                           >
                             -
@@ -3634,7 +3656,10 @@ export default function CharacterSheet() {
                           <div className="h-5 w-[1px] bg-border/50" />
                           <button
                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
-                            onClick={() => handleStatTrain(stat.key, "up")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatTrain(stat.key, "up");
+                            }}
                           >
                             +
                           </button>

@@ -4,6 +4,10 @@ import {
   useListUnlockedPasswords, 
   useLockPassword 
 } from "@/hooks/useStorage";
+import { 
+  getDiceLabel, 
+  getModifierForStat 
+} from "@/lib/storage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -222,9 +226,10 @@ export default function Chronicle() {
 
     // Search roster for matching character or familiar
     let foundName = query;
-    let agility = 10;
+    let agility = 0;
     let hp = 10;
     let maxHp = 10;
+    let rank = "Iron";
     let charId: any = null;
 
     const lowerQuery = query.toLowerCase();
@@ -232,7 +237,8 @@ export default function Chronicle() {
 
     if (matchedChar) {
       foundName = matchedChar.name;
-      agility = matchedChar.agility ?? 10;
+      agility = matchedChar.agility ?? 0;
+      rank = matchedChar.rank || "Iron";
       hp = matchedChar.currentHp ?? 10;
       maxHp = matchedChar.maxHp ?? 10;
       charId = matchedChar.id;
@@ -243,7 +249,8 @@ export default function Chronicle() {
           const fam = c.familiars.find((f: any) => f.name?.toLowerCase() === lowerQuery);
           if (fam) {
             foundName = fam.name;
-            agility = fam.agility ?? 10;
+            agility = fam.agility ?? 0;
+            rank = c.rank || "Iron";
             hp = fam.currentHp ?? 10;
             maxHp = fam.maxHp ?? 10;
             break;
@@ -252,10 +259,29 @@ export default function Chronicle() {
       }
     }
 
-    // Agility Modifier = Math.floor((agility - 10) / 2)
-    const agiMod = Math.floor((agility - 10) / 2);
-    const d20 = Math.floor(Math.random() * 20) + 1;
-    const totalInit = d20 + agiMod;
+    // Agility Initiative Roll using AEtherborne stat die & rank modifier
+    const agiDie = getDiceLabel(agility);
+    const agiMod = getModifierForStat(agility, rank);
+    const sides = parseInt(agiDie.replace("d", ""), 10) || 4;
+    const rolled = Math.floor(Math.random() * sides) + 1;
+    const dieTarget = Math.min(sides, agility);
+    let breakdown: string;
+    let effectiveDie: number;
+    let isCrit = false;
+
+    if (rolled === dieTarget) {
+      breakdown = String(rolled);
+      effectiveDie = rolled;
+      isCrit = true;
+    } else if (rolled > dieTarget) {
+      breakdown = `${rolled}(${dieTarget})`;
+      effectiveDie = dieTarget;
+    } else {
+      breakdown = String(rolled);
+      effectiveDie = rolled;
+    }
+
+    const totalInit = effectiveDie + agiMod;
 
     // Add to combatants array and auto-sort descending by initiative score
     setCombatants(prev => [...prev, {
@@ -271,24 +297,24 @@ export default function Chronicle() {
     setInitName("");
 
     // Create roll history log & toast notification
-    const modStr = agiMod >= 0 ? `+${agiMod}` : `${agiMod}`;
+    const modStr = agiMod !== 0 ? (agiMod >= 0 ? `+${agiMod}` : `${agiMod}`) : "";
     const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
     rolls.unshift({
       id: Date.now(),
       characterId: charId ?? 0,
       diceType: "agility-init",
-      result: d20,
+      result: effectiveDie,
       modifier: agiMod,
       total: totalInit,
-      label: `Agility Initiative: ${foundName} [d20:${d20}${modStr}=${totalInit}]`,
-      isCrit: d20 === 20,
+      label: `Agility Initiative: ${foundName} [${agiDie}:${breakdown}${modStr}=${totalInit}]`,
+      isCrit,
       critBonus: null,
       rolledAt: new Date().toISOString(),
     });
     localStorage.setItem("aetherborne_rolls", JSON.stringify(rolls.slice(0, 100)));
     refreshRecentRolls();
 
-    toast.success(`${foundName} rolled Agility Initiative: ${totalInit} (d20: ${d20}${modStr})`);
+    toast.success(`${foundName} rolled Agility Initiative: ${totalInit} (${agiDie}: ${breakdown}${modStr})`);
   };
 
   const stepTurn = (direction: number) => {
@@ -510,18 +536,19 @@ export default function Chronicle() {
   };
 
   // ───── DICE ROLL LOGS ENGINE ─────
-  const logRoll = (charName: string, label: string, formula: string, result: string, total: number, charId?: number) => {
+  const logRoll = (charName: string, label: string, formula: string, result: string, total: number, charId?: number, isCrit: boolean = false) => {
     try {
       const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
       const newRoll = {
         id: Date.now() + Math.random(),
-        characterId: charId,
+        characterId: charId ?? 0,
         characterName: charName,
         rollType: "cit_check",
         label,
         formula,
         result,
         total,
+        isCrit,
         rolledAt: new Date().toISOString()
       };
       rolls.unshift(newRoll);
@@ -536,14 +563,7 @@ export default function Chronicle() {
   const evaluateFormulaRoll = (formula: string) => {
     try {
       const clean = formula.replace(/\s+/g, "").toLowerCase();
-      // Match d20 + modifiers
-      const d20Match = clean.match(/d20([+-]\d+)?/);
-      if (d20Match) {
-        const roll = Math.floor(Math.random() * 20) + 1;
-        const mod = d20Match[1] ? parseInt(d20Match[1]) : 0;
-        return { total: roll + mod, result: `${roll}${mod >= 0 ? "+" : ""}${mod}` };
-      }
-      // Match general dice like 2d6+3, 1d8-1
+      // Match general dice like 2d6+3, 1d8-1, d6+2
       const diceMatch = clean.match(/(\d+)?d(\d+)([+-]\d+)?/);
       if (diceMatch) {
         const count = diceMatch[1] ? parseInt(diceMatch[1]) : 1;
@@ -556,7 +576,7 @@ export default function Chronicle() {
           rolls.push(r);
           sum += r;
         }
-        return { total: sum + mod, result: `${rolls.join("+")}${mod >= 0 ? "+" : ""}${mod}` };
+        return { total: sum + mod, result: `${rolls.join("+")}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}` };
       }
     } catch (e) {
       console.error(e);
@@ -564,37 +584,61 @@ export default function Chronicle() {
     return null;
   };
 
-  const rollStat = (charName: string, label: string, score: number, charId?: number) => {
-    const mod = Math.floor((score - 10) / 2);
-    const roll = Math.floor(Math.random() * 20) + 1;
-    const total = roll + mod;
-    const formula = `d20${mod >= 0 ? "+" : ""}${mod}`;
-    const result = `${roll}${mod >= 0 ? "+" : ""}${mod}`;
+  const rollStat = (charName: string, label: string, score: number, charId?: number, rank: string = "Iron") => {
+    const diceType = getDiceLabel(score);
+    const mod = getModifierForStat(score, rank);
+    const sides = parseInt(diceType.replace("d", ""), 10) || 4;
+    const rolled = Math.floor(Math.random() * sides) + 1;
+    const dieTarget = Math.min(sides, score);
+    let breakdown: string;
+    let effectiveDie: number;
+    let isCrit = false;
+
+    if (rolled === dieTarget) {
+      breakdown = String(rolled);
+      effectiveDie = rolled;
+      isCrit = true;
+    } else if (rolled > dieTarget) {
+      breakdown = `${rolled}(${dieTarget})`;
+      effectiveDie = dieTarget;
+    } else {
+      breakdown = String(rolled);
+      effectiveDie = rolled;
+    }
+
+    const total = effectiveDie + mod;
+    const formula = `${diceType}${mod >= 0 ? "+" : ""}${mod}`;
+    const result = `${breakdown}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}`;
     
-    logRoll(charName, `${label} Check`, formula, result, total, charId);
+    logRoll(charName, `${label} Check`, formula, result, total, charId, isCrit);
   };
 
   const rollFavorite = (charName: string, slot: FavoriteSlot, itemBundle: any) => {
     const charId = itemBundle.character.id;
+    const rank = itemBundle.character.rank || "Iron";
     if (slot.type === "attribute") {
-      const score = itemBundle.character[slot.targetId] || 10;
-      rollStat(charName, slot.label, score, charId);
+      const score = itemBundle.character[slot.targetId] || 0;
+      rollStat(charName, slot.label, score, charId, rank);
       return;
     }
 
     // Try matching weapon
     if (slot.type === "weapon") {
       const weapon = itemBundle.equipment?.find((e: any) => e.id === Number(slot.targetId));
-      if (weapon && weapon.rollFormula) {
-        const parsed = evaluateFormulaRoll(weapon.rollFormula);
+      if (weapon && weapon.diceType) {
+        const parsed = evaluateFormulaRoll(weapon.diceType);
         if (parsed) {
-          logRoll(charName, slot.label, weapon.rollFormula, parsed.result, parsed.total, charId);
+          logRoll(charName, slot.label, weapon.diceType, parsed.result, parsed.total, charId);
           return;
         }
       }
-      const mod = Math.floor(((itemBundle.character.power || 10) - 10) / 2);
-      const roll = Math.floor(Math.random() * 20) + 1;
-      logRoll(charName, slot.label, "d20+pow", `${roll}+${mod}`, roll + mod, charId);
+      const power = itemBundle.character.power || 0;
+      const mod = getModifierForStat(power, rank);
+      const dice = weapon?.diceType || "d8";
+      const sides = parseInt(dice.replace("d", ""), 10) || 8;
+      const rolled = Math.floor(Math.random() * sides) + 1;
+      const total = rolled + mod;
+      logRoll(charName, slot.label, `${dice}+pow`, `${rolled}${mod >= 0 ? `+${mod}` : mod}`, total, charId);
       return;
     }
 
@@ -608,31 +652,49 @@ export default function Chronicle() {
           return;
         }
       }
-      const mod = Math.floor(((itemBundle.character.spirit || 10) - 10) / 2);
-      const roll = Math.floor(Math.random() * 20) + 1;
-      logRoll(charName, ability?.nickname || slot.label, "d20+spi", `${roll}+${mod}`, roll + mod, charId);
+      const spirit = itemBundle.character.spirit || 0;
+      const mod = getModifierForStat(spirit, rank);
+      const dice = getDiceLabel(spirit);
+      const sides = parseInt(dice.replace("d", ""), 10) || 4;
+      const rolled = Math.floor(Math.random() * sides) + 1;
+      const total = rolled + mod;
+      logRoll(charName, ability?.nickname || slot.label, `${dice}+spi`, `${rolled}${mod >= 0 ? `+${mod}` : mod}`, total, charId);
       return;
     }
 
     // Try matching skill
     if (slot.type === "skill") {
       const skill = itemBundle.skills?.find((s: any) => s.id === Number(slot.targetId));
-      if (skill && skill.rollFormula) {
-        const parsed = evaluateFormulaRoll(skill.rollFormula);
-        if (parsed) {
-          logRoll(charName, slot.label, skill.rollFormula, parsed.result, parsed.total, charId);
-          return;
+      if (skill) {
+        const val = Number(skill.value) || 0;
+        const train = Number(skill.training) || 0;
+        const mod = getModifierForStat(val, rank) + train;
+        const dice = getDiceLabel(val);
+        const sides = parseInt(dice.replace("d", ""), 10) || 4;
+        const rolled = Math.floor(Math.random() * sides) + 1;
+        const dieTarget = Math.min(sides, val);
+        let breakdown: string;
+        let effectiveDie: number;
+        let isCrit = false;
+        if (rolled === dieTarget) {
+          breakdown = String(rolled);
+          effectiveDie = rolled;
+          isCrit = true;
+        } else if (rolled > dieTarget) {
+          breakdown = `${rolled}(${dieTarget})`;
+          effectiveDie = dieTarget;
+        } else {
+          breakdown = String(rolled);
+          effectiveDie = rolled;
         }
+        const total = effectiveDie + mod;
+        logRoll(charName, slot.label, `${dice}${mod >= 0 ? "+" : ""}${mod}`, `${breakdown}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}`, total, charId, isCrit);
+        return;
       }
-      const mod = Math.floor(((itemBundle.character.precision || 10) - 10) / 2);
-      const roll = Math.floor(Math.random() * 20) + 1;
-      logRoll(charName, slot.label, "d20+pre", `${roll}+${mod}`, roll + mod, charId);
-      return;
     }
 
-    // Fallback standard D20 check
-    const roll = Math.floor(Math.random() * 20) + 1;
-    logRoll(charName, slot.label, "d20", `${roll}`, roll, charId);
+    // Fallback standard stat check
+    rollStat(charName, slot.label, 0, charId, rank);
   };
 
   const getFavorites = (char: any): (FavoriteSlot | null)[] => {
@@ -1233,28 +1295,30 @@ export default function Chronicle() {
                             <div className="grid grid-cols-6 gap-1 bg-black/15 p-1 rounded-md mt-1.5 z-20 relative">
                               {/* Row 1 Stats & Favorites */}
                               {[
-                                { type: "stat", key: "power", label: "POW", val: item.character.power || 10 },
-                                { type: "stat", key: "vitality", label: "VIT", val: item.character.vitality || 10 },
-                                { type: "stat", key: "spirit", label: "SPI", val: item.character.spirit || 10 },
+                                { type: "stat", key: "power", label: "POW", val: item.character.power || 0 },
+                                { type: "stat", key: "vitality", label: "VIT", val: item.character.vitality || 0 },
+                                { type: "stat", key: "spirit", label: "SPI", val: item.character.spirit || 0 },
                                 { type: "favorite", idx: 0 },
                                 { type: "favorite", idx: 1 },
                                 { type: "favorite", idx: 2 },
                                 // Row 2 Stats & Favorites
-                                { type: "stat", key: "agility", label: "AGI", val: item.character.agility || 10 },
-                                { type: "stat", key: "willpower", label: "WIL", val: item.character.willpower || 10 },
-                                { type: "stat", key: "charisma", label: "CHA", val: item.character.charisma || 10 },
+                                { type: "stat", key: "agility", label: "AGI", val: item.character.agility || 0 },
+                                { type: "stat", key: "willpower", label: "WIL", val: item.character.willpower || 0 },
+                                { type: "stat", key: "charisma", label: "CHA", val: item.character.charisma || 0 },
                                 { type: "favorite", idx: 3 },
                                 { type: "favorite", idx: 4 },
                                 { type: "favorite", idx: 5 }
                               ].map((cell, cIdx) => {
                                 if (cell.type === "stat") {
-                                  const mod = Math.floor((cell.val! - 10) / 2);
+                                  const rank = item.character.rank || "Iron";
+                                  const mod = getModifierForStat(cell.val!, rank);
+                                  const die = getDiceLabel(cell.val!);
                                   return (
                                     <button
                                       key={cIdx}
-                                      onClick={() => rollStat(item.character.name, cell.label!, cell.val!, item.character.id)}
+                                      onClick={() => rollStat(item.character.name, cell.label!, cell.val!, item.character.id, rank)}
                                       className="text-[8px] font-sans text-center border border-border/10 py-1 bg-stone-950/30 rounded hover:bg-sky-500/10 hover:border-sky-500/30 text-stone-400 font-bold transition-all h-9 cursor-pointer flex flex-col justify-between"
-                                      title={`${cell.label} check: d20+${mod}`}
+                                      title={`${cell.label} check: ${die}+${mod}`}
                                     >
                                       <span className="text-[7px] text-stone-500 leading-none">{cell.label}</span>
                                       <span className="text-foreground leading-none font-bold">{mod >= 0 ? `+${mod}` : mod}</span>
@@ -1456,20 +1520,36 @@ export default function Chronicle() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                     {[
-                      { label: "Power", val: inspectingChar.character.power },
-                      { label: "Vitality", val: inspectingChar.character.vitality },
-                      { label: "Spirit", val: inspectingChar.character.spirit },
-                      { label: "Agility", val: inspectingChar.character.agility },
-                      { label: "Endurance", val: inspectingChar.character.endurance },
-                      { label: "Precision", val: inspectingChar.character.precision },
-                      { label: "Willpower", val: inspectingChar.character.willpower },
-                      { label: "Charisma", val: inspectingChar.character.charisma }
-                    ].map(st => (
-                      <div key={st.label} className="border border-border/40 bg-background/30 p-2.5 rounded-md">
-                        <div className="text-[10px] font-bold text-stone-500 uppercase">{st.label}</div>
-                        <div className="text-lg font-serif font-bold text-foreground mt-0.5">{st.val}</div>
-                      </div>
-                    ))}
+                      { key: "power", label: "Power", val: inspectingChar.character.power || 0 },
+                      { key: "vitality", label: "Vitality", val: inspectingChar.character.vitality || 0 },
+                      { key: "spirit", label: "Spirit", val: inspectingChar.character.spirit || 0 },
+                      { key: "agility", label: "Agility", val: inspectingChar.character.agility || 0 },
+                      { key: "endurance", label: "Endurance", val: inspectingChar.character.endurance || 0 },
+                      { key: "precision", label: "Precision", val: inspectingChar.character.precision || 0 },
+                      { key: "willpower", label: "Willpower", val: inspectingChar.character.willpower || 0 },
+                      { key: "charisma", label: "Charisma", val: inspectingChar.character.charisma || 0 }
+                    ].map(st => {
+                      const rank = inspectingChar.character.rank || "Iron";
+                      const mod = getModifierForStat(st.val, rank);
+                      const die = getDiceLabel(st.val);
+                      return (
+                        <div 
+                          key={st.label} 
+                          onClick={() => rollStat(inspectingChar.character.name, st.label, st.val, inspectingChar.character.id, rank)}
+                          className="border border-border/40 hover:border-primary/60 bg-background/30 p-2.5 rounded-md cursor-pointer transition-colors group"
+                          title={`Roll ${st.label}: ${die}+${mod}`}
+                        >
+                          <div className="flex justify-between items-center text-[10px] font-bold text-stone-500 uppercase">
+                            <span className="group-hover:text-primary transition-colors">{st.label}</span>
+                            <span className="font-mono text-primary/80">{die}</span>
+                          </div>
+                          <div className="text-lg font-serif font-bold text-foreground mt-0.5 flex items-baseline justify-between">
+                            <span>{st.val}</span>
+                            <span className="text-[10px] font-mono text-primary font-bold">+{mod}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="border border-border/30 bg-background/20 p-4 rounded-md space-y-2">
