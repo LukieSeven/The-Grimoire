@@ -728,6 +728,7 @@ export function useCreateRoll() {
         result = r.result;
         isCrit = r.isCrit;
         total = result + modifier;
+        diceTypeStr = String(r.result);
       }
 
       const roll = storage.addRoll({

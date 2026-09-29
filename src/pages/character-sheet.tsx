@@ -1210,7 +1210,8 @@ export default function CharacterSheet() {
             });
 
             const isCustomFormula = !statValue && (/[a-zA-Z]/.test(diceType) || /[+\-*/]/.test(diceType));
-            const breakdownStr = String(data.diceType || rolled);
+            const rawDiceStr = String(data.diceType || "");
+            const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
 
             if (wasCrit) {
               const chainMod = isCustomFormula ? 0 : modifier;
@@ -1276,7 +1277,8 @@ export default function CharacterSheet() {
             const wasCrit = (data as any).isCrit ?? false;
             const newTotal = runningDiceTotal + rolled;
             
-            const breakdownStr = String(data.diceType || rolled);
+            const rawDiceStr = String(data.diceType || "");
+            const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             const rollTotal = rolled;
             const newRolls = [...prevRolls, { label: `Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
 
@@ -1652,7 +1654,8 @@ export default function CharacterSheet() {
           setTimeout(() => {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
-            const breakdownStr = String(data.diceType || rolled);
+            const rawDiceStr = String(data.diceType || "");
+            const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             if (wasCrit) {
               setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             } else {
@@ -1733,7 +1736,8 @@ export default function CharacterSheet() {
               const rolled = data.result ?? 0;
               const wasCrit = (data as any).isCrit ?? false;
               const chainDie = ability.rollFormula.split("+").pop() ?? ability.rollFormula;
-              const breakdownStr = String(data.diceType || rolled);
+              const rawDiceStr = String(data.diceType || "");
+              const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
               if (wasCrit) {
                 setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               } else {
