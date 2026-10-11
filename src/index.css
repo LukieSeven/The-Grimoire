@@ -3,6 +3,8 @@
 @import "tw-animate-css";
 
 /* Theme variables own every color. Textures add neutral detail only to the page background. */
+.character-section-tabs > button:first-child { margin-inline-start: auto; }
+.character-section-tabs > button:last-child { margin-inline-end: auto; }
 /* Readability floor for compact metadata; retain larger headings and numerical values. */
 .grimoire-shell :is([class~="text-[8px]"], [class~="text-[9px]"], [class~="text-[10px]"]) { font-size: .75rem; line-height: 1.4; }
 .grimoire-shell [class~="text-[11px]"] { font-size: .8125rem; line-height: 1.4; }

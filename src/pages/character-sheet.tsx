@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { upsertCharacterInitiative } from "@/lib/initiative-entry";
 import { CurrencyAdjustments } from "@/components/currency-adjustments";
 import { formatRollBreakdown } from "@/lib/roll-display";
 import { useLocation, useParams } from "wouter";
@@ -548,6 +549,7 @@ export default function CharacterSheet() {
     modifier: number;
     label: string;
     lastRolledValue: number;
+    onRollTotal?: (total: number) => void;
     statValue?: number;
     familiarId?: string | number;
     rolls: { label: string; breakdown: string; total: number }[];
@@ -1132,7 +1134,7 @@ export default function CharacterSheet() {
   };
 
   // ── Dice rolling handlers ─────────────────────────────────
-  const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number, familiarId?: string | number, rollPurpose?: "attack" | "check" | "resistance", rollScope?: string, onResolved?: () => void) => {
+  const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number, familiarId?: string | number, rollPurpose?: "attack" | "check" | "resistance", rollScope?: string, onResolved?: () => void, onRollTotal?: (total: number) => void) => {
     if (familiarId !== undefined && !character.familiars?.some(familiar => familiar.id === familiarId)) { toast.error("Record this familiar in Familiars before rolling its imported abilities."); return; }
     const rollKey = label || diceType;
     const varsForMod = {
@@ -1182,9 +1184,10 @@ export default function CharacterSheet() {
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
 
             if (wasCrit) {
-              const chainMod = isCustomFormula ? 0 : modifier;
+              const chainMod = onRollTotal ? data.modifier ?? modifier : isCustomFormula ? 0 : modifier;
               setCritChain({
                 chainCount: 0,
+                onRollTotal,
                 chainDie,
                 runningDiceTotal: rolled,
                 modifier: chainMod,
@@ -1195,6 +1198,7 @@ export default function CharacterSheet() {
                 rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
               });
             } else {
+              onRollTotal?.(data.total);
               if (isCustomFormula) {
                 setLastRoll({
                   rawRoll: rolled,
@@ -1235,7 +1239,7 @@ export default function CharacterSheet() {
 
   const handleChainRoll = () => {
     if (!critChain) return;
-    const { chainDie, runningDiceTotal, modifier, label, chainCount, statValue, familiarId, rolls: prevRolls } = critChain;
+    const { chainDie, runningDiceTotal, modifier, label, chainCount, statValue, familiarId, rolls: prevRolls, onRollTotal } = critChain;
     setRollingDice("chain");
     
     createRoll.mutate(
@@ -1253,8 +1257,9 @@ export default function CharacterSheet() {
             const newRolls = [...prevRolls, { label: `Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
 
             if (wasCrit) {
-              setCritChain({ chainCount: chainCount + 1, chainDie, runningDiceTotal: newTotal, modifier, label, lastRolledValue: rolled, statValue, familiarId, rolls: newRolls });
+              setCritChain({ chainCount: chainCount + 1, chainDie, runningDiceTotal: newTotal, modifier, label, lastRolledValue: rolled, statValue, familiarId, rolls: newRolls, onRollTotal });
             } else {
+              onRollTotal?.(newTotal + modifier);
               setLastRoll({ rawRoll: newTotal, modifier, total: newTotal + modifier, hadCrit: true, maxChainCount: chainCount, diceType: chainDie, label, rolls: newRolls });
               setCritChain(null);
             }
@@ -2918,7 +2923,18 @@ export default function CharacterSheet() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleStatRoll("agility", "Initiative")}
+                      disabled={!!rollingDice || !!critChain}
+                      onClick={() => {
+                        const existing = combatants.find(entry => entry.id === `character:${id}` || entry.name.trim().toLowerCase() === character.name.trim().toLowerCase());
+                        if (existing && !window.confirm("Do you want to overwrite and re-roll your initiative?")) return;
+                        handleRoll(diceLabels.agility, "Initiative Roll", finalStats.agility, autoModifiers.agility, undefined, "check", "agility", undefined, total => {
+                        setCombatants(current => {
+                          const next = upsertCharacterInitiative(current, currentTurnIdx, id, character.name, total);
+                          setCurrentTurnIdx(next.turn);
+                          return next.combatants;
+                        });
+                        });
+                      }}
                       className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
                       title="Roll Initiative (Agility Check)"
                     >
@@ -3539,7 +3555,7 @@ export default function CharacterSheet() {
       </div>
 
       {/* ── TABBED TOOL SCREEN BAR ── */}
-      <div className="flex gap-1 border-b border-border/40 mt-6 overflow-x-auto pb-1 flex-nowrap" aria-label="Character sections">
+      <div className="character-section-tabs flex gap-1 border-b border-border/40 mt-6 overflow-x-auto pb-1 flex-nowrap" aria-label="Character sections">
         {[
           { key: "stats", label: "Stats and Essence", icon: Hammer },
           { key: "abilities", label: "Abilities", icon: Flame },
