@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { CurrencyAdjustments } from "@/components/currency-adjustments";
 import { formatRollBreakdown } from "@/lib/roll-display";
 import { useLocation, useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
@@ -287,7 +288,7 @@ export default function CharacterSheet() {
   };
 
   // ── Tab State ─────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "essences" | "abilities" | "notes" | "familiar" | "settings">("stats");
+  const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "abilities" | "notes" | "familiar" | "settings">("stats");
 
   // ── Resource state ────────────────────────────────────────
   const [hp, setHp] = useState<number | null>(null);
@@ -2545,7 +2546,8 @@ export default function CharacterSheet() {
     <div className="w-full p-3 sm:p-4 max-w-[96rem] mx-auto animate-in fade-in duration-500 space-y-4">
       
       {/* ── Top Header Controls ── */}
-      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-3.5 flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap rounded-lg shadow-sm w-full mb-4 flex-nowrap shrink-0">
+      <div className="grimoire-card bg-card/45 backdrop-blur-md border border-border/40 rounded-lg shadow-sm w-full mb-4 shrink-0">
+      <div className="p-3.5 flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap flex-nowrap">
         <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => setLocation("/grimoire")} className="h-8 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3 font-bold text-muted-foreground transition-all">
             <ArrowLeft className="w-3.5 h-3.5 text-primary" />
@@ -2578,16 +2580,17 @@ export default function CharacterSheet() {
         </div>
       </div>
 
+      </div>
       {/* Resources occupy half the desktop workspace; tracker and dice each occupy a quarter. */}
       <div className="grimoire-workspace grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start" style={{ "--workspace-panel-height": "clamp(26rem, 50dvh, 28rem)" } as React.CSSProperties}>
 
         {/* Character identity and resources share the wider left panel. */}
-        <div className="md:col-span-2 lg:col-span-2 min-w-0 h-[var(--workspace-panel-height)]">
-          <Card tabIndex={0} aria-label="Character resources" className="bg-card border-border/40 shadow-lg relative h-full max-h-full overflow-hidden rounded-none">
+        <div className="md:col-span-2 lg:col-span-2 min-w-0">
+          <Card tabIndex={0} aria-label="Character resources" className="character-resource-card bg-card border-border/40 shadow-lg relative min-h-[var(--workspace-panel-height)] rounded-none">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10" />
             
-            <CardContent className="resource-zone p-4 h-full min-h-0 flex flex-col gap-3">
-              <div className="workspace-scroll flex-1 min-h-0 overflow-y-auto space-y-3">
+            <CardContent className="resource-zone p-4 flex flex-col gap-3">
+              <div className="space-y-3">
               {adjustedStats.warnings.map(warning => <p key={warning} role="alert" className="text-xs text-amber-400 border border-amber-500/40 rounded-md p-2">{warning}</p>)}
               {/* Profile HUD Header */}
               <div className="space-y-2 border-b border-border/30 pb-2">
@@ -2595,7 +2598,7 @@ export default function CharacterSheet() {
                 <div className="flex justify-between items-center gap-3">
                   {/* Left: Portrait, Name, Rank & Race Badges */}
                   <div className="flex items-center gap-4 min-w-0">
-                    <div className="relative group w-16 h-16 rounded-full overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
+                    <div className="character-portrait relative group w-20 h-20 sm:w-24 sm:h-24 aspect-square rounded-lg overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
                       {character.avatar ? (
                         <img src={character.avatar} alt={character.name} className="w-full h-full object-cover" />
                       ) : (
@@ -2611,7 +2614,7 @@ export default function CharacterSheet() {
                             const file = e.target.files?.[0];
                             if (file) {
                               try {
-                                const dataUrl = await compressImage(file, 200, 200);
+                                const dataUrl = await compressImage(file, 1200, 1200);
                                 updateChar.mutate({ id, data: { avatar: dataUrl } }, {
                                   onSuccess: () => toast.success("Character portrait updated!")
                                 });
@@ -3264,7 +3267,7 @@ export default function CharacterSheet() {
 
       {/* ── Custom Favorites Hotbar ── */}
       <div className="favorites-belt mt-3 w-full">
-        <Card className="bg-card/75 border-border/40 p-4 rounded-none shadow-md">
+        <Card className="favorites-frame bg-card/75 border-border/40 p-4 rounded-lg shadow-md">
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" /> Favorites Hotbar
           </h3>
@@ -3536,15 +3539,14 @@ export default function CharacterSheet() {
       </div>
 
       {/* ── TABBED TOOL SCREEN BAR ── */}
-      <div className="flex gap-1 border-b border-border/40 mt-6 overflow-x-auto pb-1 flex-wrap">
+      <div className="flex gap-1 border-b border-border/40 mt-6 overflow-x-auto pb-1 flex-nowrap" aria-label="Character sections">
         {[
-          { key: "stats", label: "Stats & Training", icon: Hammer },
-          { key: "skills", label: "Skills", icon: BookText },
-          { key: "inventory", label: "Bag / Gear", icon: Coins },
-          { key: "essences", label: "Essence Imbuement", icon: Layers },
+          { key: "stats", label: "Stats and Essence", icon: Hammer },
           { key: "abilities", label: "Abilities", icon: Flame },
-          { key: "notes", label: "Campaign Notes", icon: BookText },
+          { key: "skills", label: "Skills", icon: BookText },
           { key: "familiar", label: "Familiars", icon: UserCheck },
+          { key: "inventory", label: "Bag / Gear", icon: Coins },
+          { key: "notes", label: "Campaign Notes", icon: BookText },
           { key: "settings", label: "Settings", icon: Palette },
         ].map((tab) => {
           const isActive = activeTab === tab.key;
@@ -3553,7 +3555,7 @@ export default function CharacterSheet() {
               key={tab.key}
               variant="ghost"
               onClick={() => setActiveTab(tab.key as any)}
-              className={`rounded-none border-b-2 font-serif text-sm px-4 py-2 flex items-center gap-1.5 h-10 cursor-pointer ${
+              className={`shrink-0 whitespace-nowrap rounded-none border-b-2 font-serif text-xs sm:text-sm px-2 sm:px-3 py-2 flex items-center gap-1.5 h-10 cursor-pointer ${
                 isActive ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/40"
               }`}
             >
@@ -3672,6 +3674,110 @@ export default function CharacterSheet() {
             })}
           </div>
         </div>
+        )}
+
+        {/* ESSENCE IMBUEMENT — part of Stats and Essence */}
+        {activeTab === "stats" && (
+          <div className="space-y-4 mt-8">
+            <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
+              <div className="flex items-center gap-2.5">
+                <Layers className="w-5 h-5 text-primary" />
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-primary">Essence Imbuement</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Bind and align essence crystals to unlock attributes</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(slot => {
+                const essence = essences.find(e => e.slot === slot);
+                const label = slot === 1 ? "First Essence" : slot === 2 ? "Second Essence" : slot === 3 ? "Third Essence" : "Confluence";
+                const isExpanded = essence ? !!expandedEssences[essence.id] : false;
+
+                return (
+                  <Card key={slot} className={`bg-card border-border/50 relative overflow-hidden flex flex-col justify-between rounded-none ${
+                    slot === 4 ? "border-amber-500/30 bg-amber-500/[0.02]" : ""
+                  }`}>
+                    {slot === 4 && (
+                      <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
+                    )}
+
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[9px] uppercase tracking-widest font-mono text-muted-foreground font-bold">
+                          {label}
+                        </span>
+                        {essence && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={(e) => { e.stopPropagation(); deleteEssence.mutate({ id: essence.id, charId: id }); }}>
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+
+                      {essence ? (
+                        <div
+                          className="space-y-1.5 cursor-pointer select-none"
+                          onClick={() => setExpandedEssences(prev => ({ ...prev, [essence.id]: !isExpanded }))}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <h4 className={`font-serif text-lg font-bold leading-tight ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
+                            <ChevronDown className={`w-4 h-4 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                          </div>
+                          <div
+                            className={`text-xs text-muted-foreground/80 font-serif leading-relaxed ${isExpanded ? "whitespace-pre-wrap animate-in slide-in-from-top-1 duration-150" : "line-clamp-3"}`}
+                            dangerouslySetInnerHTML={{ __html: parseMarkdown(essence.description || "*No description.*") }}
+                          />
+                        </div>
+                      ) : slot === 4 ? (
+                        <div className="py-4 text-center">
+                          <Button
+                            size="sm"
+                            className="bg-amber-500/20 border border-amber-500/30 text-amber-500 hover:bg-amber-500/30 h-7 text-xs font-serif rounded-none cursor-pointer font-bold transition-all"
+                            onClick={() => setEssenceSlotInput(slot)}
+                          >
+                            + Unleash Confluence
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="py-4 text-center">
+                          <Button
+                            size="sm"
+                            className="bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 h-7 text-xs font-serif rounded-none cursor-pointer"
+                            onClick={() => setEssenceSlotInput(slot)}
+                          >
+                            + Add Essence
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {essenceSlotInput !== null && (
+              <Card className="bg-card border-primary/20 mt-4 max-w-lg animate-in slide-in-from-top-4 duration-300 rounded-none">
+                <CardContent className="p-4 space-y-4">
+                  <h4 className="font-serif text-lg text-primary font-bold">Attune Essence ({essenceSlotInput === 4 ? "Confluence" : `Slot ${essenceSlotInput}`})</h4>
+                  <form onSubmit={handleSaveEssence} className="space-y-3 text-xs">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Essence Name</label>
+                      <Input value={essenceName} onChange={e => setEssenceName(e.target.value)} required placeholder="e.g. Fire, Earth, Sky" className="bg-background text-sm rounded-none" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description</label>
+                      <Textarea value={essenceDesc} onChange={e => setEssenceDesc(e.target.value)} placeholder="Description of attunements..." className="bg-background text-sm font-serif rounded-none" />
+                    </div>
+                    <div className="flex justify-end gap-1.5 pt-2 border-t border-border/30">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setEssenceSlotInput(null)} className="rounded-none">Cancel</Button>
+                      <Button type="submit" size="sm" className="bg-primary text-primary-foreground font-serif rounded-none">Apply Essence</Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         )}
 
         {/* TAB 2: SKILLS (Card click rolls) */}
@@ -3825,7 +3931,7 @@ export default function CharacterSheet() {
                   <Coins className="w-4 h-4 text-primary" /> Currencies
                 </h4>
                 <Button size="sm" variant="ghost" className="h-7 text-xs text-primary px-2 rounded-none cursor-pointer" onClick={() => triggerAddInventory("currency")}>
-                  [Add]
+                  Add Currency
                 </Button>
               </div>
 
@@ -3833,10 +3939,13 @@ export default function CharacterSheet() {
                 <div className="space-y-2">
                   {currencies.map(c => (
                     <Card key={c.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all rounded-none">
-                      <CardContent className="p-3 flex justify-between items-center">
-                        <div className="font-serif font-semibold text-foreground">{c.name}</div>
-                        <div className="flex items-center gap-2">
+                      <CardContent className="p-3 flex flex-wrap justify-between items-center gap-3">
+                        <div className="flex items-baseline gap-2 shrink-0">
+                          <span className="font-serif font-semibold text-foreground">{c.name}</span>
                           <span className="font-mono font-bold text-lg text-primary">{c.amount}</span>
+                        </div>
+                        <CurrencyAdjustments currency={c}/>
+                        <div className="flex items-center gap-2">
                           <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground rounded-none cursor-pointer" onClick={() => triggerEditInventory("currency", c)}>
                             <Edit2 className="w-3 h-3" />
                           </Button>
@@ -4208,109 +4317,6 @@ export default function CharacterSheet() {
         </div>
         )}
 
-        {/* TAB 4: ESSENCE IMBUEMENT */}
-        {activeTab === "essences" && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
-              <div className="flex items-center gap-2.5">
-                <Layers className="w-5 h-5 text-primary" />
-                <div>
-                  <h3 className="font-serif text-lg font-bold text-primary">Essence Imbuement</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Bind and align essence crystals to unlock attributes</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map(slot => {
-                const essence = essences.find(e => e.slot === slot);
-                const label = slot === 1 ? "First Essence" : slot === 2 ? "Second Essence" : slot === 3 ? "Third Essence" : "Confluence";
-                const isExpanded = essence ? !!expandedEssences[essence.id] : false;
-                
-                return (
-                  <Card key={slot} className={`bg-card border-border/50 relative overflow-hidden flex flex-col justify-between rounded-none ${
-                    slot === 4 ? "border-amber-500/30 bg-amber-500/[0.02]" : ""
-                  }`}>
-                    {slot === 4 && (
-                      <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
-                    )}
-                    
-                    <CardContent className="p-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[9px] uppercase tracking-widest font-mono text-muted-foreground font-bold">
-                          {label}
-                        </span>
-                        {essence && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={(e) => { e.stopPropagation(); deleteEssence.mutate({ id: essence.id, charId: id }); }}>
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
-                        )}
-                      </div>
-
-                      {essence ? (
-                        <div 
-                          className="space-y-1.5 cursor-pointer select-none"
-                          onClick={() => setExpandedEssences(prev => ({ ...prev, [essence.id]: !isExpanded }))}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <h4 className={`font-serif text-lg font-bold leading-tight ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
-                            <ChevronDown className={`w-4 h-4 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
-                          </div>
-                          <div 
-                            className={`text-xs text-muted-foreground/80 font-serif leading-relaxed ${isExpanded ? "whitespace-pre-wrap animate-in slide-in-from-top-1 duration-150" : "line-clamp-3"}`}
-                            dangerouslySetInnerHTML={{ __html: parseMarkdown(essence.description || "*No description.*") }}
-                          />
-                        </div>
-                      ) : slot === 4 ? (
-                        <div className="py-4 text-center">
-                          <Button
-                            size="sm"
-                            className="bg-amber-500/20 border border-amber-500/30 text-amber-500 hover:bg-amber-500/30 h-7 text-xs font-serif rounded-none cursor-pointer font-bold transition-all"
-                            onClick={() => setEssenceSlotInput(slot)}
-                          >
-                            + Unleash Confluence
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="py-4 text-center">
-                          <Button
-                            size="sm"
-                            className="bg-primary/20 border border-primary/30 text-primary hover:bg-primary/30 h-7 text-xs font-serif rounded-none cursor-pointer"
-                            onClick={() => setEssenceSlotInput(slot)}
-                          >
-                            + Add Essence
-                          </Button>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-
-            {essenceSlotInput !== null && (
-              <Card className="bg-card border-primary/20 mt-4 max-w-lg animate-in slide-in-from-top-4 duration-300 rounded-none">
-                <CardContent className="p-4 space-y-4">
-                  <h4 className="font-serif text-lg text-primary font-bold">Attune Essence ({essenceSlotInput === 4 ? "Confluence" : `Slot ${essenceSlotInput}`})</h4>
-                  <form onSubmit={handleSaveEssence} className="space-y-3 text-xs">
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Essence Name</label>
-                      <Input value={essenceName} onChange={e => setEssenceName(e.target.value)} required placeholder="e.g. Fire, Earth, Sky" className="bg-background text-sm rounded-none" />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Description</label>
-                      <Textarea value={essenceDesc} onChange={e => setEssenceDesc(e.target.value)} placeholder="Description of attunements..." className="bg-background text-sm font-serif rounded-none" />
-                    </div>
-                    <div className="flex justify-end gap-1.5 pt-2 border-t border-border/30">
-                      <Button type="button" variant="ghost" size="sm" onClick={() => setEssenceSlotInput(null)} className="rounded-none">Cancel</Button>
-                      <Button type="submit" size="sm" className="bg-primary text-primary-foreground font-serif rounded-none">Apply Essence</Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        )}
         {/* TAB 5: ABILITIES */}
         {activeTab === "abilities" && (
           <div className="space-y-4">

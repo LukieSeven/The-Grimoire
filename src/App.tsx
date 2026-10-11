@@ -6,6 +6,8 @@ import { Layout } from "@/components/layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { lazy, Suspense, useEffect } from "react";
 import { applyTexture } from "./lib/appearance";
+import { applyCardAppearance } from "./lib/card-appearance";
+import { applyFontAppearance } from "./lib/font-appearance";
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   componentImport: () => Promise<{ default: T }>
@@ -53,6 +55,8 @@ function Router() {
     const savedRadius = localStorage.getItem(`aetherborne_radius_${scope}`) || "0px";
     document.documentElement.style.setProperty("--radius", savedRadius);
     applyTexture(scope);
+    applyCardAppearance(scope);
+    applyFontAppearance(scope);
   }, [location]);
 
   return (

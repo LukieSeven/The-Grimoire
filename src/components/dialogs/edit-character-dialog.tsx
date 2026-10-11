@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { useUpdateCharacter } from "@/hooks/useStorage";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ interface Props {
 export function EditCharacterDialog({ character }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const updateChar = useUpdateCharacter();
+  const initializedCharacter = useRef<number | null>(null);
 
   // Form State
   const [name, setName] = useState(character.name);
@@ -47,6 +49,9 @@ export function EditCharacterDialog({ character }: Props) {
 
   // Sync state with prop updates
   useEffect(() => {
+    if (!isOpen) { initializedCharacter.current = null; return; }
+    if (initializedCharacter.current === character.id) return;
+    initializedCharacter.current = character.id;
     if (character) {
       setName(character.name);
       setRank(character.rank || "Iron");
@@ -76,14 +81,16 @@ export function EditCharacterDialog({ character }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (updateChar.isPending) return;
+    if (!name.trim()) { toast.error("Enter a character name."); return; }
     updateChar.mutate(
       {
         id: character.id,
         data: {
-          name,
+          name: name.trim(),
           rank,
           race,
-          level: character.level,
+          level,
           speed,
           dtBonus,
           resistances,
@@ -106,7 +113,8 @@ export function EditCharacterDialog({ character }: Props) {
         },
       },
       {
-        onSuccess: () => setIsOpen(false),
+        onSuccess: () => { setIsOpen(false); toast.success("Character updated."); },
+        onError: error => toast.error(error.message),
       }
     );
   };
@@ -254,7 +262,7 @@ export function EditCharacterDialog({ character }: Props) {
 
           <div className="flex justify-end border-t border-border/30 pt-4 gap-2">
             <Button type="button" variant="ghost" onClick={() => setIsOpen(false)}>Cancel</Button>
-            <Button type="submit" className="bg-primary text-primary-foreground font-serif">Save Modifications</Button>
+            <Button type="submit" disabled={updateChar.isPending} className="bg-primary text-primary-foreground font-serif">{updateChar.isPending ? "Saving…" : "Save Modifications"}</Button>
           </div>
         </form>
       </DialogContent>

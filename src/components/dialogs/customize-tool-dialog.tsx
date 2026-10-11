@@ -1,4 +1,7 @@
 import { TEXTURES, applyTexture } from "../../lib/appearance";
+import { surfaceTexture } from "../../lib/surface-textures";
+import { CARD_FRAMES, cardFrame, applyCardAppearance } from "../../lib/card-appearance";
+import { FONT_CHOICES, applyFontAppearance } from "../../lib/font-appearance";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -23,8 +26,10 @@ export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean
   const [location] = useLocation();
   const [activeTheme, setActiveTheme] = useState("theme-grimoire");
   const [activeRadius, setActiveRadius] = useState("0px");
+  const [activeFrame, setActiveFrame] = useState("OG Theme");
+  const [activeFont, setActiveFont] = useState("Classic");
   const [texture, setTexture] = useState("Slate / stone");
-  const [intensity, setIntensity] = useState(25);
+  const [intensity, setIntensity] = useState(45);
   const [isOpen, setIsOpen] = useState(false);
 
   // Determine current scope based on url path
@@ -43,8 +48,10 @@ export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean
       const savedRadius = localStorage.getItem(`aetherborne_radius_${scope}`) || "0px";
       setActiveTheme(savedTheme);
       setActiveRadius(savedRadius);
+      setActiveFrame(localStorage.getItem(`aetherborne_card_frame_${scope}`) ?? "OG Theme");
+      setActiveFont(localStorage.getItem(`aetherborne_font_${scope}`) ?? "Classic");
       setTexture(localStorage.getItem(`aetherborne_texture_${scope}`) ?? "Slate / stone");
-      setIntensity(Number(localStorage.getItem(`aetherborne_texture_intensity_${scope}`) ?? "25"));
+      setIntensity(Number(localStorage.getItem(`aetherborne_texture_intensity_${scope}`) ?? "45"));
     }
   }, [isOpen, scope]);
 
@@ -74,7 +81,7 @@ export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean
           <Palette className={prominent ? "" : "w-3.5 h-3.5 mr-1.5"}/><span><span className="block">Customize Tool</span>{prominent && <span className="home-action-caption">Themes, textures, and more</span>}</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[420px] bg-card border border-border shadow-2xl rounded-md p-6 max-h-[90vh] overflow-y-auto">
+      <DialogContent className="customization-dialog sm:max-w-[480px] bg-card border border-border shadow-2xl rounded-md p-6 max-h-[90vh] overflow-y-auto">
         <div className="absolute inset-1 border border-border/10 pointer-events-none" />
         <div className="absolute top-2 left-2 right-2 bottom-2 border border-dashed border-border/5 pointer-events-none" />
 
@@ -125,7 +132,31 @@ export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean
             </div>
           </div>
 
-          <fieldset className="space-y-3 border-t border-border/30 pt-3"><legend className="text-sm font-bold">Surface texture</legend><div className="grid grid-cols-2 gap-2">{TEXTURES.map(value => <button type="button" key={value} aria-pressed={texture === value} className={`p-3 text-left text-xs rounded-md border ${texture === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 hover:bg-accent/40"}`} onClick={() => { setTexture(value); localStorage.setItem(`aetherborne_texture_${scope}`, value); applyTexture(scope); }}>{value}</button>)}</div><label className="block text-xs">Texture intensity · {intensity}%<input type="range" min="0" max="100" value={intensity} className="block w-full mt-2 accent-primary" onChange={event => { const value = Number(event.target.value); setIntensity(value); localStorage.setItem(`aetherborne_texture_intensity_${scope}`, String(value)); applyTexture(scope); }}/></label><p className="text-xs text-muted-foreground font-sans">Textures follow your theme colors. Appearance settings do not change character data.</p></fieldset>
+          <details className="border-t border-border/30 pt-3"><summary className="text-sm font-bold cursor-pointer select-none focus-visible:outline focus-visible:outline-primary">Page background texture<span className="ml-2 text-xs text-muted-foreground font-normal">{texture}</span></summary><div className="space-y-3 pt-3"><div className="grid grid-cols-2 gap-2">{TEXTURES.map(value => <button type="button" key={value} aria-pressed={texture === value} className={`p-3 text-left text-xs rounded-md border ${texture === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 hover:bg-accent/40"}`} onClick={() => { setTexture(value); localStorage.setItem(`aetherborne_texture_${scope}`, value); applyTexture(scope); }}><span aria-hidden="true" className="block h-10 rounded mb-2 border border-border/30" style={{ backgroundColor: "hsl(var(--background))", backgroundImage: surfaceTexture(value).image, backgroundSize: surfaceTexture(value).size, backgroundBlendMode: "soft-light" }}/><span className="block font-semibold">{value}</span><span className="block mt-1 text-[10px] text-muted-foreground font-sans">{surfaceTexture(value).description}</span></button>)}</div><label className="block text-xs">Texture intensity · {intensity}%<input type="range" min="0" max="100" value={intensity} className="block w-full mt-2 accent-primary" onChange={event => { const value = Number(event.target.value); setIntensity(value); localStorage.setItem(`aetherborne_texture_intensity_${scope}`, String(value)); applyTexture(scope); }}/></label><p className="text-xs text-muted-foreground font-sans">Applies only to the primary page background. Cards retain their theme colors; separate card settings will come later.</p></div></details>
+          <details className="border-t border-border/30 pt-3">
+            <summary className="text-sm font-bold cursor-pointer select-none focus-visible:outline focus-visible:outline-primary">Card Customization<span className="ml-2 text-xs font-normal text-muted-foreground">{activeFrame}</span></summary>
+            <div className="space-y-3 pt-3">
+              <p className="text-xs font-sans text-muted-foreground">Border design only. Your theme controls card colors, and Corner Style controls the frame shape.</p>
+              <div className="grid grid-cols-2 gap-2">{CARD_FRAMES.map(name => {
+                const frame = cardFrame(name);
+                return <button type="button" key={name} aria-pressed={activeFrame === name} className={`p-2 text-left rounded-md border ${activeFrame === name ? "border-primary bg-primary/10" : "border-border/50 hover:bg-accent/40"}`} onClick={() => { setActiveFrame(name); localStorage.setItem(`aetherborne_card_frame_${scope}`, name); applyCardAppearance(scope); }}>
+                  <span aria-hidden="true" className="block h-16 mb-2 bg-card" style={{ border: `1px solid ${frame.edge}`, borderRadius: activeRadius, boxShadow: name === "OG Theme" ? undefined : `inset 0 0 0 3px hsl(var(--card)), inset 0 0 0 4px ${frame.edge}`, backgroundImage: frame.ornaments, backgroundSize: "26px 26px", backgroundPosition: "left 3px top 3px, right 3px top 3px, left 3px bottom 3px, right 3px bottom 3px", backgroundRepeat: "no-repeat" }}/>
+                  <span className="block text-xs font-semibold">{name}</span><span className="block mt-1 text-[10px] font-sans text-muted-foreground">{frame.description}</span>
+                </button>;
+              })}</div>
+            </div>
+          </details>
+          <details className="border-t border-border/30 pt-3">
+            <summary className="text-sm font-bold cursor-pointer select-none focus-visible:outline focus-visible:outline-primary">Fonts<span className="ml-2 text-xs font-normal text-muted-foreground">{activeFont}</span></summary>
+            <div className="space-y-2 pt-3">
+              <p className="text-xs text-muted-foreground font-sans">Choose the heading and label style. Forms and numbers retain their readable fonts.</p>
+              {FONT_CHOICES.map(choice => <button type="button" key={choice.name} aria-pressed={activeFont === choice.name} className={`w-full p-3 text-left border rounded-md ${activeFont === choice.name ? "border-primary bg-primary/10" : "border-border/50 hover:bg-accent/40"}`} onClick={() => { setActiveFont(choice.name); localStorage.setItem(`aetherborne_font_${scope}`, choice.name); applyFontAppearance(scope); }}>
+                <span className="block text-xs font-sans font-semibold">{choice.name} · {choice.font}</span>
+                <span className="block text-xl mt-2" style={{ fontFamily: `'${choice.font}', Georgia, serif` }}>The Grimoire · Forge your story</span>
+                <span className="block text-[11px] text-muted-foreground font-sans mt-1">{choice.description}</span>
+              </button>)}
+            </div>
+          </details>
           {/* Corner Style Section */}
           <div className="pt-3 space-y-2 border-t border-border/30">
             <span className="text-xs font-bold text-foreground">Corner Style</span>

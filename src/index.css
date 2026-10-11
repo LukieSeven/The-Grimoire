@@ -1,17 +1,97 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=Space+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Alegreya:wght@400;600;700&family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@400;500;600&family=Space+Mono&family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=Uncial+Antiqua&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Theme color and surface texture are independent appearance preferences. */
-:root { --texture-opacity: .25; --surface-texture: none; }
-[data-texture="Fine grain"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.4' filter='url(%23n)'/%3E%3C/svg%3E"); }
-[data-texture="Slate / stone"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.035 .14' numOctaves='5' stitchTiles='stitch'/%3E%3CfeDiffuseLighting surfaceScale='3' diffuseConstant='.7' lighting-color='%23bbbbbb'%3E%3CfeDistantLight azimuth='45' elevation='45'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-[data-texture="Leather"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.12' numOctaves='3' stitchTiles='stitch'/%3E%3CfeDiffuseLighting surfaceScale='4' lighting-color='%23aaaaaa'%3E%3CfeDistantLight azimuth='60' elevation='55'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-[data-texture="Parchment"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.025' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E"); }
-[data-texture="Brushed metal"] { --surface-texture: repeating-linear-gradient(0deg, #ffffff30 0 1px, transparent 1px 3px), linear-gradient(110deg, transparent, #ffffff30, transparent); }
-[data-texture="Woven cloth"] { --surface-texture: repeating-linear-gradient(0deg, #ffffff30 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, #ffffff30 0 1px, transparent 1px 4px); }
-.grimoire-shell::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: var(--surface-texture); opacity: var(--texture-opacity); mix-blend-mode: soft-light; }
+/* Theme variables own every color. Textures add neutral detail only to the page background. */
+/* Readability floor for compact metadata; retain larger headings and numerical values. */
+.grimoire-shell :is([class~="text-[8px]"], [class~="text-[9px]"], [class~="text-[10px]"]) { font-size: .75rem; line-height: 1.4; }
+.grimoire-shell [class~="text-[11px]"] { font-size: .8125rem; line-height: 1.4; }
+.grimoire-shell .text-xs { font-size: .875rem; line-height: 1.45; }
+.customization-dialog :is(.text-xs, [class~="text-[9px]"], [class~="text-[10px]"], [class~="text-[11px]"]) { font-size: .875rem; line-height: 1.5; }
+.customization-dialog summary { font-size: 1rem; line-height: 1.5; }
+.customization-dialog button > span.text-xl { font-size: 1.5rem; line-height: 1.4; }
+.grimoire-shell .grimoire-workspace .resource-management > div > :first-child { font-size: .75rem; }
+.grimoire-shell .grimoire-workspace .workspace-tabs button { font-size: .8125rem; line-height: 1.35; }
+:root { --texture-opacity: .45; --surface-texture: none; --surface-texture-size: auto; }
+.grimoire-shell { isolation: isolate; background-color: hsl(var(--background)); }
+.grimoire-shell::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: var(--surface-texture); background-size: var(--surface-texture-size); opacity: var(--texture-opacity); filter: grayscale(1); mix-blend-mode: soft-light; }
+.grimoire-shell main { z-index: 1; }
+/* Card frames are independent of page colors/textures and inherit corner settings. */
+html[data-card-frame]:not([data-card-frame="OG Theme"]) :is(.grimoire-card, .home-roster-card) {
+  position: relative;
+  border-color: var(--card-frame-edge);
+  box-shadow: 0 6px 18px #00000030, inset 0 1px 0 color-mix(in srgb, var(--card-frame-highlight) 25%, transparent);
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) :is(.grimoire-card, .home-roster-card)::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 2px;
+  pointer-events: none;
+  background: linear-gradient(135deg, var(--card-frame-highlight), var(--card-frame-edge) 22%, color-mix(in srgb, var(--card-frame-edge) 35%, #151515) 48%, var(--card-frame-highlight) 72%, var(--card-frame-edge));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) :is(.grimoire-card, .home-roster-card)::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--card-frame-edge) 55%, transparent);
+  border-radius: max(0px, calc(var(--radius) - 6px));
+  background-image: var(--card-frame-ornaments);
+  background-size: 38px 38px;
+  background-position: left top, right top, left bottom, right bottom;
+  background-repeat: no-repeat;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card .grimoire-card::after { background-size: 22px 22px; inset: 4px; border-radius: max(0px, calc(var(--radius) - 4px)); }
 .grimoire-shell main > .pointer-events-none { display: none; }
+/* Keep functional content clear of ornament footprints, without shifting OG Theme. */
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card:not(.character-resource-card)::after {
+  background-size: 24px 24px;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card:not(.character-resource-card) > :is([class~="p-3"], [class~="p-3.5"], [class~="p-4"]) {
+  padding: 20px;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card:is([class~="p-3"], [class~="p-4"]) {
+  padding: 20px;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card .grimoire-card::after {
+  background-size: 20px 20px;
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card > [class~="p-2.5"] { padding: 16px; }
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .grimoire-card > .absolute[class~="top-0"][class~="right-0"][class~="p-3"] {
+  top: 20px;
+  right: 20px;
+  padding: 0;
+}
+/* The portrait shares the card's top/left rails; only its lower/right return is drawn. */
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .character-portrait {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  overflow: visible;
+  background: transparent;
+}
+.character-portrait > img { border-radius: max(0px, calc(var(--radius) - 7px)); }
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .character-portrait::before,
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .character-portrait::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  pointer-events: none;
+  border-right: 1px solid var(--card-frame-edge);
+  border-bottom: 1px solid var(--card-frame-edge);
+  border-bottom-right-radius: var(--radius);
+}
+html[data-card-frame]:not([data-card-frame="OG Theme"]) .character-portrait::before {
+  inset: -4px;
+  border-color: color-mix(in srgb, var(--card-frame-highlight) 45%, transparent);
+  border-bottom-right-radius: max(0px, calc(var(--radius) - 3px));
+}
 .home-surface { background: linear-gradient(135deg, hsl(var(--card) / .97), hsl(var(--background) / .93)); border: 1px solid hsl(var(--primary) / .3); box-shadow: 0 12px 35px #00000025, inset 0 1px 0 #ffffff06; }
 .home-action { height: auto; min-height: 4rem; padding: .75rem 1.1rem; display: flex; justify-content: flex-start; gap: .8rem; text-align: left; white-space: normal; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border) / .65); border-radius: .75rem; background: hsl(var(--background) / .35); font-size: .95rem; }
 .home-action > svg { width: 1.6rem; height: 1.6rem; flex-shrink: 0; color: hsl(var(--primary)); }
@@ -406,23 +486,7 @@ html.theme-grimoire {
   --card-border: 43 45% 32%;
 }
 
-html.theme-grimoire body {
-  background-color: #0c0806;
-  background-image: 
-    radial-gradient(circle at 50% 30%, rgba(30, 20, 15, 0.15), transparent 70%),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.003) 0px, rgba(255, 255, 255, 0.003) 1px, transparent 1px, transparent 3px),
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.08) 0px, rgba(0, 0, 0, 0.08) 1.5px, transparent 1.5px, transparent 3px);
-}
-
-/* Card book page texture and gold border for the default theme */
-html.theme-grimoire .bg-card,
-html.theme-grimoire [class*="bg-card"],
-html.theme-grimoire .card,
-html.theme-grimoire [class*="card-"] {
-  background-image: linear-gradient(rgba(255, 255, 255, 0.01) 0%, rgba(0, 0, 0, 0.05) 100%) !important;
-  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6), 0 0 15px rgba(212, 175, 55, 0.05) !important;
-  border: 1.5px solid hsl(43, 45%, 32%) !important;
-}
+/* All themes use the same texture renderer and their own color variables. */
 
 /* ── Custom Theme Corner Style Support ── */
 .rounded-none,
