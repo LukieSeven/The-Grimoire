@@ -1,7 +1,7 @@
 import { expandAttachedEffects } from "./effect-details.ts";
 import type { Ability, Familiar } from "./storage.ts";
 import { calculateAbilityEvolutions, EVOLUTION_THRESHOLDS_TABLE, parseFormulaOrNum, getModifierForStat } from "./storage.ts";
-import { BONUS_FIELDS, bonusesFromSummary, normalizeBonuses } from "./ability-bonuses.ts";
+import { BONUS_FIELDS, bonusesFromSummary, normalizeBonuses, hasModifierValue } from "./ability-bonuses.ts";
 import type { ResolvedEffect } from "./tracker.ts";
 import type { TriggerContext, RequirementState } from "./ability-components.ts";
 import { evaluateRequirements } from "./ability-components.ts";
@@ -22,13 +22,8 @@ export function resolveAbilityInput(ability: Ability, rank: string, stats: Recor
     const progression = calculateAbilityEvolutions({ ...ability, linkedStats: node.linkedStats, primaryStat: node.linkedStats[0] ?? "", evolutionModifiers: EVOLUTION_THRESHOLDS_TABLE.map(step => ({ id: step.rankLabel, name: step.rankLabel, rankLabel: step.rankLabel, requiredStat: step.requiredStat, effect: "" })) }, rank, ownerStats);
     const earned = (id: string) => progression.activeModifiers.some(modifier => modifier.id === id);
     const state = !node.unlockRank || earned(node.unlockRank) ? "unlocked" : progression.earnedDormantModifiers.some(modifier => modifier.id === node.unlockRank) ? "dormant" : "locked";
-    const upgradeRules: string[] = [];
-    for (const upgrade of node.upgrades) if (earned(upgrade.rank)) {
-      if (upgrade.range !== undefined) node.range = upgrade.range;
-      if (upgrade.duration !== undefined) node.duration = upgrade.duration;
-      if (upgrade.rules) upgradeRules.push(upgrade.rules);
-      if (upgrade.formula !== undefined) node.results = node.results.map(result => (upgrade.resultId ? result.id === upgrade.resultId : !!result.formula) ? { ...result, formula: upgrade.formula! } : result);
-    }
+    // The current form owns these fields. Preserve older upgrade data in saved
+    // files, but do not inject uneditable descriptions or field overrides.
     const resourceTriggers = node.trigger.conditions.filter(condition => condition.kind === "resource");
     const resourceEndings = node.ending.conditions.filter(condition => condition.kind === "resource");
     const parentRequirements = evaluateRequirements(resourceTriggers, node.trigger.match, ownerContext, confirmations);
@@ -39,7 +34,7 @@ export function resolveAbilityInput(ability: Ability, rank: string, stats: Recor
     const available = (requirements: RequirementState): ResolvedEffect["applicability"] => state !== "unlocked" || requirements === "unmet" || ended ? "unavailable" : requirements === "judgment" ? "requires judgment" : "available";
     const parent: ResolvedEffect = {
       ability, familiar, input: node, targetLabels: node.targets, requirements: parentRequirements, progression: state,
-      effect: { id: node.id, name: node.name, description: upgradeRules.join("\n"), duration: durationLabel(node.durationType, node.duration), tracking },
+      effect: { id: node.id, name: node.name, description: "", duration: durationLabel(node.durationType, node.duration), tracking },
       applicability: available(parentRequirements), permanent: state === "unlocked" && !ended && automatic && parentRequirements === "met", endingMet: ended,
     };
     return [parent, ...node.results.filter(result => node.targets.includes(result.target)).flatMap(expandAttachedEffects).map(savedResult => {
@@ -56,7 +51,7 @@ export function resolveAbilityInput(ability: Ability, rank: string, stats: Recor
         variables[prefix] = value;
         variables[`${prefix}r`] = getModifierForStat(value, rank);
       }
-      const bonusReadout = bonuses ? BONUS_FIELDS.filter(([key]) => bonuses[key] !== undefined && bonuses[key] !== "").map(([key, label]) => `${label}: ${parseFormulaOrNum(bonuses[key], variables)}`).concat(["resistances", "immunities", "vulnerabilities"].flatMap(key => bonuses[key as "resistances" | "immunities" | "vulnerabilities"] ? [`${key}: ${bonuses[key as "resistances" | "immunities" | "vulnerabilities"]}`] : [])) : [];
+      const bonusReadout = bonuses ? BONUS_FIELDS.filter(([key]) => hasModifierValue(bonuses[key])).map(([key, label]) => `${label}: ${parseFormulaOrNum(bonuses[key], variables)}`).concat(["resistances", "immunities", "vulnerabilities"].flatMap(key => bonuses[key as "resistances" | "immunities" | "vulnerabilities"]?.trim() ? [`${key}: ${bonuses[key as "resistances" | "immunities" | "vulnerabilities"]}`] : [])) : [];
       const template = result.templateId ? ability.definition?.options.effects.find(effect => effect.id === result.templateId) : undefined;
       const resultResources = result.trigger.conditions.filter(condition => condition.kind === "resource");
       const resultEndings = result.ending.conditions.filter(condition => condition.kind === "resource");

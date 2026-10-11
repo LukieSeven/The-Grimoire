@@ -157,11 +157,12 @@ test("Instant effect duration overrides a timed source without inheriting its ti
   definition.results = [{ ...blankResult("Self"), durationType: "Instant" }];
   assert.equal(resolveTrackerEffects([ability], "Iron", {})[1].effect.duration, "Instant");
 });
-test("progression updates derived ranges and formulas without mutating saved inputs", () => {
+test("uneditable legacy upgrades cannot override current form fields or inject text", () => {
   const { ability, definition } = fixture(); definition.linkedStats = ["power"]; definition.rangeType = "Aura"; definition.range = "10"; definition.targets = ["Self"];
   definition.results = [{ ...blankResult("Self"), formula: "POW" }];
   definition.upgrades = [{ id: "test-upgrade", rank: "Iron 2", rules: "Upgrade rules", range: "20", formula: "POW*2" }];
   const entries = resolveTrackerEffects([ability], "Bronze", { power: 12 });
-  assert.equal(entries[1].effect.tracking?.radius, 20); assert.equal(entries[1].effect.rollFormula, "POW*2");
+  assert.equal(entries[1].effect.tracking?.radius, 10); assert.equal(entries[1].effect.rollFormula, "POW");
+  assert.equal(entries[0].effect.description, "");
   assert.equal(definition.range, "10"); assert.equal(definition.results[0].formula, "POW");
 });

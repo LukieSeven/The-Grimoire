@@ -8,6 +8,11 @@ export const BONUS_FIELDS = [
   ["bonusResistanceRoll", "Resistance Roll"], ["damageReduction", "Damage Reduction"], ["armorPenetration", "Armor Penetration"], ["dtPenetration", "DT Penetration"],
 ] as const;
 export type AbilityBonuses = Partial<Record<typeof BONUS_FIELDS[number][0], number | string>> & { resistances?: string; immunities?: string; vulnerabilities?: string; resistanceAttributes?: string[]; checkSkills?: string[] };
+/** Blank fields and legacy zero placeholders do not belong in player readouts. */
+export function hasModifierValue(value: number | string | undefined): boolean {
+  if (value === undefined || value === null || String(value).trim() === "") return false;
+  return Number(value) !== 0;
+}
 export function normalizeBonuses(bonuses: AbilityBonuses): AbilityBonuses {
   const copy = { ...bonuses };
   for (const [oldKey, key] of [["bonusHp", "hpBuff"], ["bonusMana", "manaBuff"], ["bonusDt", "dtBuff"]] as const) {

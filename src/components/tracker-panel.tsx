@@ -140,9 +140,9 @@ export function TrackerPanel(props: Props) {
       {controls && entry.effect.rollFormula && <div className="flex flex-wrap items-center gap-2"><code className="text-xs">{entry.effect.rollFormula}</code><Button size="sm" variant="outline" disabled={entry.progression !== "unlocked" || (!active && entry.applicability !== "available")} onClick={() => props.onRoll(entry.effect.rollFormula!, entry.input?.name ?? entry.ability.name, entry.familiar)}>Roll</Button></div>}
       {entry.input && !entry.result && <div className="text-xs space-y-1">
         {entry.input.manaCost !== undefined && <p>Activation: {entry.input.manaCost} mana</p>}
-        {entry.input.manaPerTurn !== undefined && <p>Per turn: {entry.input.manaPerTurn} mana · manual payment</p>}
-        <p>Time cost: {entry.input.reaction ? "Reaction" : entry.input.timeCost === undefined ? "Unspecified" : `${entry.input.timeCost} seconds`}</p>
-        {entry.input.cooldown !== undefined && <p>Cooldown: {entry.input.cooldown} {entry.input.cooldownUnit.toLowerCase()} · starts {entry.input.cooldownStarts === "activation" ? "on activation" : "on ending"} · manual timing</p>}
+        {entry.input.manaPerTurn !== undefined && <p>Per turn: {entry.input.manaPerTurn} mana</p>}
+        {(entry.input.reaction || entry.input.timeCost !== undefined) && <p>Time cost: {entry.input.reaction ? "Reaction" : `${entry.input.timeCost} seconds`}</p>}
+        {entry.input.cooldown !== undefined && <p>Cooldown: {entry.input.cooldown} {entry.input.cooldownUnit.toLowerCase()} · starts {entry.input.cooldownStarts === "activation" ? "on activation" : "on ending"}</p>}
       </div>}
       {controls && entry.input && <>{!!entry.input.trigger.conditions.length && <><p className="text-xs text-primary">When triggered</p>{requirements(entry.input.trigger.conditions, true)}</>}
         {!!entry.input.ending.conditions.length && <><p className="text-xs text-primary">Ends when</p>{requirements(entry.input.ending.conditions, true)}</>}
@@ -156,7 +156,7 @@ export function TrackerPanel(props: Props) {
   };
   const renderManual = (effect: ManualTrackedEffect, controls = false) => <article key={effect.id} className="border border-border/40 p-3 space-y-2 text-sm">
     <div className="flex justify-between gap-2"><strong>{effect.name}</strong><span className="text-xs text-primary">{manualActive(effect) ? "Active" : "Inactive"}</span></div><p className="text-xs text-muted-foreground">Manual effect</p><p className="whitespace-pre-wrap">{effect.rules}</p>
-    {effect.radius !== undefined && <p className="text-xs">Radius: {effect.radius} {effect.radiusUnit}</p>}{effect.duration && <p className="text-xs">Duration: {effect.duration} · manual timing</p>}
+    {effect.radius !== undefined && <p className="text-xs">Radius: {effect.radius} {effect.radiusUnit}</p>}{effect.duration && <p className="text-xs">Duration: {effect.duration}</p>}
     {controls && requirements(effect.conditions)}
     <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setManualDraft({ targetId: effect.targetId, initial: effect })}>Edit</Button><Button size="sm" variant="outline" disabled={!manualActive(effect) && evaluateRequirements(effect.conditions, effect.conditionMatch, props.vitals, confirmations) !== "met"} onClick={() => props.onManualEffectsChange(manual.map(entry => entry.id === effect.id ? { ...entry, active: !manualActive(entry), triggerMode: manualActive(entry) && entry.triggerMode === "automatic" ? "manual" : entry.triggerMode } : entry))}>{manualActive(effect) ? "End" : "Activate"}</Button></div>
   </article>;

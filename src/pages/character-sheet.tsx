@@ -4384,7 +4384,7 @@ export default function CharacterSheet() {
                   const displayRange = activeUpdateTrigger?.updatedRange || ability.range;
                   const displaySpeed = activeUpdateTrigger?.updatedSpeed || ability.speed;
                   const displayRollFormula = activeUpdateTrigger?.updatedRollFormula || ability.rollFormula;
-                  const displayDescription = activeUpdateTrigger?.updatedDescription || ability.description;
+                  const displayDescription = ability.definition ? ability.definition.description : activeUpdateTrigger?.updatedDescription || ability.description;
 
                   return (
                     <Card 
