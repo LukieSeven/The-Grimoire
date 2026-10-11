@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { formatRollBreakdown } from "../lib/roll-display";
 import { getFamiliarAdjusted } from "../lib/familiar-values";
 import { activeEffectModifier } from "../lib/active-effect-modifiers";
 import type { RollPurpose } from "../lib/active-effect-modifiers";
@@ -542,6 +543,7 @@ export function useCreateRoll() {
         familiarId?: string | number;
         rollPurpose?: RollPurpose;
         rollScope?: string;
+        criticalContinuation?: boolean;
       };
     }) => {
       const charId = data.id;
@@ -672,7 +674,7 @@ export function useCreateRoll() {
           
           if (regexFull.test(expression) || regexPrefix.test(expression)) {
             const statVal = (finalStats[statKey] !== undefined ? finalStats[statKey] : 10) as number;
-            const statMod = getModifierForStat(statVal, rollingEntity?.rank || "Iron");
+            const statMod = data.data.criticalContinuation ? 0 : getModifierForStat(statVal, rollingEntity?.rank || "Iron");
             const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statVal);
             if (crit) isCrit = true;
             
@@ -753,7 +755,7 @@ export function useCreateRoll() {
 
       const roll = storage.addRoll({
         characterId: charId,
-        diceType: diceTypeStr,
+        diceType: formatRollBreakdown(diceTypeStr),
         result,
         modifier,
         total,

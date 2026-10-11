@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { formatRollBreakdown } from "@/lib/roll-display";
 import { useLocation, useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -1237,7 +1238,7 @@ export default function CharacterSheet() {
     setRollingDice("chain");
     
     createRoll.mutate(
-      { id, data: { diceType: chainDie, modifier: 0, label, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
+      { id, data: { diceType: chainDie, modifier: 0, criticalContinuation: true, label, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
         onSuccess: (data) => {
           setTimeout(() => {
@@ -3133,7 +3134,7 @@ export default function CharacterSheet() {
                                 {roll.isCrit && <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-widest">crit</span>}
                               </div>
                               <div className="text-[9px] text-muted-foreground font-mono">
-                                {roll.diceType === "action-log" ? "Ability action" : roll.diceType === "hp-log" ? "Health change" : roll.diceType === "dt-log" ? "DT change" : roll.diceType === "mana-log" ? "Mana change" : roll.diceType}{roll.modifier ? (roll.modifier > 0 ? `+${roll.modifier}` : roll.modifier) : ""}
+                                {roll.diceType === "action-log" ? "Ability action" : roll.diceType === "hp-log" ? "Health change" : roll.diceType === "dt-log" ? "DT change" : roll.diceType === "mana-log" ? "Mana change" : formatRollBreakdown(roll.diceType)}{roll.modifier ? (roll.modifier > 0 ? ` + ${roll.modifier}` : ` - ${Math.abs(roll.modifier)}`) : ""}
                               </div>
                             </div>
                             <div className="text-right">
@@ -3177,7 +3178,7 @@ export default function CharacterSheet() {
                     </p>
                     
                     <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide text-center">
-                      {critChain.rolls.map(r => r.breakdown).join(" + ")}
+                      {critChain.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
                       {critChain.modifier !== 0 && (critChain.modifier > 0 ? ` + ${critChain.modifier}` : ` - ${Math.abs(critChain.modifier)}`)}
                     </div>
 
@@ -3213,13 +3214,13 @@ export default function CharacterSheet() {
                     {lastRoll.rolls && lastRoll.rolls.length > 0 ? (
                       <div className="space-y-2 my-2 text-center">
                         <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide">
-                          {lastRoll.rolls.map(r => r.breakdown).join(" + ")}
+                          {lastRoll.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
                           {lastRoll.modifier !== 0 && (lastRoll.modifier > 0 ? ` + ${lastRoll.modifier}` : ` - ${Math.abs(lastRoll.modifier)}`)}
                         </div>
                       </div>
                     ) : lastRoll.diceType && (lastRoll.diceType.includes("(") || lastRoll.diceType.includes("+") || lastRoll.diceType.includes("-") || lastRoll.diceType.includes("*")) ? (
                       <div className="text-sm font-semibold text-emerald-300/90 mb-3 font-mono bg-emerald-950/30 py-1.5 px-3 border border-emerald-500/10 rounded inline-block max-w-[90%] mx-auto leading-normal">
-                        {lastRoll.diceType}
+                        {formatRollBreakdown(lastRoll.diceType)}
                       </div>
                     ) : (
                       <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
