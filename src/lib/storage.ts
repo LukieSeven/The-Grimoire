@@ -10,9 +10,17 @@ import {
   validateArchiveRelationships,
 } from "./archive-schema.ts";
 import { commitStorageUpdates } from "./persistence.ts";
+import { spendTemporary } from "./temporary-resources.ts";
+import { selectStackedEffects } from "./effect-stacking.ts";
+import type { AbilityComponent, ManualTrackedEffect } from "./ability-components.ts";
+import type { AbilityInput, AbilityOptions } from "./ability-input.ts";
+import { resolveTrackerEffects, isEffectApplied } from "./tracker.ts";
+import { BONUS_FIELDS, bonusesFromSummary } from "./ability-bonuses.ts";
+import { getFamiliarAdjusted } from "./familiar-values.ts";
+import type { EffectTracking, EffectApplication, EffectChange, TrackerEncounter } from "./tracker-types.ts";
 
 export interface FavoriteSlot {
-  type: "weapon" | "item" | "ability" | "sub-ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
+  type: "weapon" | "item" | "ability" | "ability-result" | "sub-ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
   targetId: string | number;
   subId?: string;
   label: string;
@@ -20,6 +28,7 @@ export interface FavoriteSlot {
 }
 
 export interface FamiliarAbility {
+  definition?: AbilityInput;
   id: number;
   name: string;
   nickname?: string;
@@ -59,6 +68,10 @@ export interface FamiliarAbility {
 }
 
 export interface Familiar {
+  tempHp?: number; tempMana?: number; tempDt?: number;
+  effectApplications?: EffectApplication[];
+  triggerConfirmations?: Record<string, boolean>;
+  abilityTiming?: Record<string, { elapsed?: string; spent?: string }>;
   id: string | number;
   name: string;
   className: string;
@@ -96,6 +109,14 @@ export interface Familiar {
 }
 
 export interface Character {
+  tempHp?: number; tempMana?: number; tempDt?: number;
+  abilityTiming?: Record<string, { elapsed?: string; spent?: string }>;
+  abilityOptions?: AbilityOptions;
+  uiPreferences?: { autoScrollRolls?: boolean };
+  manualTrackedEffects?: ManualTrackedEffect[];
+  triggerConfirmations?: Record<string, boolean>;
+  trackerEncounter?: TrackerEncounter;
+  effectApplications?: EffectApplication[];
   id: number;
   name: string;
   rank: string;
@@ -211,6 +232,8 @@ export interface SubAbility {
 }
 
 export interface AbilityEffect {
+  rollFormula?: string;
+  tracking?: EffectTracking;
   id: string;
   name: string;
   category?: string; // "debuff" | "buff" | "dot" | "status" | "mark" | custom
@@ -512,6 +535,7 @@ export function getAbilityActiveModifierBadges(
 }
 
 export interface EvolutionModifier {
+  effectChanges?: EffectChange[];
   id: string;
   name: string;
   rankLabel: string;
@@ -521,6 +545,9 @@ export interface EvolutionModifier {
 }
 
 export interface Ability {
+  inputVersion?: 2 | 3;
+  definition?: AbilityInput;
+  components?: AbilityComponent[];
   id: number;
   characterId: number;
   name: string;
@@ -767,7 +794,20 @@ export function getModifierForStat(val: number, rank: string = "Iron"): number {
   return Math.floor(val / 3);
 }
 
-export function getAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[] = []): {
+export function getAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[] = []): ReturnType<typeof calculateAdjustedStats> {
+  let result = calculateAdjustedStats(char, equipment, abilities);
+  const seen = new Set<string>();
+  while (true) {
+    const signature = JSON.stringify([result.totalMaxHp, result.totalMaxMana, result.totalMaxDt, result.stats]);
+    if (seen.has(signature)) return { ...result, warnings: ["Resource-triggered bonuses create a circular threshold. Review effects that change the same resource used by their own trigger."] };
+    seen.add(signature);
+    const next = calculateAdjustedStats(char, equipment, abilities, { maxHp: result.totalMaxHp, maxMana: result.totalMaxMana, maxDt: result.totalMaxDt });
+    if (JSON.stringify([next.totalMaxHp, next.totalMaxMana, next.totalMaxDt, next.stats]) === signature) return next;
+    result = next;
+  }
+}
+function calculateAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[], triggerMaximums?: { maxHp: number; maxMana: number; maxDt: number }): {
+  warnings: string[];
   stats: Record<string, number>;
   modifiers: Record<string, number>;
   diceLabels: Record<string, string>;
@@ -854,7 +894,39 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   });
 
   // Add active ability, sub-ability, and active trigger stat bonuses
-  const activeAbilities = abilities.filter(a => a.active === true);
+  const structuredContext = { hp: char.currentHp, mana: char.currentMana, dt: char.currentDt,
+    maxHp: triggerMaximums?.maxHp ?? (char.hpFormula ? evaluateFormula(char.hpFormula, buildVars(stats)) : Number.NaN),
+    maxMana: triggerMaximums?.maxMana ?? (char.manaFormula ? evaluateFormula(char.manaFormula, buildVars(stats)) : Number.NaN),
+    maxDt: triggerMaximums?.maxDt ?? (char.dtFormula ? evaluateFormula(char.dtFormula, buildVars(stats)) : Number.NaN) };
+  const selectedStructured = selectStackedEffects(resolveTrackerEffects(abilities.filter(ability => ability.definition), char.rank, stats, structuredContext, char.triggerConfirmations ?? {}, char.familiars).filter(entry => !entry.familiar && entry.result?.target === "Self"), char.effectApplications ?? [], value => parseFormulaOrNum(value, buildVars(stats)));
+  const activeAbilities = abilities.flatMap(ability => {
+    if (!ability.definition) return ability.active === true ? [ability] : [];
+    const context = { hp: char.currentHp, mana: char.currentMana, dt: char.currentDt,
+      maxHp: triggerMaximums?.maxHp ?? (char.hpFormula ? evaluateFormula(char.hpFormula, buildVars(stats)) : Number.NaN),
+      maxMana: triggerMaximums?.maxMana ?? (char.manaFormula ? evaluateFormula(char.manaFormula, buildVars(stats)) : Number.NaN),
+      maxDt: triggerMaximums?.maxDt ?? (char.dtFormula ? evaluateFormula(char.dtFormula, buildVars(stats)) : Number.NaN) };
+    return selectedStructured.filter(entry => entry.ability.id === ability.id)
+      .filter(entry => !entry.familiar && entry.result?.target === "Self" && isEffectApplied(entry, "self", char.effectApplications ?? []))
+      .flatMap(entry => {
+        let bonuses = entry.result!.bonuses ?? bonusesFromSummary(entry.result!.rules);
+        if (!bonuses) return [];
+        const vars = buildVars(stats);
+        const stacks = entry.result!.stacking === "Stack" ? Math.min(entry.result!.maxStacks ?? Number.POSITIVE_INFINITY, (char.effectApplications ?? []).find(application => application.abilityId === ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1) : 1;
+        bonuses = { ...bonuses, ...Object.fromEntries(BONUS_FIELDS.map(([key]) => [key, parseFormulaOrNum(bonuses![key], vars) * stacks])) };
+        return [{ ...ability, ...Object.fromEntries(BONUS_FIELDS.map(([key]) => [key, undefined])), ...bonuses, active: true, definition: undefined, components: undefined, subAbilities: undefined, triggers: undefined,
+          hpBuff: parseFormulaOrNum(bonuses.hpBuff, vars) + parseFormulaOrNum(bonuses.bonusHp, vars),
+          manaBuff: parseFormulaOrNum(bonuses.manaBuff, vars) + parseFormulaOrNum(bonuses.bonusMana, vars),
+          dtBuff: parseFormulaOrNum(bonuses.dtBuff, vars) + parseFormulaOrNum(bonuses.bonusDt, vars) }];
+      });
+  });
+  // New structured Self modifiers use the same activation records as the trackers.
+  const attributeVars = buildVars(stats);
+  for (const ability of activeAbilities.filter(ability => abilities.some(original => original.id === ability.id && original.definition))) {
+    for (const stat of Object.keys(stats)) {
+      const key = `bonus${stat[0].toUpperCase()}${stat.slice(1)}` as keyof Ability;
+      stats[stat] += parseFormulaOrNum(ability[key] as number | string | undefined, attributeVars);
+    }
+  }
 
   // Calculate auto-modifiers scaling with Rank (Iron 3:1, Bronze 2:1, Silver 1:1, Gold 1:2, Diamond 1:3)
   const modifiers: Record<string, number> = {};
@@ -1006,10 +1078,10 @@ export function getAdjustedStats(char: Character, equipment: Equipment[], abilit
   const maxInitiative = (rawInitiative || 0) + (abilityInitiativeBonus || 0) + (equipmentInitiativeBonus || 0);
 
   return {
-    stats,
+    warnings: [], stats,
     modifiers,
     diceLabels,
-    speed: rawSpeed,
+    speed: Math.max(0, rawSpeed + activeAbilities.reduce((sum, ability) => sum + parseFormulaOrNum((ability as unknown as Record<string, number | string>).bonusMovement, variables), 0)),
     baseSpeed: rawSpeed,
     baseMaxHp,
     totalMaxHp,
@@ -1054,6 +1126,23 @@ export function getDiceLabel(stat: number): string {
 
 // ── CRUD Methods ──────────────────────────────────────────
 
+type ResourceMaximums = Pick<ReturnType<typeof getAdjustedStats>, "totalMaxHp" | "totalMaxMana" | "totalMaxDt">;
+function reconcileResourcePools(previous: Character, next: Character, before: ResourceMaximums, after: ResourceMaximums, explicit: Partial<Character> = {}): void {
+  for (const [key, maximum, diceType] of [["currentHp", "totalMaxHp", "hp-log"], ["currentMana", "totalMaxMana", "mana-log"], ["currentDt", "totalMaxDt", "dt-log"]] as const) {
+    if (before[maximum] === after[maximum]) continue;
+    next[key] = Math.max(0, Math.min(after[maximum], (explicit[key] ?? previous[key]) + after[maximum] - before[maximum]));
+    const delta = next[key] - previous[key];
+    if (delta) storage.addRoll({ characterId: previous.id, diceType, result: delta, total: delta, modifier: 0, label: "Bonus/debuff source changed", isCrit: false, critBonus: null });
+  }
+}
+function reconcileStoredSource(owner: Character, before: ResourceMaximums): void {
+  const after = getAdjustedStats(owner, storage.getEquipment(owner.id), storage.getAbilities(owner.id));
+  const next = { ...owner };
+  reconcileResourcePools(owner, next, before, after);
+  if (next.currentHp !== owner.currentHp || next.currentMana !== owner.currentMana || next.currentDt !== owner.currentDt) {
+    storage.updateCharacter(owner.id, { currentHp: next.currentHp, currentMana: next.currentMana, currentDt: next.currentDt }, "exact");
+  }
+}
 export const storage = {
   // Characters
   getCharacters(): Character[] {
@@ -1171,16 +1260,92 @@ export const storage = {
     return character;
   },
 
-  updateCharacter(id: number, data: Partial<Omit<Character, "id" | "createdAt" | "updatedAt">>): Character {
+  longRestCharacter(id: number): Character {
+    const characters = this.getCharacters();
+    const owner = characters.find(character => character.id === id);
+    if (!owner) throw new Error("Character not found");
+    const abilities = getList<Ability>(KEYS.abilities).map(ability => ability.characterId !== id ? ability : { ...ability, active: false, ...(ability.usageType === "rechargeable" && ability.maxCharges != null ? { currentCharges: ability.maxCharges } : {}) });
+    const rested: Character = { ...owner, tempHp: 0, tempMana: 0, tempDt: 0, effectApplications: [], triggerConfirmations: {}, abilityTiming: {}, updatedAt: new Date().toISOString(), manualTrackedEffects: (owner.manualTrackedEffects ?? []).map(effect => effect.targetId === "self" ? { ...effect, active: false, triggerMode: "manual" as const } : effect) };
+    const maximums = getAdjustedStats(rested, this.getEquipment(id), abilities.filter(ability => ability.characterId === id));
+    rested.currentHp = maximums.totalMaxHp; rested.currentMana = maximums.totalMaxMana; rested.currentDt = maximums.totalMaxDt;
+    const rolls = getList<Roll>(KEYS.rolls);
+    let nextId = rolls.reduce((maximum, roll) => Math.max(maximum, roll.id), 0);
+    for (const [diceType, result] of [["hp-log", rested.currentHp - owner.currentHp], ["mana-log", rested.currentMana - owner.currentMana], ["dt-log", rested.currentDt - owner.currentDt], ["action-log", 0]] as const) {
+      rolls.push({ id: ++nextId, characterId: id, diceType, result, modifier: 0, total: result, isCrit: false, critBonus: null, label: diceType === "action-log" ? "Long Rest: abilities, charges, timers and trigger checks reset" : "Long Rest", rolledAt: new Date().toISOString() });
+    }
+    commitStorageUpdates(safeStorage, { [KEYS.characters]: JSON.stringify(characters.map(character => character.id === id ? rested : character)), [KEYS.abilities]: JSON.stringify(abilities), [KEYS.rolls]: JSON.stringify(rolls) });
+    return rested;
+  },
+  useAbility(id: number, abilityId: number, data: Partial<Character>): Character {
+    const characters = this.getCharacters();
+    const owner = characters.find(character => character.id === id);
+    let abilities = getList<Ability>(KEYS.abilities);
+    const source = abilities.find(ability => ability.id === abilityId && ability.characterId === id);
+    if (!owner || !source) throw new Error("Ability source is no longer available.");
+    let inventory = getList<InventoryItem>(KEYS.inventory);
+    let usageLabel: string | undefined;
+    if (source.usageType === "rechargeable") {
+      const charges = source.currentCharges ?? source.maxCharges ?? 0;
+      if (charges <= 0) throw new Error("This ability has no charges remaining.");
+      abilities = abilities.map(ability => ability.id === source.id ? { ...ability, currentCharges: charges - 1 } : ability);
+      usageLabel = `${source.name}: spent one charge (${charges - 1} remaining)`;
+    }
+    if (source.usageType === "one-time" && source.inventoryItemId != null) {
+      const item = inventory.find(item => item.id === source.inventoryItemId && item.characterId === id);
+      if (!item || item.quantity <= 0) throw new Error("No item quantity remains to use this ability.");
+      inventory = item.quantity > 1 ? inventory.map(entry => entry.id === item.id ? { ...entry, quantity: item.quantity - 1 } : entry) : inventory.filter(entry => entry.id !== item.id);
+      if (item.quantity <= 1) abilities = abilities.filter(ability => ability.inventoryItemId !== item.id);
+      usageLabel = `${source.name}: consumed one ${item.name} (${item.quantity - 1} remaining)`;
+    }
+    const next = { ...owner, ...spendTemporary(owner, data), updatedAt: new Date().toISOString() };
+    const removed = new Set(this.getAbilities(id).filter(ability => !abilities.some(entry => entry.id === ability.id)).map(ability => ability.id));
+    next.effectApplications = (next.effectApplications ?? []).filter(application => application.familiarId !== undefined || !removed.has(application.abilityId));
+    const before = getAdjustedStats(owner, this.getEquipment(id), this.getAbilities(id));
+    const after = getAdjustedStats(next, this.getEquipment(id), abilities.filter(ability => ability.characterId === id));
+    const rolls = getList<Roll>(KEYS.rolls);
+    let nextId = rolls.reduce((maximum, roll) => Math.max(maximum, roll.id), 0);
+    const log = (diceType: string, delta: number, label: string) => rolls.push({ id: ++nextId, characterId: id, diceType, result: delta, total: delta, modifier: 0, isCrit: false, critBonus: null, label, rolledAt: new Date().toISOString() } as Roll);
+    for (const [key, maximum, diceType] of [["currentHp", "totalMaxHp", "hp-log"], ["currentMana", "totalMaxMana", "mana-log"], ["currentDt", "totalMaxDt", "dt-log"]] as const) {
+      const explicit = next[key];
+      if (before[maximum] !== after[maximum]) {
+        next[key] = Math.max(0, Math.min(after[maximum], explicit + after[maximum] - before[maximum]));
+        if (next[key] !== explicit) log(diceType, next[key] - explicit, `${source.name}: bonus/debuff source changed`);
+      }
+    }
+    if (usageLabel) log("action-log", 0, usageLabel);
+    commitStorageUpdates(safeStorage, { [KEYS.characters]: JSON.stringify(characters.map(character => character.id === id ? next : character)), [KEYS.abilities]: JSON.stringify(abilities), [KEYS.inventory]: JSON.stringify(inventory), [KEYS.rolls]: JSON.stringify(rolls) });
+    return next;
+  },
+  updateCharacter(id: number, data: Partial<Omit<Character, "id" | "createdAt" | "updatedAt">>, resourceMode: "reconcile" | "exact" = "reconcile"): Character {
     const chars = this.getCharacters();
     const idx = chars.findIndex(c => c.id === id);
     if (idx === -1) throw new Error("Character not found");
+
+    if (resourceMode === "reconcile") data = spendTemporary(chars[idx], data);
 
     const updated: Character = {
       ...chars[idx],
       ...data,
       updatedAt: new Date().toISOString(),
     };
+    if (resourceMode === "reconcile" && data.familiars) {
+      updated.familiars = data.familiars.map(familiar => {
+        const previous = chars[idx].familiars?.find(entry => entry.id === familiar.id);
+        if (!previous) return familiar;
+        const before = getFamiliarAdjusted(previous);
+        const next = { ...familiar, ...spendTemporary(previous, familiar) };
+        const after = getFamiliarAdjusted(next);
+        for (const [key, maximum, diceType] of [["currentHp", "maxHp", "hp-log"], ["currentMana", "maxMana", "mana-log"], ["currentDt", "maxDt", "dt-log"]] as const) {
+          if (before[maximum] === after[maximum]) continue;
+          next[key] = Math.max(0, Math.min(after[maximum], next[key] + after[maximum] - before[maximum]));
+          this.addRoll({ characterId: id, familiarId: familiar.id, diceType, result: next[key] - familiar[key], total: next[key] - familiar[key], modifier: 0, label: `${familiar.name}: bonus/debuff source changed`, isCrit: false, critBonus: null });
+        }
+        return next;
+      });
+    }
+    const before = getAdjustedStats(chars[idx], this.getEquipment(id), this.getAbilities(id));
+    const after = getAdjustedStats(updated, this.getEquipment(id), this.getAbilities(id));
+    if (resourceMode === "reconcile") reconcileResourcePools(chars[idx], updated, before, after, data);
     chars[idx] = updated;
     setList(KEYS.characters, chars);
     return updated;
@@ -1208,11 +1373,14 @@ export const storage = {
   },
 
   addEquipment(data: Omit<Equipment, "id">): Equipment {
+    const owner = this.getCharacter(data.characterId);
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const list = getList<Equipment>(KEYS.equipment);
     const newId = list.length > 0 ? Math.max(...list.map(e => e.id)) + 1 : 1;
     const item: Equipment = { ...data, id: newId };
     list.push(item);
     setList(KEYS.equipment, list);
+    if (owner && before) reconcileStoredSource(owner, before);
     return item;
   },
 
@@ -1220,15 +1388,22 @@ export const storage = {
     const list = getList<Equipment>(KEYS.equipment);
     const idx = list.findIndex(e => e.id === id);
     if (idx === -1) throw new Error("Equipment not found");
+    const owner = this.getCharacter(list[idx].characterId);
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const updated = { ...list[idx], ...data };
     list[idx] = updated;
     setList(KEYS.equipment, list);
+    if (owner && before) reconcileStoredSource(owner, before);
     return updated;
   },
 
   deleteEquipment(id: number): void {
+    const source = getList<Equipment>(KEYS.equipment).find(entry => entry.id === id);
+    const owner = source ? this.getCharacter(source.characterId) : null;
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const list = getList<Equipment>(KEYS.equipment).filter(e => e.id !== id);
     setList(KEYS.equipment, list);
+    if (owner && before) reconcileStoredSource(owner, before);
   },
 
   // Currencies
@@ -1315,11 +1490,14 @@ export const storage = {
   },
 
   addAbility(data: Omit<Ability, "id">): Ability {
+    const owner = this.getCharacter(data.characterId);
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const list = getList<Ability>(KEYS.abilities);
     const newId = list.length > 0 ? Math.max(...list.map(a => a.id)) + 1 : 1;
     const item: Ability = { ...data, id: newId };
     list.push(item);
     setList(KEYS.abilities, list);
+    if (owner && before) reconcileStoredSource(owner, before);
     return item;
   },
 
@@ -1327,15 +1505,22 @@ export const storage = {
     const list = getList<Ability>(KEYS.abilities);
     const idx = list.findIndex(a => a.id === id);
     if (idx === -1) throw new Error("Ability not found");
+    const owner = this.getCharacter(list[idx].characterId);
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const updated = { ...list[idx], ...data };
     list[idx] = updated;
     setList(KEYS.abilities, list);
+    if (owner && before) reconcileStoredSource(owner, before);
     return updated;
   },
 
   deleteAbility(id: number): void {
+    const source = getList<Ability>(KEYS.abilities).find(entry => entry.id === id);
+    const owner = source ? this.getCharacter(source.characterId) : null;
+    const before = owner ? getAdjustedStats(owner, this.getEquipment(owner.id), this.getAbilities(owner.id)) : undefined;
     const list = getList<Ability>(KEYS.abilities).filter(a => a.id !== id);
     setList(KEYS.abilities, list);
+    if (owner && before) reconcileStoredSource(owner, before);
   },
 
   // Skills
@@ -1738,12 +1923,22 @@ const DEFAULT_NOTE: Omit<Note, "id" | "characterId" | "createdAt" | "updatedAt">
   images: []
 };
 
+function characterForExport(character: Character): Character {
+  const raw = safeStorage.getItem(`aetherborne_combatants_${character.id}`);
+  if (!raw) return character;
+  try {
+    return { ...character, trackerEncounter: { combatants: JSON.parse(raw), turn: Number(safeStorage.getItem(`aetherborne_combatants_turn_${character.id}`)) } };
+  } catch {
+    return character;
+  }
+}
+
 export function exportCharacterJSON(charId: number): void {
   const char = storage.getCharacter(charId);
   if (!char) return;
 
   const data = {
-    character: char,
+    character: characterForExport(char),
     equipment: storage.getEquipment(charId),
     currencies: storage.getCurrencies(charId),
     inventory: storage.getInventory(charId),
@@ -1789,6 +1984,7 @@ export function importCharacterJSON(jsonString: string): Character {
       name: fam.name || "Companion",
       abilities: Array.isArray(fam.abilities)
         ? fam.abilities.map((ab: any) => ({
+            ...ab,
             id: ab.id || Date.now() + Math.random(),
             name: ab.name || "Ability",
             description: ab.description || "",
@@ -1892,10 +2088,12 @@ export function importCharacterJSON(jsonString: string): Character {
     setList(KEYS.essences, list);
   }
 
+  const abilityIdMap: Record<number, number> = {};
   if (Array.isArray(data.abilities)) {
     const list = getList<Ability>(KEYS.abilities);
     let nextId = list.length > 0 ? Math.max(...list.map(a => a.id)) + 1 : 1;
     data.abilities.forEach((item: any) => {
+      abilityIdMap[item.id] = nextId;
       const oldEssId = item.essenceId;
       const newEssId = oldEssId && essenceIdMap[oldEssId] ? essenceIdMap[oldEssId] : null;
 
@@ -1957,6 +2155,21 @@ export function importCharacterJSON(jsonString: string): Character {
     setList(KEYS.notes, list);
   }
 
+  if (Array.isArray(importedChar.favorites)) {
+    importedChar.favorites = importedChar.favorites.map(slot => slot && ["ability", "sub-ability", "ability-result"].includes(slot.type) ? { ...slot, targetId: abilityIdMap[Number(slot.targetId)] ?? slot.targetId } : slot);
+    setList(KEYS.characters, chars);
+  }
+  if (Array.isArray(importedChar.manualTrackedEffects)) {
+    importedChar.manualTrackedEffects = importedChar.manualTrackedEffects.map(effect => ({ ...effect, abilityId: effect.abilityId === undefined ? undefined : abilityIdMap[effect.abilityId] }));
+    setList(KEYS.characters, chars);
+  }
+  if (Array.isArray(importedChar.effectApplications)) {
+    importedChar.effectApplications = importedChar.effectApplications.map(application => ({
+      ...application,
+      abilityId: application.familiarId !== undefined ? application.abilityId : abilityIdMap[application.abilityId] ?? application.abilityId,
+    }));
+    setList(KEYS.characters, chars);
+  }
   return importedChar;
 }
 
@@ -1983,7 +2196,7 @@ export function exportFullBackup(): void {
   const data = {
     fullArchive: true,
     schemaVersion: ARCHIVE_SCHEMA_VERSION,
-    characters: getList<Character>(KEYS.characters),
+    characters: getList<Character>(KEYS.characters).map(characterForExport),
     equipment: getList<Equipment>(KEYS.equipment),
     currencies: getList<Currency>(KEYS.currencies),
     inventory: getList<InventoryItem>(KEYS.inventory),
@@ -2070,7 +2283,7 @@ export function exportGrimoireBackup(): void {
   const data = {
     grimoireBackup: true,
     schemaVersion: ARCHIVE_SCHEMA_VERSION,
-    characters: getList<Character>(KEYS.characters),
+    characters: getList<Character>(KEYS.characters).map(characterForExport),
     equipment: getList<Equipment>(KEYS.equipment),
     currencies: getList<Currency>(KEYS.currencies),
     inventory: getList<InventoryItem>(KEYS.inventory),
@@ -2116,175 +2329,11 @@ export function importGrimoireBackup(jsonString: string): { count: number } {
   return { count: data.characters.length };
 }
 
-// ── Default Mock Database Initialization ──────────────────
-
+// Fresh installations start empty. Existing records are never reset.
 function initializeDefaultSample(): void {
-  const initialized = safeStorage.getItem("aetherborne_initialized");
-  if (initialized === "true") return;
-
-  // Insert Garrick
-  const char: Character = {
-    id: 1,
-    name: "Garrick the Shieldbearer",
-    rank: "Iron",
-    race: "Human",
-    level: 5,
-    maxHp: 150,
-    currentHp: 150,
-    dtBonus: 0,
-    currentDt: 14,
-    speed: 30,
-    power: 14,
-    vitality: 15,
-    spirit: 8,
-    agility: 10,
-    endurance: 14,
-    precision: 11,
-    willpower: 12,
-    charisma: 10,
-    currentMana: 50,
-    background: "Captain of the Outer Walls",
-    backstory: "Garrick stood guard during the Siege of Blackwood Forest, single-handedly holding the eastern gate shield line against a horde of wild mythical beasts. He lives by a simple code: shields high, protectors firm.",
-    hpFormula: "1 + Vitality * 10 + Endurance * 5",
-    manaFormula: "1 + Spirit * 10 + Willpower * 5",
-    dtFormula: "Endurance * 2 + dtBonus",
-    powerTraining: 4,
-    vitalityTraining: 2,
-    spiritTraining: 0,
-    agilityTraining: 1,
-    enduranceTraining: 8,
-    precisionTraining: 0,
-    willpowerTraining: 3,
-    charismaTraining: 0,
-    resistances: "Slash, Bludgeon",
-    immunities: "Fear",
-    familiars: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  setList(KEYS.characters, [char]);
-
-  // Equipment
-  const equipment: Equipment[] = [
-    {
-      id: 1,
-      characterId: 1,
-      name: "Iron Longsword",
-      description: "A standard-issue military blade, heavy but reliable.",
-      equipped: true,
-      assignedToQuickRolls: true,
-      dtBonus: 0,
-      statModifiers: { precision: 1 },
-      diceType: "d8",
-      modifier: 0,
-    },
-    {
-      id: 2,
-      characterId: 1,
-      name: "Steel Tower Shield",
-      description: "An enormous rectangular shield engraved with fortress walls. Absorbs massive impacts.",
-      equipped: true,
-      assignedToQuickRolls: false,
-      dtBonus: 6,
-      statModifiers: {},
-    },
-  ];
-  setList(KEYS.equipment, equipment);
-
-  // Currencies
-  const currencies: Currency[] = [
-    { id: 1, characterId: 1, name: "Gold", amount: 150 },
-    { id: 2, characterId: 1, name: "Silver", amount: 30 },
-  ];
-  setList(KEYS.currencies, currencies);
-
-  // Inventory Items
-  const inventory: InventoryItem[] = [
-    { id: 1, characterId: 1, name: "Hempen Rope (50ft)", description: "Coiled rope, tough and useful.", quantity: 1 },
-    { id: 2, characterId: 1, name: "Iron Rations", description: "Hard tack and dried meat slices.", quantity: 5 },
-  ];
-  setList(KEYS.inventory, inventory);
-
-  // Essences
-  const essences: Essence[] = [
-    { id: 1, characterId: 1, name: "Aegis", description: "Shielding energies of ancient steel.", slot: 1 },
-    { id: 2, characterId: 1, name: "Earthguard", description: "Defensive solid earth attunement.", slot: 2 },
-    { id: 3, characterId: 1, name: "Stoneform", description: "Hardening skin like heavy bedrock.", slot: 3 },
-    { id: 4, characterId: 1, name: "Confluence: Bastion of Gaia", description: "Ultimate earth defense alignment.", slot: 4 },
-  ];
-  setList(KEYS.essences, essences);
-
-  // Abilities
-  const abilities: Ability[] = [
-    {
-      id: 1,
-      characterId: 1,
-      name: "Stone Aegis",
-      description: "Shapes stone armor around yourself. Increases current DT by +6.",
-      cost: 10,
-      cooldown: 3,
-      range: "Self",
-      speed: "Instant",
-      rollFormula: "d6",
-      linkedStat: "willpower",
-      linkedStats: ["willpower"],
-      assignedToQuickRolls: true,
-      level: 1,
-    },
-    {
-      id: 2,
-      characterId: 1,
-      name: "Earthbreaker Strike",
-      description: "Slams your heavy weapon down. Deals bonus earth damage and knocks the target back.",
-      cost: 15,
-      cooldown: 5,
-      range: "Melee",
-      speed: "Standard",
-      rollFormula: "2d6",
-      linkedStat: "power",
-      linkedStats: ["power"],
-      assignedToQuickRolls: true,
-      level: 1,
-    },
-  ];
-  setList(KEYS.abilities, abilities);
-
-  // Skills
-  const skills: Skill[] = [
-    { id: 1, characterId: 1, name: "Beast Handling", value: 3, training: 0 },
-    { id: 2, characterId: 1, name: "Basic Wilderness Knowledge", value: 3, training: 0 },
-    { id: 3, characterId: 1, name: "Athletics", value: 6, training: 0 },
-  ];
-  setList(KEYS.skills, skills);
-
-  // Notes
-  const notes: Note[] = [
-    {
-      id: 1,
-      characterId: 1,
-      title: "The Blackwood Forest ruins",
-      content: "Innkeepers speak of goblins gathering near the ruins in the eastern quadrant. They seem to be looking for shaped artifacts.",
-      category: "lore",
-      tags: ["Blackwood", "Goblin"],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  ];
-  setList(KEYS.notes, notes);
-
-  // Recaps
-  const recaps: SessionRecap[] = [
-    {
-      id: 1,
-      title: "Session 1: Siege of the Blackwood Forest",
-      content: "The party successfully defended the eastern gate ruins from a wild night beast raid. Garrick held the gate line with his tower shield. The campfire burns low...",
-      createdAt: new Date().toISOString(),
-    },
-  ];
-  setList(KEYS.recaps, recaps);
-
-  safeStorage.setItem("aetherborne_initialized", "true");
+  if (safeStorage.getItem('aetherborne_initialized') !== 'true') {
+    safeStorage.setItem('aetherborne_initialized', 'true');
+  }
 }
 
 // ── Ability Evolution Constants & Helpers ──────────────────────────

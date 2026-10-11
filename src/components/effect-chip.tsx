@@ -1,0 +1,4 @@
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+export function EffectChip({ name, description, onRemove }: { name: string; description: string; onRemove?: () => void }) {
+  return <span className="inline-flex items-center rounded-md border border-primary/40 text-xs"><TooltipProvider delayDuration={150}><Tooltip><TooltipTrigger asChild><button type="button" className="px-2 py-1 text-primary">{name}</button></TooltipTrigger><TooltipContent className="max-w-xs whitespace-pre-wrap bg-popover text-popover-foreground border border-border"><p className="font-semibold mb-1">{name}</p>{description}</TooltipContent></Tooltip></TooltipProvider>{onRemove && <button type="button" className="px-1.5 text-muted-foreground hover:text-destructive" aria-label={`Remove ${name}`} onClick={onRemove}>×</button>}</span>;
+}

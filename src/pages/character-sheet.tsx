@@ -18,7 +18,7 @@ import { format } from "date-fns";
 
 // Storage Hooks & Helpers
 import {
-  useGetCharacter, useUpdateCharacter, useDeleteCharacter, useApplyDamage,
+  useGetCharacter, useUpdateCharacter, useDeleteCharacter, useApplyDamage, useLongRestCharacter,
   useCreateRoll, useListCharacterRolls,
   useListEquipment, useUpdateEquipment, useDeleteEquipment,
   useListCurrencies, useUpdateCurrency, useDeleteCurrency,
@@ -45,6 +45,19 @@ import { EditAbilitiesDialog } from "@/components/dialogs/edit-abilities-dialog"
 import { EditSkillsDialog } from "@/components/dialogs/edit-skills-dialog";
 import { EditInventoryDialog } from "@/components/dialogs/edit-inventory-dialog";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
+import { TrackerPanel } from "@/components/tracker-panel";
+import { AbilityResultList } from "@/components/ability-result-list";
+import { AbilityOptionsFields } from "@/components/dialogs/ability-options";
+import { mergeOptions, flattenInputs } from "@/lib/ability-input";
+import { restedFamiliar, getFamiliarMaxValues, getFamiliarAdjusted, familiarAsCharacter, familiarAbilityAsAbility } from "@/lib/familiar-values";
+import { spendTemporary } from "@/lib/temporary-resources";
+import { activeEffectModifier } from "@/lib/active-effect-modifiers";
+import { expireEffectApplications } from "@/lib/effect-stacking";
+import { resolveTrackerEffects, isEffectApplied } from "@/lib/tracker";
+import { favoriteRollChoices } from "@/lib/favorite-rolls";
+import { removeResourceBonus } from "@/lib/resource-bonus-transition";
+import { shouldEndAbilityOnUse } from "@/lib/ability-use-action";
+import { AbilityComponentList } from "@/components/ability-component-list";
 import { EditItemAbilityDialog } from "@/components/dialogs/edit-item-ability-dialog";
 
 const STATS = [
@@ -229,6 +242,7 @@ export default function CharacterSheet() {
   // Mutations
   const deleteAbility = useDeleteAbility();
   const updateChar = useUpdateCharacter();
+  const longRestMut = useLongRestCharacter();
   const deleteChar = useDeleteCharacter();
   const createRoll = useCreateRoll();
   const applyDamageMut = useApplyDamage();
@@ -272,7 +286,7 @@ export default function CharacterSheet() {
   };
 
   // ── Tab State ─────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "essences" | "abilities" | "notes" | "familiar" | "combat">("stats");
+  const [activeTab, setActiveTab] = useState<"stats" | "skills" | "inventory" | "essences" | "abilities" | "notes" | "familiar" | "settings">("stats");
 
   // ── Resource state ────────────────────────────────────────
   const [hp, setHp] = useState<number | null>(null);
@@ -282,6 +296,7 @@ export default function CharacterSheet() {
   // ── Combat Tracker State ──────────────────────────────────
   const [combatants, setCombatants] = useState<Combatant[]>([]);
   const [currentTurnIdx, setCurrentTurnIdx] = useState<number>(0);
+  const [loadedEncounterId, setLoadedEncounterId] = useState<number | null>(null);
   const [recentCombatants, setRecentCombatants] = useState<Omit<Combatant, "id">[]>([]);
 
   useEffect(() => {
@@ -303,27 +318,28 @@ export default function CharacterSheet() {
 
   // ── Combat Tracker LocalStorage Persistence ───────────────
   useEffect(() => {
-    if (id) {
+    if (id && character) {
       try {
         const savedCombatants = localStorage.getItem(`aetherborne_combatants_${id}`);
-        if (savedCombatants) setCombatants(JSON.parse(savedCombatants));
+        setCombatants(savedCombatants ? JSON.parse(savedCombatants) : character.trackerEncounter?.combatants ?? []);
         const savedTurnIdx = localStorage.getItem(`aetherborne_combatants_turn_${id}`);
-        if (savedTurnIdx) setCurrentTurnIdx(Number(savedTurnIdx));
+        setCurrentTurnIdx(savedTurnIdx ? Number(savedTurnIdx) : character.trackerEncounter?.turn ?? 0);
         const savedRecents = localStorage.getItem(`aetherborne_combatants_recents_${id}`);
         if (savedRecents) setRecentCombatants(JSON.parse(savedRecents));
       } catch (e) {
         console.error("Failed to load combat tracker state", e);
       }
+      setLoadedEncounterId(id);
     }
-  }, [id]);
+  }, [id, character?.id]);
 
   useEffect(() => {
-    if (id) {
+    if (id && loadedEncounterId === id) {
       localStorage.setItem(`aetherborne_combatants_${id}`, JSON.stringify(combatants));
       localStorage.setItem(`aetherborne_combatants_turn_${id}`, String(currentTurnIdx));
       localStorage.setItem(`aetherborne_combatants_recents_${id}`, JSON.stringify(recentCombatants));
     }
-  }, [id, combatants, currentTurnIdx, recentCombatants]);
+  }, [id, loadedEncounterId, combatants, currentTurnIdx, recentCombatants]);
 
   // Retroactive Auto-Conversion of Existing Items to Notes
   const hasSyncedItemsRef = useRef(false);
@@ -387,48 +403,13 @@ export default function CharacterSheet() {
   const [isLongRestConfirmOpen, setIsLongRestConfirmOpen] = useState(false);
 
   const handleLongRest = () => {
-    const targetHp = maxHp;
-    const targetDt = maxDt;
-    const targetMana = maxMana;
-
-    // Reset rechargeable ability charges on Long Rest
-    const rechargeableAbilities = abilities?.filter(a => a.usageType === "rechargeable") || [];
-    rechargeableAbilities.forEach(ab => {
-      if (ab.maxCharges && ab.maxCharges > 0 && ab.currentCharges !== ab.maxCharges) {
-        updateAbilityMut.mutate({
-          id: ab.id,
-          data: { currentCharges: ab.maxCharges ?? 0 }
-        });
-      }
-    });
-
-    updateChar.mutate({
-      id,
-      data: {
-        currentHp: targetHp,
-        currentDt: targetDt,
-        currentMana: targetMana
-      }
-    }, {
-      onSuccess: () => {
-        const curHp = hp ?? character?.currentHp ?? targetHp;
-        const curDt = currentDt ?? character?.currentDt ?? targetDt;
-        const curMana = mana ?? character?.currentMana ?? targetMana;
-
-        setHp(targetHp);
-        setCurrentDt(targetDt);
-        setMana(targetMana);
-
-        createRoll.mutate({ id, data: { diceType: "hp-log", modifier: targetHp - curHp, label: "Long Rest" } });
-        createRoll.mutate({ id, data: { diceType: "dt-log", modifier: targetDt - curDt, label: "Long Rest" } });
-        createRoll.mutate({ id, data: { diceType: "mana-log", modifier: targetMana - curMana, label: "Long Rest" } });
-        
-        toast.success("Long Rest completed. Vitals and ability charges restored.");
-        setIsLongRestConfirmOpen(false);
-      }
-    });
+    if (!character || longRestMut.isPending) return;
+    longRestMut.mutate(id, { onSuccess: rested => {
+      setHp(rested.currentHp); setMana(rested.currentMana); setCurrentDt(rested.currentDt);
+      toast.success("Long Rest completed. Abilities reset and resources fully restored.");
+      setIsLongRestConfirmOpen(false);
+    }, onError: error => toast.error(error.message) });
   };
-
   // ── Dedicated HUD Inputs State ─────────────────────────────
   const [hpAdd, setHpAdd] = useState("");
   const [hpRemove, setHpRemove] = useState("");
@@ -513,7 +494,9 @@ export default function CharacterSheet() {
   const [famDamageResult, setFamDamageResult] = useState<{ hpLost: number; absorbed: boolean } | null>(null);
 
   // ── New Features State ──
-  const [recentRollActions, setRecentRollActions] = useState<{ diceType: string; label: string; modifier: number }[]>([]);
+  const [favoriteRollPicker, setFavoriteRollPicker] = useState<{ abilityId: number; inputId: string } | null>(null);
+  const [familiarRollPicker, setFamiliarRollPicker] = useState<{ familiarId: string | number; abilityId: number; inputId: string } | null>(null);
+  const [recentRollActions, setRecentRollActions] = useState<{ diceType: string; label: string; modifier: number; familiarId?: string | number }[]>([]);
   const [discardItem, setDiscardItem] = useState<any | null>(null);
   const [discardCount, setDiscardCount] = useState<number>(1);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
@@ -551,6 +534,8 @@ export default function CharacterSheet() {
   const [rollTab, setRollTab] = useState<"stats" | "dice" | "history">("stats");
   const [rollMod, setRollMod] = useState("0");
   const [rollLabel, setRollLabel] = useState("");
+  const [rollPurpose, setRollPurpose] = useState<"" | "attack" | "check" | "resistance">("");
+  const [rollScope, setRollScope] = useState("");
   const [rollingDice, setRollingDice] = useState<string | null>(null);
   const [customFormula, setCustomFormula] = useState("");
   
@@ -576,6 +561,34 @@ export default function CharacterSheet() {
     label: string;
     rolls?: { label: string; breakdown: string; total: number }[];
   } | null>(null);
+
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null);
+  const autoScrollRolls = character?.uiPreferences?.autoScrollRolls ?? true;
+  const previousRollEvent = useRef({ rollingDice, lastRoll, critChain });
+  useEffect(() => {
+    if (!pendingScrollTarget) return;
+    const frame = requestAnimationFrame(() => {
+      const element = document.getElementById(pendingScrollTarget);
+      if (element) {
+        element.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
+        element.classList.add("ring-2", "ring-primary");
+        setTimeout(() => element.classList.remove("ring-2", "ring-primary"), 2000);
+      }
+      setPendingScrollTarget(null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingScrollTarget, activeTab]);
+
+  useEffect(() => {
+    const previous = previousRollEvent.current;
+    previousRollEvent.current = { rollingDice, lastRoll, critChain };
+    if (previous.rollingDice === rollingDice && previous.lastRoll === lastRoll && previous.critChain === critChain) return;
+    if (!autoScrollRolls || (!rollingDice && !lastRoll && !critChain)) return;
+    const frame = requestAnimationFrame(() => document.getElementById("dice-roll-result")?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center",
+    }));
+    return () => cancelAnimationFrame(frame);
+  }, [rollingDice, lastRoll, critChain, autoScrollRolls]);
 
   if (isLoading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
   if (!character) return <div className="p-8 text-center text-muted-foreground">Character not found</div>;
@@ -603,51 +616,6 @@ export default function CharacterSheet() {
   } = adjustedStats;
 
   // ── Derived max values for familiar ───────────────────────
-  const getFamiliarMaxValues = (fam: Familiar) => {
-    const vars = {
-      power: fam.power, pow: fam.power,
-      vitality: fam.vitality, vit: fam.vitality,
-      spirit: fam.spirit, spi: fam.spirit,
-      agility: fam.agility, agi: fam.agility,
-      endurance: fam.endurance, end: fam.endurance,
-      precision: fam.precision, pre: fam.precision,
-      willpower: fam.willpower, wil: fam.willpower,
-      charisma: fam.charisma, cha: fam.charisma,
-      dtbonus: parseFormulaOrNum(fam.dtBonus, {})
-    };
-    const activeFamAbilities = fam.abilities?.filter(ab => ab.active) || [];
-    const hpAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpAdd, vars), 0);
-    const hpBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.hpBuff, vars), 0);
-    const manaAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaAdd, vars), 0);
-    const manaBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.manaBuff, vars), 0);
-    const dtAddBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtAdd, vars), 0);
-    const dtBuffBonus = activeFamAbilities.reduce((sum, ab) => sum + parseFormulaOrNum(ab.dtBuff, vars), 0);
-
-    const baseMaxHp = Math.max(1, evaluateFormula(fam.hpFormula || "Vitality * 8", vars) + hpAddBonus);
-    const totalMaxHp = Math.max(1, baseMaxHp + hpBuffBonus);
-
-    const baseMaxMana = Math.max(0, evaluateFormula(fam.manaFormula || "Spirit * 5", vars) + manaAddBonus);
-    const totalMaxMana = Math.max(0, baseMaxMana + manaBuffBonus);
-
-    const baseMaxDt = Math.max(0, evaluateFormula(fam.dtFormula || "Endurance * 1", vars) + dtAddBonus);
-    const totalMaxDt = Math.max(0, baseMaxDt + dtBuffBonus);
-
-    const famSpeed = Math.max(0, evaluateFormula(fam.speedFormula || "Agility * 5", vars));
-
-    return {
-      baseMaxHp,
-      totalMaxHp,
-      maxHp: totalMaxHp,
-      baseMaxMana,
-      totalMaxMana,
-      maxMana: totalMaxMana,
-      baseMaxDt,
-      totalMaxDt,
-      maxDt: totalMaxDt,
-      speed: famSpeed,
-      maxSpeed: famSpeed,
-    };
-  };
 
   const getSlotDetails = (slot: FavoriteSlot) => {
     let name = slot.label;
@@ -691,6 +659,11 @@ export default function CharacterSheet() {
           statStr = "SPI";
         }
       }
+    } else if (slot.type === "ability-result") {
+      const ability = abilities.find(entry => entry.id === Number(slot.targetId));
+      const node = ability?.definition ? flattenInputs(ability.definition).find(input => input.results.some(result => result.id === slot.subId)) : undefined;
+      const result = node?.results.find(result => result.id === slot.subId);
+      if (result) { name = node!.name; costStr = node!.manaCost === undefined ? "" : `${node!.manaCost} MP`; statStr = result.formula; }
     } else if (slot.type === "sub-ability") {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
       if (ability && ability.subAbilities) {
@@ -767,18 +740,16 @@ export default function CharacterSheet() {
     const diff = next - cur !== 0 ? next - cur : -amount;
     setHp(next);
     setHpRemove("");
-    updateChar.mutate({ id, data: { currentHp: next } });
+    updateChar.mutate({ id, data: { currentHp: cur - amount } });
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: diff, label: "Direct DMG" } });
   };
 
   const handleHpBuff = () => {
-    const amount = parseInt(hpBuff) || 1;
-    const cur = hp ?? character.currentHp;
-    const next = cur + amount;
-    setHp(next);
+    const amount = Number(hpBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
     setHpBuff("");
-    updateChar.mutate({ id, data: { currentHp: next } });
-    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: "Buffed HP" } });
+    updateChar.mutate({ id, data: { tempHp: (character.tempHp ?? 0) + amount } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: "Added temporary HP" } });
   };
 
   const handleFullRestoreHp = () => {
@@ -815,7 +786,7 @@ export default function CharacterSheet() {
     const next = Math.max(0, cur - amount);
     setCurrentDt(next);
     setDtRemove("");
-    updateChar.mutate({ id, data: { currentDt: next } });
+    updateChar.mutate({ id, data: { currentDt: cur - amount } });
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: "Manual DT Reduction" } });
     toast.success(`Deducted ${amount} from DT directly.`);
   };
@@ -832,13 +803,11 @@ export default function CharacterSheet() {
   };
 
   const handleDtBuff = () => {
-    const amount = parseInt(dtBuff) || 1;
-    const cur = currentDt ?? character.currentDt;
-    const next = cur + amount;
-    setCurrentDt(next);
+    const amount = Number(dtBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
     setDtBuff("");
-    updateChar.mutate({ id, data: { currentDt: next } });
-    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: "Buffed DT" } });
+    updateChar.mutate({ id, data: { tempDt: (character.tempDt ?? 0) + amount } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: "Added temporary DT" } });
   };
 
   const handleRestoreDt = () => {
@@ -871,19 +840,16 @@ export default function CharacterSheet() {
     const diff = next - cur !== 0 ? next - cur : -amount;
     setMana(next);
     setManaRemove("");
-    updateChar.mutate({ id, data: { currentMana: next } });
+    updateChar.mutate({ id, data: { currentMana: cur - amount } });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: diff, label: "Spent Mana" } });
   };
 
   const handleManaBuff = () => {
-    const amount = parseInt(manaBuff) || 1;
-    if (isNaN(amount) || amount <= 0) return;
-    const cur = mana ?? character.currentMana;
-    const next = cur + amount;
-    setMana(next);
+    const amount = Number(manaBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
     setManaBuff("");
-    updateChar.mutate({ id, data: { currentMana: next } });
-    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: "Buffed Mana" } });
+    updateChar.mutate({ id, data: { tempMana: (character.tempMana ?? 0) + amount } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: "Added temporary Mana" } });
   };
 
   const handleFullRestoreMana = () => {
@@ -967,18 +933,17 @@ export default function CharacterSheet() {
     const inputVal = famInputs[fam.id]?.hpRemove || "";
     const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentHp - amount);
-    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    updateFamiliarData(fam.id, { ...fam, currentHp: fam.currentHp - amount });
     updateFamInput(fam.id, "hpRemove", "");
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} DMG`, familiarId: fam.id } });
   };
 
   const handleFamHpBuff = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.hpBuff || "";
-    const amount = parseInt(inputVal) || 1;
-    const next = fam.currentHp + amount;
-    updateFamiliarData(fam.id, { ...fam, currentHp: next });
+    const amount = Number(famInputs[fam.id]?.hpBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    updateFamiliarData(fam.id, { ...fam, tempHp: (fam.tempHp ?? 0) + amount });
     updateFamInput(fam.id, "hpBuff", "");
-    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: `Fam: ${fam.name} Buff`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: amount, label: "Added temporary HP", familiarId: fam.id } });
   };
 
   const handleFamFullRestoreHp = (fam: Familiar) => {
@@ -991,17 +956,17 @@ export default function CharacterSheet() {
   // ── Familiar DT Adjustments ───────────────────────────────
   const handleFamApplyDamage = (fam: Familiar) => {
     const inputVal = famInputs[fam.id]?.damageAmount || "";
-    const amount = parseInt(inputVal) || 1;
+    const amount = Math.max(0, (parseInt(inputVal) || 1) - activeEffectModifier(fam, [], [], "damageReduction"));
 
-    let dtVal = fam.currentDt;
+    let dtVal = fam.currentDt + (fam.tempDt ?? 0);
     let hpVal = fam.currentHp;
     let hpLost = 0;
     let absorbed = true;
 
-    const newDtVal = Math.max(0, dtVal - 1);
+    const newDtVal = fam.currentDt - 1;
     if (amount > dtVal) {
       hpLost = amount - dtVal;
-      hpVal = Math.max(0, hpVal - hpLost);
+      hpVal -= hpLost;
       dtVal = newDtVal;
       absorbed = false;
     } else {
@@ -1032,7 +997,7 @@ export default function CharacterSheet() {
     const inputVal = famInputs[fam.id]?.dtRemove || "";
     const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentDt - amount);
-    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    updateFamiliarData(fam.id, { ...fam, currentDt: fam.currentDt - amount });
     updateFamInput(fam.id, "dtRemove", "");
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: `Fam: ${fam.name} Manual DT Deduct`, familiarId: fam.id } });
     toast.success(`Deducted ${amount} from ${fam.name}'s DT directly.`);
@@ -1095,12 +1060,11 @@ export default function CharacterSheet() {
   };
 
   const handleFamDtBuff = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.dtBuff || "";
-    const amount = parseInt(inputVal) || 1;
-    const next = fam.currentDt + amount;
-    updateFamiliarData(fam.id, { ...fam, currentDt: next });
+    const amount = Number(famInputs[fam.id]?.dtBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    updateFamiliarData(fam.id, { ...fam, tempDt: (fam.tempDt ?? 0) + amount });
     updateFamInput(fam.id, "dtBuff", "");
-    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: `Fam: ${fam.name} DT Buff`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: amount, label: "Added temporary DT", familiarId: fam.id } });
   };
 
   const handleFamRestoreDt = (fam: Familiar) => {
@@ -1140,19 +1104,17 @@ export default function CharacterSheet() {
     const inputVal = famInputs[fam.id]?.manaRemove || "";
     const amount = parseInt(inputVal) || 1;
     const next = Math.max(0, fam.currentMana - amount);
-    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    updateFamiliarData(fam.id, { ...fam, currentMana: fam.currentMana - amount });
     updateFamInput(fam.id, "manaRemove", "");
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Spent Mana`, familiarId: fam.id } });
   };
 
   const handleFamManaBuff = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.manaBuff || "";
-    const amount = parseInt(inputVal) || 1;
-    if (isNaN(amount) || amount <= 0) return;
-    const next = fam.currentMana + amount;
-    updateFamiliarData(fam.id, { ...fam, currentMana: next });
+    const amount = Number(famInputs[fam.id]?.manaBuff);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    updateFamiliarData(fam.id, { ...fam, tempMana: (fam.tempMana ?? 0) + amount });
     updateFamInput(fam.id, "manaBuff", "");
-    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: `Fam: ${fam.name} Mana Buff`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: amount, label: "Added temporary Mana", familiarId: fam.id } });
   };
 
   const handleFamFullRestoreMana = (fam: Familiar) => {
@@ -1168,7 +1130,8 @@ export default function CharacterSheet() {
   };
 
   // ── Dice rolling handlers ─────────────────────────────────
-  const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number) => {
+  const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number, familiarId?: string | number, rollPurpose?: "attack" | "check" | "resistance", rollScope?: string, onResolved?: () => void) => {
+    if (familiarId !== undefined && !character.familiars?.some(familiar => familiar.id === familiarId)) { toast.error("Record this familiar in Familiars before rolling its imported abilities."); return; }
     const rollKey = label || diceType;
     const varsForMod = {
       power: finalStats.power, pow: finalStats.power,
@@ -1196,9 +1159,10 @@ export default function CharacterSheet() {
     setCritChain(null);
     
     createRoll.mutate(
-      { id, data: { diceType, modifier, label: label || rollLabel || diceType, ...(statValue !== undefined ? { statValue } : {}) } },
+      { id, data: { diceType, modifier, rollPurpose, rollScope, label: label || rollLabel || diceType, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
         onSuccess: (data) => {
+          onResolved?.();
           setTimeout(() => {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
@@ -1206,8 +1170,8 @@ export default function CharacterSheet() {
             const lbl = label || rollLabel || diceType;
             
             setRecentRollActions(prev => {
-              const next = { diceType, label: lbl, modifier };
-              const filtered = prev.filter(a => !(a.label === next.label && a.diceType === next.diceType && a.modifier === next.modifier));
+              const next = { diceType, label: lbl, modifier, familiarId };
+              const filtered = prev.filter(a => !(a.label === next.label && a.diceType === next.diceType && a.modifier === next.modifier && a.familiarId === next.familiarId));
               return [next, ...filtered].slice(0, 10);
             });
 
@@ -1225,6 +1189,7 @@ export default function CharacterSheet() {
                 label: lbl,
                 lastRolledValue: rolled,
                 statValue,
+                familiarId,
                 rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
               });
             } else {
@@ -1262,7 +1227,7 @@ export default function CharacterSheet() {
 
   const handleCustomFormulaRoll = () => {
     if (!customFormula.trim()) return;
-    handleRoll(customFormula.trim(), rollLabel || "Custom Roll");
+    handleRoll(customFormula.trim(), rollLabel || "Custom Roll", undefined, undefined, undefined, rollPurpose || undefined, rollScope);
   };
 
 
@@ -1299,17 +1264,36 @@ export default function CharacterSheet() {
     );
   };
 
+  const handleAbilityResultRoll = (formula: string, label: string, familiar?: Familiar, onResolved?: () => void) => {
+    handleRoll(formula, label, undefined, familiar ? 0 : undefined, familiar?.id, undefined, undefined, onResolved);
+  };
+  const handleAbilityManaPayment = (amount: number, label: string, familiar?: Familiar) => {
+    if (familiar) {
+      const current = character.familiars?.find(entry => entry.id === familiar.id);
+      if (!current) { toast.error("Record this familiar in Familiars before paying its mana cost."); return; }
+      if (amount > current.currentMana + (current.tempMana ?? 0)) { toast.error("Not enough familiar mana; adjust its resource manually if your table permits it."); return; }
+      updateFamiliarData(current.id, { ...current, currentMana: current.currentMana - amount });
+      createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -amount, label: `${current.name}: ${label}`, familiarId: current.id } });
+      return;
+    }
+    const current = mana ?? character.currentMana;
+    if (amount > current + (character.tempMana ?? 0)) { toast.error("Not enough mana; adjust the resource manually if your table permits it."); return; }
+    setMana(current - amount);
+    updateChar.mutate({ id, data: { currentMana: current - amount } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -amount, label } });
+  };
+
   const handleStatRoll = (statKey: string, statLabel: string) => {
     const statValue = finalStats[statKey];
     const modifier = autoModifiers[statKey];
-    handleRoll(diceLabels[statKey], `${statLabel} Roll`, statValue, modifier);
+    handleRoll(diceLabels[statKey], `${statLabel} Roll`, statValue, modifier, undefined, "check", statKey);
   };
 
   const handleSkillRoll = (skill: Skill) => {
     const val = Number(skill.value) || 0;
     const train = Number(skill.training) || 0;
     const modifier = getModifierForStat(val, character?.rank) + train;
-    handleRoll(getDiceLabel(val), `${skill.name} Skill Roll`, val, modifier);
+    handleRoll(getDiceLabel(val), `${skill.name} Skill Roll`, val, modifier, undefined, "check", skill.name);
   };
 
   const handleWeaponRoll = (item: Equipment) => {
@@ -1329,10 +1313,54 @@ export default function CharacterSheet() {
       formula = `${dice} + powr`;
     }
 
-    handleRoll(formula, `${item.name} Strike`, undefined, flatMod);
+    handleRoll(formula, `${item.name} Strike`, undefined, flatMod, undefined, "attack");
   };
 
-  const handleAbilityRoll = (ability: Ability, chosenStat?: string) => {
+  const changeAbilityApplications = (effectApplications: NonNullable<typeof character.effectApplications>) => {
+    updateChar.mutate({ id, data: { effectApplications } }, { onSuccess: updated => {
+      setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt);
+    }, onError: error => toast.error(error.message) });
+  };
+  const executeFavoriteResult = (entry: ReturnType<typeof resolveTrackerEffects>[number], toggle = true) => {
+    if (entry.applicability !== "available" && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability's resource requirements are not currently met."); return; }
+    if (!entry.input || rollingDice || updateChar.isPending) return;
+    const node = entry.input;
+    if (node.durationType === "When Triggered" && node.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability is activated only by its resource trigger while its parent is active."); return; }
+    const parentRecorded = (character.effectApplications ?? []).some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self");
+    if (shouldEndAbilityOnUse(parentRecorded, node.durationType, toggle)) {
+      changeAbilityApplications((character.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self")));
+      return;
+    }
+    const actor = entry.familiar ? character.familiars?.find(familiar => familiar.id === entry.familiar!.id) : undefined;
+    if (entry.familiar && !actor) { toast.error("Record this familiar before using its ability."); return; }
+    const cost = node.manaCost ?? 0;
+    if (cost > (actor ? actor.currentMana + (actor.tempMana ?? 0) : (mana ?? character.currentMana) + (character.tempMana ?? 0))) { toast.error("Not enough mana to use this ability."); return; }
+    const effectApplications = [...(character.effectApplications ?? [])];
+    if (!["Instant", "When Triggered"].includes(node.durationType) && !entry.permanent && !effectApplications.some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self")) {
+      effectApplications.push({ id: crypto.randomUUID(), abilityId: entry.ability.id, effectId: node.id, targetId: "self", startedAt: new Date().toISOString(), duration: entry.effect.duration });
+    }
+    const data = actor ? { familiars: character.familiars!.map(familiar => familiar.id === actor.id ? { ...familiar, currentMana: familiar.currentMana - cost } : familiar), effectApplications } : { currentMana: (mana ?? character.currentMana) - cost, effectApplications };
+    updateChar.mutate({ id, data, consumeAbilityId: actor ? undefined : entry.ability.id }, { onSuccess: updated => {
+      setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt);
+      if (cost > 0) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: node.name, ...(actor ? { familiarId: actor.id } : {}) } });
+      if (entry.effect.rollFormula) handleAbilityResultRoll(entry.effect.rollFormula, node.name, actor, entry.effect.duration?.startsWith("Until Used") ? () => changeAbilityApplications((updated.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.targetId === "self" && (application.effectId === entry.effect.id || application.effectId === node.id)))) : undefined);
+      else { createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `Activated ${node.name}`, ...(actor ? { familiarId: actor.id } : {}) } }); toast.success(`Used ${node.name}`); }
+    }, onError: error => toast.error(error.message) });
+  };
+  const handleAbilityRoll = (ability: Ability, chosenStat?: string, inputId?: string) => {
+    if (ability.definition) {
+      const entries = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars);
+      const selectedId = inputId ?? ability.definition.id;
+      const parent = entries.find(entry => entry.input?.id === selectedId && !entry.result);
+      if (parent && !parent.permanent && (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === selectedId && application.targetId === "self") && !["Instant", "When Triggered"].includes(parent.input!.durationType)) { executeFavoriteResult(parent); return; }
+      const choices = favoriteRollChoices(entries, ability.id, selectedId);
+      if (choices.length === 1) executeFavoriteResult(choices[0]);
+      else if (choices.length > 1) setFavoriteRollPicker({ abilityId: ability.id, inputId: selectedId });
+      else { const parent = entries.find(entry => entry.input?.id === selectedId && !entry.result); if (parent) executeFavoriteResult(parent); }
+      return;
+    }
+    // Ending a legacy buff does not consume charges or mana, or roll again.
+    if (ability.active && hasStatModifiers(ability)) { toggleAbilityActive(ability); return; }
     // 1. Rechargeable charges check
     if (ability.usageType === "rechargeable") {
       const curCharges = ability.currentCharges ?? ability.maxCharges ?? 0;
@@ -1591,21 +1619,21 @@ export default function CharacterSheet() {
         targetHp -= valHpAdd;
       }
       // HP Buff only caps current HP if it still exceeds new totalMaxHp
-      newHp = Math.min(newStats.totalMaxHp, Math.max(0, targetHp));
+      newHp = removeResourceBonus(curHp, prevStats.totalMaxHp, newStats.totalMaxHp);
 
       // Mana Add resets base value altogether:
       let targetMana = curMana;
       if (valManaAdd > 0) {
         targetMana -= valManaAdd;
       }
-      newMana = Math.min(newStats.totalMaxMana, Math.max(0, targetMana));
+      newMana = removeResourceBonus(curMana, prevStats.totalMaxMana, newStats.totalMaxMana);
 
       // DT Add resets base value altogether:
       let targetDt = curDt;
       if (valDtAdd > 0) {
         targetDt -= valDtAdd;
       }
-      newDt = Math.min(newStats.totalMaxDt, Math.max(0, targetDt));
+      newDt = removeResourceBonus(curDt, prevStats.totalMaxDt, newStats.totalMaxDt);
     }
 
     updateAbilityMut.mutate({
@@ -1634,8 +1662,10 @@ export default function CharacterSheet() {
 
   // ── Familiar Rolls ────────────────────────────────────────
   const handleFamiliarStatRoll = (famId: string | number, statKey: string, statLabel: string, val: number) => {
-    const numericVal = Number(val) || 0;
-    const mod = Math.floor(numericVal / 3);
+    const actor = character.familiars?.find(familiar => familiar.id === famId);
+    if (!actor) return;
+    const numericVal = getFamiliarAdjusted(actor).stats[statKey] ?? Number(val);
+    const mod = getModifierForStat(numericVal, actor.className);
     const dice = getDiceLabel(numericVal);
     setRollingDice(`fam-${famId}-${statLabel}`);
     setLastRoll(null);
@@ -1649,6 +1679,8 @@ export default function CharacterSheet() {
           modifier: mod, 
           label: `Fam: ${statLabel} Roll`, 
           familiarId: famId,
+          rollPurpose: "check",
+          rollScope: statKey,
           statValue: numericVal
         } 
       },
@@ -1672,7 +1704,66 @@ export default function CharacterSheet() {
     );
   };
 
-  const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility) => {
+  const ownedAbilityActive = (ability: Ability, familiar?: Familiar) => {
+    if (!ability.definition) return !!ability.active;
+    const values = familiar ? getFamiliarAdjusted(familiar) : adjustedStats;
+    const context = familiar ? { hp: familiar.currentHp, maxHp: values.maxHp, mana: familiar.currentMana, maxMana: values.maxMana, dt: familiar.currentDt, maxDt: values.maxDt } : { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt };
+    const parent = resolveTrackerEffects([ability], familiar?.className ?? character.rank, values.stats, context, familiar?.triggerConfirmations ?? character.triggerConfirmations ?? {}).find(entry => !entry.result && entry.input?.id === ability.definition!.id);
+    return !!parent && isEffectApplied(parent, "self", familiar?.effectApplications ?? character.effectApplications ?? []);
+  };
+  const renderOwnedAbilityDetails = (ability: Ability, familiar?: Familiar) => {
+    if (!ability.definition) return null;
+    const values = familiar ? getFamiliarAdjusted(familiar) : adjustedStats;
+    const context = familiar ? { hp: familiar.currentHp, maxHp: values.maxHp, mana: familiar.currentMana, maxMana: values.maxMana, dt: familiar.currentDt, maxDt: values.maxDt } : { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt };
+    return <AbilityResultList ability={ability} rank={familiar?.className ?? character.rank} stats={values.stats} vitals={context} confirmations={familiar?.triggerConfirmations ?? character.triggerConfirmations ?? {}} applications={familiar?.effectApplications ?? character.effectApplications ?? []}
+      onApplicationsChange={applications => {
+        if (!familiar) { changeAbilityApplications(applications); return; }
+        const next = { ...familiar, effectApplications: applications }; const after = getFamiliarAdjusted(next);
+        next.currentHp = removeResourceBonus(familiar.currentHp, values.maxHp, after.maxHp); next.currentMana = removeResourceBonus(familiar.currentMana, values.maxMana, after.maxMana); next.currentDt = removeResourceBonus(familiar.currentDt, values.maxDt, after.maxDt);
+        updateChar.mutate({ id, resourceMode: "exact", data: { familiars: character.familiars!.map(entry => entry.id === familiar.id ? next : entry) } });
+      }} onRoll={(formula, label) => handleAbilityResultRoll(formula, label, familiar)} onUse={nodeId => familiar ? handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, nodeId) : handleAbilityRoll(ability, undefined, nodeId)}
+      onUseResult={resultId => { const entry = resolveTrackerEffects([ability], familiar?.className ?? character.rank, values.stats, context, familiar?.triggerConfirmations ?? character.triggerConfirmations ?? {}).find(entry => entry.effect.id === resultId); if (!entry) return; if (familiar) handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, entry.input?.id, resultId); else executeFavoriteResult(entry, false); }}
+      onPayMana={(amount, label) => handleAbilityManaPayment(amount, label, familiar)} movementSpeed={values.speed} familiars={familiar ? [] : character.familiars} timing={familiar?.abilityTiming ?? character.abilityTiming}
+      onTimingChange={(nodeId, patch) => familiar ? updateFamiliarData(familiar.id, { ...familiar, abilityTiming: { ...familiar.abilityTiming, [nodeId]: { ...familiar.abilityTiming?.[nodeId], ...patch } } }) : updateChar.mutate({ id, data: { abilityTiming: { ...character.abilityTiming, [nodeId]: { ...character.abilityTiming?.[nodeId], ...patch } } } })}/>
+  };
+  const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility, inputId?: string, resultId?: string) => {
+    if (ability.definition) {
+      const current = character.familiars?.find(entry => entry.id === fam.id);
+      if (!current || updateChar.isPending || rollingDice) return;
+      const before = getFamiliarAdjusted(current);
+      const entries = resolveTrackerEffects([familiarAbilityAsAbility(ability)], current.className, before.stats, { hp: current.currentHp, maxHp: before.maxHp, mana: current.currentMana, maxMana: before.maxMana, dt: current.currentDt, maxDt: before.maxDt }, current.triggerConfirmations ?? {});
+      const nodeId = inputId ?? ability.definition.id;
+      const parent = entries.find(entry => !entry.result && entry.input?.id === nodeId);
+      if (!parent) return;
+      const applications = current.effectApplications ?? [];
+      const recorded = applications.some(application => application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self");
+      const ending = !resultId && shouldEndAbilityOnUse(recorded, parent.input!.durationType, true);
+      if (!ending && parent.applicability !== "available") { toast.info("This familiar ability's resource condition is not met."); return; }
+      if (parent.input!.durationType === "When Triggered" && parent.input!.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(parent, "self", applications)) return;
+      const choices = favoriteRollChoices(entries, ability.id, nodeId);
+      if (!ending && !resultId && choices.length > 1) { setFamiliarRollPicker({ familiarId: current.id, abilityId: ability.id, inputId: nodeId }); return; }
+      const result = resultId ? entries.find(entry => entry.effect.id === resultId) : choices[0] ?? parent;
+      if (!result) return;
+      if (!ending && (result.applicability !== "available" || result.triggerParent && !isEffectApplied(result.triggerParent, "self", applications))) { toast.info("This result's resource requirements are not currently met."); return; }
+      const cost = ending ? 0 : parent.input!.manaCost ?? 0;
+      if (current.currentMana + (current.tempMana ?? 0) < cost) { toast.error("Not enough familiar mana."); return; }
+      const nextApplications = ending ? applications.filter(application => !(application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self")) : recorded || parent.permanent || ["Instant", "When Triggered"].includes(parent.input!.durationType) ? applications : [...applications, { id: crypto.randomUUID(), abilityId: ability.id, effectId: nodeId, targetId: "self", startedAt: new Date().toISOString() }];
+      const next = { ...current, ...spendTemporary(current, { effectApplications: nextApplications, currentMana: current.currentMana - cost }) };
+      const after = getFamiliarAdjusted(next);
+      next.currentHp = removeResourceBonus(current.currentHp, before.maxHp, after.maxHp);
+      next.currentMana = removeResourceBonus(next.currentMana, before.maxMana, after.maxMana);
+      next.currentDt = removeResourceBonus(current.currentDt, before.maxDt, after.maxDt);
+      updateChar.mutate({ id, resourceMode: "exact", data: { familiars: character.familiars!.map(familiar => familiar.id === next.id ? next : familiar) } }, { onSuccess: () => {
+        createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `${ending ? "Ended" : "Used"} ${parent.input!.name}`, familiarId: current.id } });
+        for (const [key, diceType] of [["currentHp", "hp-log"], ["currentMana", "mana-log"], ["currentDt", "dt-log"]] as const) {
+          const delta = next[key] - current[key] + (key === "currentMana" ? Math.max(0, cost - (current.tempMana ?? 0)) : 0);
+          if (delta) createRoll.mutate({ id, data: { diceType, modifier: delta, label: `${parent.input!.name}: bonus/debuff source changed`, familiarId: current.id } });
+        }
+        if (cost) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: parent.input!.name, familiarId: current.id } });
+        if (!ending && result.effect.rollFormula) handleAbilityResultRoll(result.effect.rollFormula, parent.input!.name, next, result.effect.duration?.startsWith("Until Used") ? () => updateChar.mutate({ id, data: { familiars: character.familiars!.map(familiar => familiar.id === next.id ? { ...next, effectApplications: (next.effectApplications ?? []).filter(application => !(application.abilityId === ability.id && (application.effectId === result.effect.id || application.effectId === nodeId))) } : familiar) } }) : undefined);
+      }, onError: error => toast.error(error.message) });
+      return;
+    }
     const curMana = fam.currentMana;
     if (curMana < ability.cost) {
       toast.error(`${fam.name} not enough Mana! Requires ${ability.cost} MP`);
@@ -1759,6 +1850,19 @@ export default function CharacterSheet() {
 
   // ── Favorites Hotbar Executer ─────────────────────────────
   const handleExecuteFavorite = (slot: FavoriteSlot) => {
+    if (slot.type === "ability-result") {
+      const ability = abilities.find(entry => entry.id === Number(slot.targetId));
+      if (!ability) { toast.error("Ability no longer exists."); return; }
+      const entry = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).find(result => result.effect.id === slot.subId);
+      if (!entry?.effect.rollFormula) { toast.error("This result no longer has a roll."); return; }
+      if (entry.applicability !== "available" && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This result's resource requirements are not currently met."); return; }
+      executeFavoriteResult(entry);
+      return;
+    }
+    if (slot.type === "sub-ability") {
+      const ability = abilities.find(entry => entry.id === Number(slot.targetId));
+      if (ability?.definition) { handleAbilityRoll(ability, undefined, slot.subId); return; }
+    }
     if (slot.type === "attribute") {
       const statLabel = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
       handleStatRoll(slot.targetId as string, statLabel);
@@ -1852,9 +1956,9 @@ export default function CharacterSheet() {
     }
   };
 
-  const handleAssignFavorite = (slotIdx: number, type: FavoriteSlot["type"], targetId: string | number, label: string, familiarId?: string | number) => {
+  const handleAssignFavorite = (slotIdx: number, type: FavoriteSlot["type"], targetId: string | number, label: string, familiarId?: string | number, subId?: string) => {
     const cur = [...getFavorites(character, equipment, abilities)];
-    cur[slotIdx] = { type, targetId, label, familiarId };
+    cur[slotIdx] = { type, targetId, label, familiarId, subId };
     updateChar.mutate({ id, data: { favorites: cur } });
     setAssigningSlotIndex(null);
     toast.success(`Slot #${slotIdx + 1} assigned successfully!`);
@@ -1869,23 +1973,14 @@ export default function CharacterSheet() {
   };
 
   const scrollToElement = (elementId: string) => {
-    setTimeout(() => {
-      const el = document.getElementById(elementId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background", "transition-all");
-        setTimeout(() => {
-          el.classList.remove("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background");
-        }, 2500);
-      }
-    }, 120);
+    setPendingScrollTarget(elementId);
   };
 
   const handleLocateFavorite = (fav: FavoriteSlot, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!fav) return;
 
-    if (fav.type === "ability") {
+    if (fav.type === "ability" || fav.type === "ability-result" || fav.type === "sub-ability") {
       setActiveTab("abilities");
       const abId = Number(fav.targetId);
       setExpandedAbilities(prev => ({ ...prev, [abId]: true }));
@@ -1897,7 +1992,8 @@ export default function CharacterSheet() {
         setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
       }
       toast.success(`Navigated to Familiar Action: ${fav.label}`);
-      scrollToElement(`fam-ability-card-${fav.targetId}`);
+      const familiar = character.familiars?.find(fam => fav.familiarId != null ? fam.id === fav.familiarId : fam.abilities.some(ability => ability.id === Number(fav.targetId)));
+      if (familiar) scrollToElement(`fam-ability-card-${familiar.id}-${fav.targetId}`);
     } else if (fav.type === "weapon" || fav.type === "item") {
       setActiveTab("inventory");
       toast.success(`Navigated to Inventory: ${fav.label}`);
@@ -2280,7 +2376,8 @@ export default function CharacterSheet() {
 
   // ── Familiar Full Rest ──
   const handleFamFullRest = (fam: Familiar) => {
-    const fMax = getFamiliarMaxValues(fam);
+    const rested = restedFamiliar(fam);
+    const fMax = { maxHp: rested.currentHp, maxMana: rested.currentMana, maxDt: rested.currentDt };
     const curHp = fam.currentHp;
     const curMana = fam.currentMana;
     const curDt = fam.currentDt;
@@ -2294,18 +2391,14 @@ export default function CharacterSheet() {
       delete copy[fam.id];
       return copy;
     });
-    updateFamiliarData(fam.id, { 
-      ...fam, 
-      currentHp: fMax.maxHp,
-      currentDt: fMax.maxDt,
-      currentMana: fMax.maxMana
-    });
+    updateChar.mutate({ id, resourceMode: "exact", data: { familiars: (character.familiars ?? []).map(entry => entry.id === fam.id ? rested : entry) } });
 
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: fMax.maxHp - curHp, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: fMax.maxDt - curDt, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: fMax.maxMana - curMana, label: `Fam: ${fam.name} Long Rest`, familiarId: fam.id } });
 
-    toast.success(`${fam.name} completed a Long Rest. Vitals restored.`);
+    createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `${fam.name}: Long Rest reset abilities, timers and trigger checks`, familiarId: fam.id } });
+    toast.success(`${fam.name} completed a Long Rest. Base state restored.`);
     setTimeout(() => {
       setFamDtFlashes(prev => ({
         ...prev,
@@ -2416,7 +2509,7 @@ export default function CharacterSheet() {
 
   const activeFavorites = getFavorites(character, equipment, abilities);
 
-  const preparedAbilities = abilities?.filter(a => a.level && a.level > 0 && a.active) || [];
+  const preparedAbilities = [...abilities.filter(a => !a.definition && a.level && a.level > 0 && a.active), ...resolveTrackerEffects(abilities.filter(ability => ability.definition), character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).filter(entry => !entry.familiar && entry.result?.target === "Self" && isEffectApplied(entry, "self", character.effectApplications ?? [])).map(entry => entry.effect)];
   const abilityResistances = preparedAbilities.map(a => a.resistances).filter(Boolean).join(", ");
   const abilityImmunities = preparedAbilities.map(a => a.immunities).filter(Boolean).join(", ");
 
@@ -2448,7 +2541,7 @@ export default function CharacterSheet() {
   const finalTier = lastRoll?.hadCrit ? CRIT_TIERS[Math.min(lastRoll.maxChainCount, CRIT_TIERS.length - 1)] : null;
 
   return (
-    <div className="p-4 max-w-7xl mx-auto animate-in fade-in duration-500 space-y-4">
+    <div className="w-full p-3 sm:p-4 max-w-[96rem] mx-auto animate-in fade-in duration-500 space-y-4">
       
       {/* ── Top Header Controls ── */}
       <div className="bg-card/45 backdrop-blur-md border border-border/40 p-3.5 flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap rounded-lg shadow-sm w-full mb-4 flex-nowrap shrink-0">
@@ -2484,19 +2577,21 @@ export default function CharacterSheet() {
         </div>
       </div>
 
-      {/* ── Double-Column Main Workspace ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+      {/* Resources occupy half the desktop workspace; tracker and dice each occupy a quarter. */}
+      <div className="grimoire-workspace grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start" style={{ "--workspace-panel-height": "clamp(26rem, 50dvh, 28rem)" } as React.CSSProperties}>
 
-        {/* COLUMN 1: CHARACTER HUD (2/3 width) */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <Card className="bg-card border-border/40 shadow-lg relative overflow-hidden rounded-none">
+        {/* Character identity and resources share the wider left panel. */}
+        <div className="md:col-span-2 lg:col-span-2 min-w-0 h-[var(--workspace-panel-height)]">
+          <Card tabIndex={0} aria-label="Character resources" className="bg-card border-border/40 shadow-lg relative h-full max-h-full overflow-hidden rounded-none">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10" />
             
-            <CardContent className="p-5 space-y-5">
+            <CardContent className="resource-zone p-4 h-full min-h-0 flex flex-col gap-3">
+              <div className="workspace-scroll flex-1 min-h-0 overflow-y-auto space-y-3">
+              {adjustedStats.warnings.map(warning => <p key={warning} role="alert" className="text-xs text-amber-400 border border-amber-500/40 rounded-md p-2">{warning}</p>)}
               {/* Profile HUD Header */}
-              <div className="space-y-4 border-b border-border/30 pb-4">
-                {/* Single Row Layout: Identity (Left) | Controls (Center) | Speed (Right) */}
-                <div className="flex justify-between items-center flex-wrap gap-4">
+              <div className="space-y-2 border-b border-border/30 pb-2">
+                {/* Single Row Layout: Identity (Left) | Speed (Right) */}
+                <div className="flex justify-between items-center gap-3">
                   {/* Left: Portrait, Name, Rank & Race Badges */}
                   <div className="flex items-center gap-4 min-w-0">
                     <div className="relative group w-16 h-16 rounded-full overflow-hidden border-2 border-primary/55 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
@@ -2544,71 +2639,8 @@ export default function CharacterSheet() {
                     </div>
                   </div>
 
-                  {/* Center: Centered Damage Input Box + Roll Initiative Button + Long Rest */}
-                  <div className="flex items-center gap-3 flex-wrap justify-center my-auto">
-                    {/* Pulsing Red Damage Box */}
-                    <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-9">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={damageAmount}
-                        onChange={e => setDamageAmount(e.target.value)}
-                        placeholder="Damage"
-                        className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-mono text-center w-24 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="h-full px-4 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
-                        onClick={handleApplyDamage}
-                        disabled={!damageAmount || applyDamageMut.isPending}
-                      >
-                        Hit
-                      </Button>
-                    </div>
-
-                    {/* Standalone Roll Initiative Button (NO numbers on button or anywhere else) */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleStatRoll("agility", "Initiative")}
-                      className="h-9 px-4 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
-                      title="Roll Initiative (Agility Check)"
-                    >
-                      <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
-                      <span>Roll Initiative</span>
-                    </Button>
-
-                    {/* Long Rest Confirmation Trigger */}
-                    <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-9 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
-                          Long Rest
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[400px] bg-card border border-border shadow-2xl rounded-md p-6">
-                        <DialogHeader>
-                          <DialogTitle className="font-serif text-xl text-amber-500 font-bold flex items-center gap-2">
-                            <RotateCcw className="w-5 h-5" /> Confirm Long Rest?
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="py-3 text-xs text-muted-foreground leading-relaxed font-sans">
-                          Are you sure you want to take a Long Rest? This will fully restore your HP, DT, and Mana pools to their maximum values and record the logs.
-                        </div>
-                        <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
-                          <Button variant="ghost" size="sm" onClick={() => setIsLongRestConfirmOpen(false)} className="rounded-md font-bold text-xs">
-                            Cancel
-                          </Button>
-                          <Button variant="default" size="sm" onClick={handleLongRest} className="bg-amber-500 hover:bg-amber-600 text-black rounded-md font-bold text-xs">
-                            Confirm Rest
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
-                  </div>
-
                   {/* Right: Speed Readout */}
-                  <div className="text-right">
+                  <div className="text-right shrink-0 ml-auto">
                     <div className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Speed</div>
                     <div className="text-2xl font-serif text-foreground font-bold">{speed ?? character.speed} ft</div>
                   </div>
@@ -2652,10 +2684,10 @@ export default function CharacterSheet() {
               </div>
 
               {/* Resource Management HUD grids */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="resource-management grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch">
                 
                 {/* 1. DT (Damage Threshold) - Ordered First */}
-                <div className={`rounded-md border p-3 flex flex-col justify-between gap-3 transition-colors duration-200 ${
+                <div className={`rounded-md border p-2 flex flex-col gap-2 min-w-0 transition-colors duration-200 ${
                   dtFlash === "hit" ? "border-destructive/70 bg-destructive/10"
                   : dtFlash === "restore" ? "border-primary/70 bg-primary/10"
                   : "border-border/40 bg-background/30"
@@ -2669,7 +2701,7 @@ export default function CharacterSheet() {
                       : (currentDt ?? character.currentDt) > baseMaxDt ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" 
                       : "text-foreground"
                     }`}>
-                      {currentDt ?? character.currentDt}
+                      {!!character.tempDt && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempDt}</span>}{currentDt ?? character.currentDt}
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
@@ -2687,14 +2719,14 @@ export default function CharacterSheet() {
                   <ResourceBar current={currentDt ?? character.currentDt} max={maxDt} color="#eab308" />
                   
                   {/* dt quick actions: add/remove/buff */}
-                  <div className="space-y-2 mt-1">
+                  <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
                       <Input
                         type="number" min="0" value={dtAdd} placeholder="Add val"
                         onChange={e => setDtAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleDtAdd}>
                         Add
                       </Button>
@@ -2703,84 +2735,35 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={dtRemove} placeholder="Dmg val"
                         onChange={e => { setDtRemove(e.target.value); setDamageResult(null); }}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
+                      <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
                         onClick={handleDtRemoveDirect}>
                         Dmg
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={dtBuff} placeholder="Buff val"
+                        type="number" min="0" value={dtBuff} placeholder="Temp val"
                         onChange={e => setDtBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
                         onClick={handleDtBuff}>
-                        Buff
+                        Temp
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
-                      onClick={handleRestoreDt}>
-                      Full Restore DT
-                    </Button>
-                    {/* Fixed Height Container to prevent layout shifts */}
-                    <div className="h-4 flex items-center justify-center mt-1">
-                      {latestDtLog && (() => {
-                        const isPos = latestDtModifier >= 0;
-                        const cleanLabel = cleanLogReadoutLabel(latestDtLog.label);
-                        const text = isPos ? `+${latestDtModifier} DT${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestDtModifier} DT${cleanLabel ? ` (${cleanLabel})` : ""}`;
-                        return (
-                          <p key={latestDtLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-yellow-500 font-bold drop-shadow-[0_0_5px_rgba(234,179,8,0.3)]" : "text-destructive font-bold"}`}>
-                            {text}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                    {/* DT History Dialog */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
-                          <Clock className="w-3 h-3 mr-1" /> Log History
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
-                        <DialogHeader>
-                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
-                            <Clock className="w-4 h-4" /> DT Changes History
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="py-2 space-y-2">
-                          {rolls && rolls.filter(r => r.diceType === "dt-log").length > 0 ? (
-                            rolls.filter(r => r.diceType === "dt-log").slice(0, 15).map(r => (
-                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
-                                <span className="text-muted-foreground">{r.label || "DT Update"}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className={r.result >= 0 ? "text-yellow-500 font-bold" : "text-destructive font-bold"}>
-                                    {r.result >= 0 ? `+${r.result}` : r.result}
-                                  </span>
-                                  <span className="text-[9px] text-muted-foreground/50">
-                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
-                                  </span>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No DT history recorded.</p>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+
                   </div>
                 </div>
 
                 {/* 2. HP (Health) - Ordered Second */}
-                <div className="rounded-md border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
+                <div className="rounded-md border border-border/40 bg-background/30 p-2 flex flex-col gap-2 min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
                     <Heart className="w-4 h-4 text-destructive" /> Health (HP)
                   </div>
                   <div className="text-center py-1">
+                    {!!character.tempHp && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempHp}</span>}
                     <span className={`text-4xl font-mono font-bold ${hp && hp > baseMaxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
                       {hp ?? character.currentHp}
                     </span>
@@ -2800,14 +2783,14 @@ export default function CharacterSheet() {
                   <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
                   
                   {/* hp quick actions: add/remove/buff */}
-                  <div className="space-y-2 mt-1">
+                  <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
                       <Input
                         type="number" min="0" value={hpAdd} placeholder="Heal val"
                         onChange={e => setHpAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleHpAdd}>
                         Heal
                       </Button>
@@ -2816,84 +2799,35 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={hpRemove} placeholder="Dmg val"
                         onChange={e => setHpRemove(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
+                      <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
                         onClick={handleHpRemove}>
                         Dmg
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={hpBuff} placeholder="Buff val"
+                        type="number" min="0" value={hpBuff} placeholder="Temp val"
                         onChange={e => setHpBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
                         onClick={handleHpBuff}>
-                        Buff
+                        Temp
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
-                      onClick={handleFullRestoreHp}>
-                      Full Restore HP
-                    </Button>
-                    {/* Fixed Height Container to prevent layout shifts */}
-                    <div className="h-4 flex items-center justify-center mt-1">
-                      {latestHpLog && (() => {
-                        const isPos = latestHpModifier >= 0;
-                        const cleanLabel = cleanLogReadoutLabel(latestHpLog.label);
-                        const text = isPos ? `+${latestHpModifier} Health${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestHpModifier} Health${cleanLabel ? ` (${cleanLabel})` : ""}`;
-                        return (
-                          <p key={latestHpLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-green-500 font-bold drop-shadow-[0_0_5px_rgba(34,197,94,0.3)]" : "text-destructive font-bold"}`}>
-                            {text}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                    {/* HP History Dialog */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
-                          <Clock className="w-3 h-3 mr-1" /> Log History
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
-                        <DialogHeader>
-                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
-                            <Clock className="w-4 h-4" /> Health Changes History
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="py-2 space-y-2">
-                          {rolls && rolls.filter(r => r.diceType === "hp-log").length > 0 ? (
-                            rolls.filter(r => r.diceType === "hp-log").slice(0, 15).map(r => (
-                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
-                                <span className="text-muted-foreground">{r.label || "HP Update"}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className={r.result >= 0 ? "text-green-500 font-bold" : "text-destructive font-bold"}>
-                                    {r.result >= 0 ? `+${r.result}` : r.result}
-                                  </span>
-                                  <span className="text-[9px] text-muted-foreground/50">
-                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
-                                  </span>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No Health history recorded.</p>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+
                   </div>
                 </div>
 
                 {/* 3. Mana (MP) - Ordered Third */}
-                <div className="rounded-md border border-border/40 bg-background/30 p-3 flex flex-col justify-between gap-3">
+                <div className="rounded-md border border-border/40 bg-background/30 p-2 flex flex-col gap-2 min-w-0">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-muted-foreground uppercase tracking-wider">
                     <Sparkles className="w-4 h-4 text-blue-400" /> Mana (MP)
                   </div>
                   <div className="text-center py-1">
+                    {!!character.tempMana && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempMana}</span>}
                     <span className={`text-4xl font-mono font-bold ${mana && mana > baseMaxMana ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
                       {mana ?? character.currentMana}
                     </span>
@@ -2913,14 +2847,14 @@ export default function CharacterSheet() {
                   <ResourceBar current={mana ?? character.currentMana} max={maxMana} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
                   
                   {/* mana quick actions: add/remove/buff */}
-                  <div className="space-y-2 mt-1">
+                  <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
                       <Input
                         type="number" min="0" value={manaAdd} placeholder="Add val"
                         onChange={e => setManaAdd(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
                         onClick={handleManaAdd}>
                         Add
                       </Button>
@@ -2929,93 +2863,147 @@ export default function CharacterSheet() {
                       <Input
                         type="number" min="0" value={manaRemove} placeholder="Use val"
                         onChange={e => setManaRemove(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="destructive" size="sm" className="h-7 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
+                      <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
                         onClick={handleManaRemove}>
                         Use
                       </Button>
                     </div>
                     <div className="flex gap-1.5">
                       <Input
-                        type="number" min="0" value={manaBuff} placeholder="Buff val"
+                        type="number" min="0" value={manaBuff} placeholder="Temp val"
                         onChange={e => setManaBuff(e.target.value)}
-                        className="h-7 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
+                        className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
-                      <Button variant="outline" size="sm" className="h-7 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
+                      <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
                         onClick={handleManaBuff}>
-                        Buff
+                        Temp
                       </Button>
                     </div>
-                    <Button variant="ghost" size="sm" className="w-full h-7 text-[10px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-1 rounded-md cursor-pointer btn-resource-restore"
-                      onClick={handleFullRestoreMana}>
-                      Full Restore Mana
-                    </Button>
-                    {/* Fixed Height Container to prevent layout shifts */}
-                    <div className="h-4 flex items-center justify-center mt-1">
-                      {latestManaLog && (() => {
-                        const isPos = latestManaModifier >= 0;
-                        const cleanLabel = cleanLogReadoutLabel(latestManaLog.label);
-                        const text = isPos ? `+${latestManaModifier} MP${cleanLabel ? ` (${cleanLabel})` : ""}` : `${latestManaModifier} MP${cleanLabel ? ` (${cleanLabel})` : ""}`;
-                        return (
-                          <p key={latestManaLog.id} className={`text-[10px] font-mono text-center animate-in fade-in zoom-in-95 duration-300 ${isPos ? "text-blue-400 font-bold drop-shadow-[0_0_5px_rgba(96,165,250,0.3)]" : "text-destructive font-bold"}`}>
-                            {text}
-                          </p>
-                        );
-                      })()}
-                    </div>
-                    {/* Mana History Dialog */}
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" className="w-full h-7 text-[9px] text-muted-foreground/60 border border-dashed border-border/20 hover:bg-accent/40 rounded-md cursor-pointer mt-1 font-mono">
-                          <Clock className="w-3 h-3 mr-1" /> Log History
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-[420px] max-h-[60vh] overflow-y-auto bg-card border border-border shadow-2xl rounded-md p-6">
-                        <DialogHeader>
-                          <DialogTitle className="font-serif text-lg text-primary font-bold flex items-center gap-2 border-b border-border/20 pb-2">
-                            <Clock className="w-4 h-4" /> Mana Changes History
-                          </DialogTitle>
-                        </DialogHeader>
-                        <div className="py-2 space-y-2">
-                          {rolls && rolls.filter(r => r.diceType === "mana-log").length > 0 ? (
-                            rolls.filter(r => r.diceType === "mana-log").slice(0, 15).map(r => (
-                              <div key={r.id} className="flex justify-between items-center text-xs border-b border-border/10 py-1.5 font-mono">
-                                <span className="text-muted-foreground">{r.label || "Mana Update"}</span>
-                                <div className="flex items-center gap-2">
-                                  <span className={r.result >= 0 ? "text-blue-400 font-bold" : "text-destructive font-bold"}>
-                                    {r.result >= 0 ? `+${r.result}` : r.result}
-                                  </span>
-                                  <span className="text-[9px] text-muted-foreground/50">
-                                    {format(new Date(r.rolledAt), "MMM d, HH:mm")}
-                                  </span>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-xs text-muted-foreground/50 italic text-center py-6">No Mana history recorded.</p>
-                          )}
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+
                   </div>
                 </div>
 
               </div>
+              </div>
+                  {/* Resource actions share the Combat footer baseline. */}
+                  <div className="shrink-0 flex items-center gap-2 border-t border-border/40 pt-3">
+                    {/* Pulsing Red Damage Box */}
+                    <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-8 shrink-0">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={damageAmount}
+                        onChange={e => setDamageAmount(e.target.value)}
+                        placeholder="Damage"
+                        className="h-full border-0 bg-transparent rounded-none focus-visible:ring-0 focus-visible:ring-offset-0 text-xs font-mono text-center w-24 text-foreground placeholder:text-red-500/70 placeholder:font-serif placeholder:font-bold placeholder:uppercase placeholder:tracking-wider"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-full px-4 font-bold rounded-none bg-red-600 hover:bg-red-700 text-white font-serif border-l border-red-500/40 text-xs cursor-pointer"
+                        onClick={handleApplyDamage}
+                        disabled={!damageAmount || applyDamageMut.isPending}
+                      >
+                        Hit
+                      </Button>
+                    </div>
+
+                    {/* Standalone Roll Initiative Button (NO numbers on button or anywhere else) */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatRoll("agility", "Initiative")}
+                      className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
+                      title="Roll Initiative (Agility Check)"
+                    >
+                      <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                      <span>Roll Initiative</span>
+                    </Button>
+
+                    {/* Long Rest Confirmation Trigger */}
+                    <div className="ml-auto">
+                    <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
+                          Long Rest
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[400px] bg-card border border-border shadow-2xl rounded-md p-6">
+                        <DialogHeader>
+                          <DialogTitle className="font-serif text-xl text-amber-500 font-bold flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5" /> Confirm Long Rest?
+                          </DialogTitle>
+                        </DialogHeader>
+                        <div className="py-3 text-xs text-muted-foreground leading-relaxed font-sans">
+                          Return to your base state? Long Rest ends active abilities and temporary personal effects, resets charges, timers and trigger checks, and fully restores HP, DT and Mana. Innate always-on passives remain part of your base state. This is recorded in Dice History.
+                        </div>
+                        <div className="flex justify-end gap-3 pt-3 border-t border-border/30">
+                          <Button variant="ghost" size="sm" onClick={() => setIsLongRestConfirmOpen(false)} className="rounded-md font-bold text-xs">
+                            Cancel
+                          </Button>
+                          <Button variant="default" size="sm" onClick={handleLongRest} className="bg-amber-500 hover:bg-amber-600 text-black rounded-md font-bold text-xs">
+                            Confirm Rest
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                    </div>
+                  </div>
             </CardContent>
           </Card>
 
         </div>
 
-        {/* COLUMN 2: DICE HUD (1/3 width) */}
-        <div className="lg:col-span-1">
-          <Card className="bg-card border-border/40 shadow-lg relative overflow-hidden h-full rounded-none">
+        <TrackerPanel key={id} character={character} abilities={abilities} stats={finalStats}
+          optionsPending={updateChar.isPending}
+          onOptionsChange={(abilityOptions, onSaved) => updateChar.mutate({ id, data: { abilityOptions } }, { onSuccess: onSaved, onError: error => toast.error(error.message) })}
+          onRestoreEffects={snapshot => updateChar.mutate({ id, data: { effectApplications: snapshot.applications, manualTrackedEffects: snapshot.manual, familiars: (character.familiars ?? []).map(familiar => { const saved = snapshot.familiars.find(entry => entry.id === familiar.id); return saved ? { ...familiar, effectApplications: saved.effectApplications ?? [] } : familiar; }) } }, { onSuccess: updated => { setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt); }, onError: error => toast.error(error.message) })}
+          onLifetimeEvent={(event, combatant) => {
+            const applications = character.effectApplications ?? [];
+            const effectApplications = event === "combat" ? expireEffectApplications(applications, event) : applications.filter(application => !application.duration?.startsWith("Until Next Turn") || !(application.targetId === combatant?.id || application.targetId === "self" && combatant?.name === character.name));
+            const familiars = (character.familiars ?? []).map(familiar => event === "combat" || familiar.name === combatant?.name ? { ...familiar, effectApplications: expireEffectApplications(familiar.effectApplications ?? [], event) } : familiar);
+            const label = event === "combat" ? "Until Combat Ends" : "Until Next Turn";
+            const manualTrackedEffects = (character.manualTrackedEffects ?? []).filter(effect => !effect.duration?.startsWith(label) || event === "turn" && effect.targetId !== combatant?.id);
+            updateChar.mutate({ id, data: { effectApplications, familiars, manualTrackedEffects } }, { onSuccess: updated => { setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt); } });
+          }}
+          vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
+          combatants={combatants} turn={currentTurnIdx}
+          onCombatantsChange={setCombatants} onTurnChange={setCurrentTurnIdx}
+          onApplicationsChange={changeAbilityApplications}
+          onManualEffectsChange={manualTrackedEffects => updateChar.mutate({ id, data: { manualTrackedEffects } }, { onError: error => toast.error(error.message) })}
+          onConfirmationsChange={triggerConfirmations => updateChar.mutate({ id, data: { triggerConfirmations } }, { onError: error => toast.error(error.message) })}
+          onRoll={handleAbilityResultRoll}
+          onInspect={(abilityId, familiarId) => {
+            if (familiarId !== undefined) {
+              setActiveTab("familiar");
+              setExpandedFamiliars(previous => ({ ...previous, [familiarId]: true }));
+              scrollToElement(`fam-ability-card-${familiarId}-${abilityId}`);
+              return;
+            }
+            const source = abilities.find(ability => ability.id === abilityId);
+            if (source?.equipmentId || source?.inventoryItemId) {
+              setActiveTab("inventory");
+              scrollToElement(source.equipmentId ? `equipment-card-${source.equipmentId}` : `inventory-card-${source.inventoryItemId}`);
+              return;
+            }
+            setActiveTab("abilities"); setExpandedAbilities(previous => ({ ...previous, [abilityId]: true })); scrollToElement(`ability-card-${abilityId}`);
+          }}
+          combatantSources={[character.name, ...(character.familiars ?? []).map(familiar => familiar.name), ...notes.filter(note => note.category === "bestiary").map(note => note.title)]}
+          recentCombatants={recentCombatants}
+          onRememberCombatant={combatant => setRecentCombatants(previous => [combatant, ...previous.filter(entry => entry.name !== combatant.name)].slice(0, 10))}
+        />
+
+        {/* Dice remains the rightmost desktop column across tracker tabs. */}
+        <div className="min-w-0 lg:col-span-1 h-[var(--workspace-panel-height)]">
+          <Card tabIndex={0} aria-label="Character dice" className="workspace-scroll bg-card border-border/40 shadow-lg relative h-full max-h-full overflow-hidden rounded-none">
             <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" />
-            <CardContent className="p-4 flex flex-col gap-3 h-full justify-between">
+            <CardContent className="dice-zone p-4 h-full min-h-0 flex flex-col gap-3">
               
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3 flex-1 min-h-0">
                 {/* Tabs */}
-                <div className="flex gap-1 bg-background/50 rounded-none p-1 border border-border/30">
+                <div className="workspace-tabs flex shrink-0 gap-1 bg-background/50 rounded-none p-1 border border-border/30">
                   <button
                     onClick={() => setRollTab("stats")}
                     className={`flex-1 py-1.5 text-[10px] font-bold rounded-none uppercase tracking-wider transition-all cursor-pointer ${
@@ -3042,6 +3030,7 @@ export default function CharacterSheet() {
                   </button>
                 </div>
 
+                <div className="workspace-scroll flex-1 min-h-0 overflow-y-auto">
                 {/* Stats tab */}
                 {rollTab === "stats" && (
                   <div className="space-y-2">
@@ -3088,9 +3077,10 @@ export default function CharacterSheet() {
                         value={rollMod}
                         onChange={e => setRollMod(e.target.value)}
                         placeholder="Mod / Formula (e.g. POWr*3)"
-                        className="bg-background/50 border-border/50 text-center font-mono text-xs h-7 w-48 flex-shrink-0 rounded-none text-ellipsis overflow-hidden"
+                        className="bg-background/50 border-border/50 text-center font-mono text-xs h-7 w-[45%] min-w-0 rounded-none text-ellipsis overflow-hidden"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-2"><label className="text-xs">Roll purpose<select className="block w-full bg-background border border-border p-1" value={rollPurpose} onChange={event => setRollPurpose(event.target.value as typeof rollPurpose)}><option value="">General roll</option><option value="attack">Attack</option><option value="check">Skill / Check</option><option value="resistance">Resistance</option></select></label>{rollPurpose && <label className="text-xs">Attribute / skill scope<input className="block w-full bg-background border border-border p-1" value={rollScope} onChange={event => setRollScope(event.target.value)}/></label>}</div>
                     <div className="grid grid-cols-4 gap-1">
                       {(["d4","d6","d8","d10","d12","d20","d100"] as const).map(d => (
                         <Button
@@ -3099,7 +3089,7 @@ export default function CharacterSheet() {
                           size="sm"
                           className={`font-mono font-bold text-xs h-8 rounded-none cursor-pointer ${rollingDice === d ? "animate-pulse bg-primary/20 border-primary" : "bg-background/50 hover:border-primary/50"}`}
                           disabled={!!rollingDice}
-                          onClick={() => handleRoll(d)}
+                          onClick={() => handleRoll(d, undefined, undefined, undefined, undefined, rollPurpose || undefined, rollScope)}
                         >
                           {d}
                         </Button>
@@ -3130,7 +3120,7 @@ export default function CharacterSheet() {
 
                 {/* History tab */}
                 {rollTab === "history" && (
-                  <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+                  <div className="space-y-2 pr-1">
                     {loadingRolls ? (
                       <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
                     ) : rolls && rolls.length > 0 ? (
@@ -3143,53 +3133,29 @@ export default function CharacterSheet() {
                                 {roll.isCrit && <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-widest">crit</span>}
                               </div>
                               <div className="text-[9px] text-muted-foreground font-mono">
-                                {roll.diceType}{roll.modifier ? (roll.modifier > 0 ? `+${roll.modifier}` : roll.modifier) : ""}
+                                {roll.diceType === "action-log" ? "Ability action" : roll.diceType === "hp-log" ? "Health change" : roll.diceType === "dt-log" ? "DT change" : roll.diceType === "mana-log" ? "Mana change" : roll.diceType}{roll.modifier ? (roll.modifier > 0 ? `+${roll.modifier}` : roll.modifier) : ""}
                               </div>
                             </div>
                             <div className="text-right">
-                              <div className={`text-base font-serif font-bold ${roll.isCrit ? "text-yellow-500 animate-pulse" : "text-primary"}`}>{roll.total}</div>
+                              <div className={`text-base font-serif font-bold ${roll.isCrit ? "text-yellow-500 animate-pulse" : "text-primary"}`}>{roll.diceType === "action-log" ? "—" : ["hp-log", "dt-log", "mana-log"].includes(roll.diceType) && roll.total > 0 ? `+${roll.total}` : roll.total}</div>
                               <div className="text-[8px] text-muted-foreground/45 font-mono">{format(new Date(roll.rolledAt), "MMM d, HH:mm")}</div>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="py-8 text-center text-xs text-muted-foreground font-serif italic">No rolls recorded yet.</div>
+                      <div className="py-8 text-center text-xs text-muted-foreground font-serif italic">No activity recorded yet.</div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Recent Actions Section */}
-              <div className="space-y-1.5 border-t border-border/30 pt-3">
-                <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
-                  <RotateCcw className="w-3 h-3 text-primary animate-pulse" /> Recent Actions
-                </h5>
-                {recentRollActions.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto pr-1">
-                    {recentRollActions.map((action, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => handleRoll(action.diceType, action.label, undefined, action.modifier)}
-                        className="text-[9px] font-mono border border-border/40 bg-background/40 hover:border-primary/50 px-2 py-1 flex items-center gap-1.5 rounded transition-all cursor-pointer text-foreground hover:bg-primary/5"
-                        title={`Roll again: ${action.label} (${action.diceType}${action.modifier ? (action.modifier > 0 ? `+${action.modifier}` : action.modifier) : ""})`}
-                      >
-                        <Dice5 className="w-2.5 h-2.5 text-primary" />
-                        <span className="truncate max-w-[80px] font-sans font-semibold">{action.label}</span>
-                        <span className="text-muted-foreground/80">
-                          {action.diceType}{action.modifier ? (action.modifier > 0 ? `+${action.modifier}` : action.modifier) : ""}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[9px] text-muted-foreground/60 italic font-serif">No recent actions.</p>
-                )}
               </div>
-
+              {rollTab !== "history" && <>
               {/* LCD-Style Dice HUD Roll Screen */}
+              <div id="dice-roll-result" className="scroll-mt-4 shrink-0" />
               <div
-                className="p-4 border-2 border-slate-700/60 rounded-md text-center flex flex-col items-center justify-center transition-all duration-500 min-h-[150px] mt-4 bg-[#0c100e] shadow-[inset_0_0_15px_rgba(0,0,0,0.95)] relative overflow-hidden group"
+                className="p-4 border-2 border-slate-700/60 rounded-md text-center flex flex-col items-center justify-center transition-all duration-500 h-[150px] shrink-0 bg-[#0c100e] shadow-[inset_0_0_15px_rgba(0,0,0,0.95)] relative overflow-y-auto group"
                 style={
                   tier
                     ? { borderColor: tier.color + "88", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 20px ${tier.color}33`, background: `${tier.color}05` }
@@ -3288,6 +3254,7 @@ export default function CharacterSheet() {
                   </span>
                 )}
               </div>
+              </>}
             </CardContent>
           </Card>
         </div>
@@ -3295,20 +3262,24 @@ export default function CharacterSheet() {
       </div>
 
       {/* ── Custom Favorites Hotbar ── */}
-      <div className="mt-6">
+      <div className="favorites-belt mt-3 w-full">
         <Card className="bg-card/75 border-border/40 p-4 rounded-none shadow-md">
           <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" /> Favorites Hotbar
           </h3>
           
           {/* 20 Card Grid (10-on-10 on desktop, 5-on-4 on mobile) */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 auto-rows-fr gap-3 items-stretch">
             {activeFavorites.map((fav, index) => {
               if (fav) {
                 const details = getSlotDetails(fav);
-                const targetAb = (fav.type === "ability" || fav.type === "sub-ability") ? abilities.find(a => a.id === Number(fav.targetId)) : null;
-                const isToggleable = targetAb ? hasStatModifiers(targetAb) : false;
-                const isSlotActive = targetAb ? !!targetAb.active : false;
+                const favoriteFamiliar = fav.type === "familiar-ability" ? character.familiars?.find(familiar => familiar.id === fav.familiarId) : undefined;
+                const targetAb = favoriteFamiliar ? favoriteFamiliar.abilities.find(ability => ability.id === Number(fav.targetId)) as Ability | undefined : (fav.type === "ability" || fav.type === "sub-ability") ? abilities.find(a => a.id === Number(fav.targetId)) : null;
+                const favoriteValues = favoriteFamiliar ? getFamiliarAdjusted(favoriteFamiliar) : undefined;
+                const favoriteContext = favoriteFamiliar && favoriteValues ? { hp: favoriteFamiliar.currentHp, maxHp: favoriteValues.maxHp, mana: favoriteFamiliar.currentMana, maxMana: favoriteValues.maxMana, dt: favoriteFamiliar.currentDt, maxDt: favoriteValues.maxDt } : { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt };
+                const favoriteParent = targetAb?.definition ? resolveTrackerEffects([targetAb], favoriteFamiliar?.className ?? character.rank, favoriteValues?.stats ?? finalStats, favoriteContext, favoriteFamiliar?.triggerConfirmations ?? character.triggerConfirmations ?? {}, favoriteFamiliar ? [] : character.familiars).find(entry => !entry.result && entry.input?.id === (fav.type === "sub-ability" ? fav.subId : targetAb.definition!.id)) : undefined;
+                const isToggleable = favoriteParent ? !["Instant", "When Triggered", "Always On"].includes(favoriteParent.input!.durationType) : targetAb ? hasStatModifiers(targetAb) : false;
+                const isSlotActive = favoriteFamiliar && targetAb ? ownedAbilityActive(targetAb, favoriteFamiliar) : favoriteParent ? isEffectApplied(favoriteParent, "self", character.effectApplications ?? []) : targetAb ? !!targetAb.active : false;
 
                 return (
                   <div 
@@ -3352,7 +3323,7 @@ export default function CharacterSheet() {
                         </span>
                       ) : (
                         <span className="text-[7px] font-mono font-bold uppercase tracking-wider text-primary border border-primary/20 px-1 py-0.25 rounded bg-primary/5">
-                          {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "sub-ability" ? "Sub-Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
+                          {fav.type === "weapon" ? "Weapon" : fav.type === "ability" ? "Ability" : fav.type === "ability-result" ? "Result" : fav.type === "sub-ability" ? "Sub-Ability" : fav.type === "skill" ? "Skill" : fav.type === "familiar-ability" ? "Fam Ab" : fav.type === "familiar-attribute" ? "Fam Stat" : "Stat"}
                         </span>
                       )}
                     </div>
@@ -3384,6 +3355,24 @@ export default function CharacterSheet() {
               }
             })}
           </div>
+
+          <Dialog open={familiarRollPicker !== null} onOpenChange={open => { if (!open) setFamiliarRollPicker(null); }}><DialogContent><DialogHeader><DialogTitle>Choose target roll</DialogTitle></DialogHeader><div className="space-y-2">{familiarRollPicker && (() => {
+            const familiar = character.familiars?.find(entry => entry.id === familiarRollPicker.familiarId); const ability = familiar?.abilities.find(entry => entry.id === familiarRollPicker.abilityId);
+            if (!familiar || !ability?.definition) return null;
+            const values = getFamiliarAdjusted(familiar); const entries = resolveTrackerEffects([familiarAbilityAsAbility(ability)], familiar.className, values.stats, { hp: familiar.currentHp, maxHp: values.maxHp, mana: familiar.currentMana, maxMana: values.maxMana, dt: familiar.currentDt, maxDt: values.maxDt }, familiar.triggerConfirmations ?? {});
+            return favoriteRollChoices(entries, ability.id, familiarRollPicker.inputId).map(entry => <Button key={entry.effect.id} className="w-full justify-between" variant="outline" onClick={() => { setFamiliarRollPicker(null); handleFamiliarAbilityRoll(familiar, ability, entry.input?.id, entry.effect.id); }}><span>{entry.input?.name}</span><span>{entry.result?.target}</span></Button>);
+          })()}</div></DialogContent></Dialog>
+          <Dialog open={favoriteRollPicker !== null} onOpenChange={open => { if (!open) setFavoriteRollPicker(null); }}>
+            <DialogContent className="sm:max-w-[500px] bg-card border-border">
+              <DialogHeader><DialogTitle>Choose target roll</DialogTitle></DialogHeader>
+              <div className="space-y-2">{favoriteRollPicker && (() => {
+                const ability = abilities.find(entry => entry.id === favoriteRollPicker.abilityId);
+                if (!ability) return <p className="text-sm">Ability no longer exists.</p>;
+                const entries = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars);
+                return favoriteRollChoices(entries, ability.id, favoriteRollPicker.inputId).map(entry => <Button key={entry.effect.id} className="w-full justify-between" variant="outline" onClick={() => { setFavoriteRollPicker(null); executeFavoriteResult(entry); }}><span>{entry.input?.name}</span><span className="text-xs">{entry.targetLabels?.join(", ")} · {entry.effect.rollFormula}</span></Button>);
+              })()}</div>
+            </DialogContent>
+          </Dialog>
 
           {/* Favorite Assignment Selection Modal */}
           <Dialog open={assigningSlotIndex !== null} onOpenChange={(open) => { if(!open) setAssigningSlotIndex(null); }}>
@@ -3455,6 +3444,7 @@ export default function CharacterSheet() {
                   </div>
                 )}
 
+                <div className="flex flex-wrap gap-2">{abilities.flatMap(ability => ability.definition ? flattenInputs(ability.definition).flatMap(node => node.results.filter(result => node.targets.includes(result.target) && result.formula).map(result => <Button key={`${ability.id}:${result.id}`} size="sm" variant="outline" onClick={() => handleAssignFavorite(assigningSlotIndex!, "ability-result", ability.id, node.name, undefined, result.id)}>{node.name} · {result.target}</Button>)) : [])}</div>
                 {/* Item Abilities (Gear & Potion Abilities) */}
                 {abilities.filter(ab => ab.equipmentId || ab.inventoryItemId).length > 0 && (
                   <div>
@@ -3553,8 +3543,8 @@ export default function CharacterSheet() {
           { key: "essences", label: "Essence Imbuement", icon: Layers },
           { key: "abilities", label: "Abilities", icon: Flame },
           { key: "notes", label: "Campaign Notes", icon: BookText },
-          { key: "familiar", label: "Minions", icon: UserCheck },
-          { key: "combat", label: "Combat Tracker", icon: Swords }
+          { key: "familiar", label: "Familiars", icon: UserCheck },
+          { key: "settings", label: "Settings", icon: Palette },
         ].map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -3575,6 +3565,15 @@ export default function CharacterSheet() {
 
       {/* ── ACTIVE TOOL SCREEN AREA ── */}
       <div className="mt-4 animate-in fade-in duration-300">
+        {activeTab === "settings" && <section className="max-w-2xl border border-border/40 bg-card p-4 space-y-4">
+          <h3 className="text-xl text-primary">Settings</h3>
+          <AbilityOptionsFields skillNames={skills.map(skill => skill.name)} options={character.abilityOptions ?? mergeOptions(...(abilities ?? []).map(ability => ability.definition?.options))} onChange={abilityOptions => updateChar.mutate({ id, data: { abilityOptions } }, { onError: error => toast.error(error.message) })}/>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" className="mt-1" checked={autoScrollRolls} disabled={updateChar.isPending} onChange={event => updateChar.mutate({ id, data: { uiPreferences: { ...character.uiPreferences, autoScrollRolls: event.target.checked } } }, { onError: error => toast.error(error.message) })}/>
+            <span><span className="block text-sm font-semibold">Auto-scroll to dice results</span><span className="block text-sm text-muted-foreground mt-1">Show the dice result automatically when rolling, including familiar rolls. Turning this off keeps your current page position.</span></span>
+          </label>
+          <p className="text-xs text-muted-foreground">Saved for this character. Favorites’ Take to action still navigates and scrolls to the selected entry.</p>
+        </section>}
 
         {activeTab === "stats" && (
           <div className="space-y-4">
@@ -3917,10 +3916,10 @@ export default function CharacterSheet() {
                                               {ab.name}
                                               {ab.cost > 0 && <span className="text-[9px] text-blue-400 font-mono">({ab.cost} MP)</span>}
                                             </div>
-                                            {ab.description && <p className="text-[10px] text-muted-foreground/80 font-serif line-clamp-1">{ab.description}</p>}
+
                                             {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                             {(() => {
-                                               const badges = getAbilityActiveModifierBadges(ab, finalStats);
+                                               const badges = ab.definition ? [] : getAbilityActiveModifierBadges(ab, finalStats);
                                                if (badges.length === 0) return null;
                                                return (
                                                  <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -3929,7 +3928,7 @@ export default function CharacterSheet() {
                                                        key={i} 
                                                        title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
                                                        className={`text-[8px] font-mono px-1 py-0.2 rounded-none border transition-all ${
-                                                         !ab.active ? "opacity-50" : ""
+                                                         !ownedAbilityActive(ab) ? "opacity-50" : ""
                                                        } ${
                                                          b.type === "stat" 
                                                            ? "bg-amber-500/10 border-amber-500/40 text-amber-300 font-bold"
@@ -3952,26 +3951,27 @@ export default function CharacterSheet() {
                                           <div className="flex items-center gap-1.5">
                                             <button
                                               type="button"
-                                              onClick={() => toggleAbilityActive(ab)}
+                                              onClick={() => ab.definition ? handleAbilityRoll(ab) : toggleAbilityActive(ab)}
                                               className={`px-1.5 py-0.5 rounded-none text-[8px] font-bold uppercase transition-all border cursor-pointer ${
-                                                ab.active 
+                                                ownedAbilityActive(ab)
                                                   ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]" 
                                                   : "bg-background/40 border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
                                               }`}
                                             >
-                                              {ab.active ? "Active" : "Inactive"}
+                                              {ownedAbilityActive(ab) ? "Active" : "Inactive"}
                                             </button>
                                             <Button
                                               size="sm"
                                               variant="outline"
                                               className="h-6 text-[9px] font-serif border-primary/20 text-primary hover:bg-primary/15 px-2 rounded-none cursor-pointer"
-                                              onClick={() => handleAbilityRoll(ab)}
+                                              disabled={!!ab.definition && ["Always On", "When Triggered"].includes(ab.definition.durationType)} onClick={() => handleAbilityRoll(ab)}
                                             >
-                                              Activate
+                                              {ab.definition?.durationType === "Always On" ? "Always On" : ab.definition?.durationType === "When Triggered" ? "Triggered" : ownedAbilityActive(ab) ? "Deactivate" : "Activate"}
                                             </Button>
                                           </div>
                                         </div>
                                         
+                                        {ab.definition && <details className="mt-2"><summary className="text-xs text-primary cursor-pointer">Ability Details</summary>{renderOwnedAbilityDetails(ab)}</details>}
                                         {/* Rechargeable charge counter training stats style */}
                                         {ab.usageType === "rechargeable" && (
                                           <div className="flex flex-col gap-1 mt-1.5 border-t border-border/10 pt-1.5" onClick={e => e.stopPropagation()}>
@@ -4113,7 +4113,7 @@ export default function CharacterSheet() {
                                           {ab.name}
                                           {ab.cost > 0 && <span className="text-[9px] text-blue-400 font-mono">({ab.cost} MP)</span>}
                                         </div>
-                                        {ab.description && <p className="text-[10px] text-muted-foreground/80 font-serif line-clamp-1">{ab.description}</p>}
+
                                         {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                       </div>
                                       <div className="flex items-center gap-1.5">
@@ -4121,13 +4121,14 @@ export default function CharacterSheet() {
                                           size="sm"
                                           variant="outline"
                                           className="h-6 text-[9px] font-serif border-primary/20 text-primary hover:bg-primary/15 px-2 rounded-none cursor-pointer"
-                                          onClick={() => handleAbilityRoll(ab)}
+                                          disabled={!!ab.definition && ["Always On", "When Triggered"].includes(ab.definition.durationType)} onClick={() => handleAbilityRoll(ab)}
                                         >
-                                          Activate
+                                          {ab.definition?.durationType === "Always On" ? "Always On" : ab.definition?.durationType === "When Triggered" ? "Triggered" : ownedAbilityActive(ab) ? "Deactivate" : "Activate"}
                                         </Button>
                                       </div>
                                     </div>
 
+                                    {ab.definition && <details className="mt-2"><summary className="text-xs text-primary cursor-pointer">Ability Details</summary>{renderOwnedAbilityDetails(ab)}</details>}
                                     {/* Rechargeable charge counter training stats style */}
                                     {ab.usageType === "rechargeable" && (
                                       <div className="flex flex-col gap-1 mt-1.5 border-t border-border/10 pt-1.5" onClick={e => e.stopPropagation()}>
@@ -4362,7 +4363,7 @@ export default function CharacterSheet() {
                   const rankInfo = getAbilityHighestRank(ability, finalStats);
                   const evolData = calculateAbilityEvolutions(ability, character.rank, finalStats);
 
-                  const activeUpdateTrigger = ability.triggers?.find(trig =>
+                  const activeUpdateTrigger = !ability.definition ? ability.triggers?.find(trig =>
                     trig &&
                     trig.triggerAction === "update_attached" &&
                     isAbilityTriggerActive(trig, {
@@ -4373,8 +4374,10 @@ export default function CharacterSheet() {
                       dt: character ? character.currentDt : 0,
                       maxDt,
                     })
-                  );
+                  ) : undefined;
 
+                  const parentEntry = ability.definition ? resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).find(entry => !entry.result && entry.input?.id === ability.definition!.id) : undefined;
+                  const inputActive = parentEntry ? isEffectApplied(parentEntry, "self", character.effectApplications ?? []) : ability.active;
                   const displayName = activeUpdateTrigger?.updatedName || ability.name;
                   const displayType = activeUpdateTrigger?.updatedType || ability.type;
                   const displayCost = activeUpdateTrigger?.updatedCost !== undefined ? activeUpdateTrigger.updatedCost : ability.cost;
@@ -4385,6 +4388,7 @@ export default function CharacterSheet() {
 
                   return (
                     <Card 
+                      id={`ability-card-${ability.id}`}
                       key={ability.id}
                       draggable
                       onDragStart={(e) => handleAbilityDragStart(e, ability.id)}
@@ -4398,18 +4402,18 @@ export default function CharacterSheet() {
                         <div>
                           {/* Header row (Clickable card body toggles expansion except buttons) */}
                           <div 
-                            className="flex justify-between items-start cursor-pointer select-none"
+                            className="flex flex-wrap justify-between items-start gap-x-3 gap-y-2 cursor-pointer select-none"
                             onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !expandedAbilities[ability.id] }))}
                           >
-                            <div className="space-y-1.5 flex-1 pr-4">
-                              <div className="flex items-center gap-2 flex-wrap">
+                            <div className="space-y-1.5 flex-1 min-w-0 basis-[20rem]">
+                              <div className="flex items-center gap-2 min-w-0 flex-nowrap">
                                 {/* Read-Only Rank Marker Badge */}
-                                <div className="flex items-center gap-1 border border-primary/30 px-2 py-0.5 rounded-none bg-primary/10 text-[10px] font-bold text-primary font-mono shadow-sm">
+                                <div className="shrink-0 whitespace-nowrap flex items-center gap-1 border border-primary/30 px-2 py-0.5 rounded-none bg-primary/10 text-[10px] font-bold text-primary font-mono shadow-sm">
                                   <span>Rank: {rankInfo.label}</span>
                                 </div>
 
-                                <h4 className="font-serif text-lg font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex items-center gap-1.5 flex-wrap">
-                                  {displayName}
+                                <h4 className="font-serif text-base font-bold text-primary leading-tight hover:text-primary/80 transition-colors flex-1 min-w-0 flex items-center gap-1.5">
+                                  <span className="truncate" title={displayName}>{displayName}</span>
                                   {activeUpdateTrigger && (
                                     <Badge className="bg-purple-500/20 border border-purple-400 text-purple-300 text-[8px] font-bold uppercase tracking-wider rounded-none px-1.5 py-0.5 animate-pulse">
                                       Trigger Replaced
@@ -4433,19 +4437,20 @@ export default function CharacterSheet() {
                               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                                 <button
                                   type="button"
-                                  onClick={() => toggleAbilityActive(ability)}
+                                  disabled={ability.definition?.durationType === "Always On"}
+                                  onClick={() => { if (ability.definition) { const node = ability.definition; const active = (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === node.id && application.targetId === "self"); if (active) changeAbilityApplications((character.effectApplications ?? []).filter(application => !(application.abilityId === ability.id && application.effectId === node.id && application.targetId === "self"))); else handleAbilityRoll(ability); } else toggleAbilityActive(ability); }}
                                   className={`px-2 py-0.5 rounded-none text-[9px] font-bold uppercase transition-all border cursor-pointer ${
-                                    ability.active 
+                                    (ability.definition ? ability.definition.durationType === "Always On" || (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === ability.definition!.id && application.targetId === "self") : ability.active)
                                       ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 drop-shadow-[0_0_4px_rgba(16,185,129,0.3)]" 
                                       : "bg-background/40 border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground"
                                   }`}
                                 >
-                                  {ability.active ? "Active" : "Inactive"}
+                                  {(ability.definition ? ability.definition.durationType === "Always On" || (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === ability.definition!.id && application.targetId === "self") : ability.active) ? "Active" : "Inactive"}
                                 </button>
                               </div>
 
                               {/* Active Modifiers Summary Badges */}
-                              {getAbilityActiveModifierBadges(ability, finalStats).map((b: ActiveModifierBadge, i: number) => (
+                              {(!ability.definition ? getAbilityActiveModifierBadges(ability, finalStats) : []).map((b: ActiveModifierBadge, i: number) => (
                                 <span 
                                   key={i} 
                                   title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
@@ -4468,7 +4473,7 @@ export default function CharacterSheet() {
                               ))}
 
                               {/* Ability Effect Badges (Display Effect Name, hover for details) */}
-                              {ability.abilityEffects && ability.abilityEffects.map((eff, effIdx) => {
+                              {!ability.definition && ability.abilityEffects && ability.abilityEffects.map((eff, effIdx) => {
                                 if (!eff) return null;
                                 const tooltipText = [
                                   `Effect: ${eff.name || "Effect"}`,
@@ -4489,7 +4494,7 @@ export default function CharacterSheet() {
                               })}
 
                               {/* Active Trigger Badges (Display Vital Condition, hover for trigger details) */}
-                              {ability.triggers && ability.triggers.map((trig, trigIdx) => {
+                              {!ability.definition && ability.triggers && ability.triggers.map((trig, trigIdx) => {
                                 if (!trig) return null;
                                 const isActive = isAbilityTriggerActive(trig, {
                                   hp: character ? character.currentHp : 0,
@@ -4538,7 +4543,7 @@ export default function CharacterSheet() {
                           </div>
 
                           {/* Action Roll Buttons (Prevent Card Click Toggle) */}
-                          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          <div className="flex shrink-0 items-center gap-1.5 ml-auto" onClick={e => e.stopPropagation()}>
                             <Button
                               size="sm"
                               variant="outline"
@@ -4551,7 +4556,7 @@ export default function CharacterSheet() {
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
-                            {ability.linkedStats && ability.linkedStats.length > 0 ? (
+                            {ability.definition ? <Button size="sm" className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer whitespace-nowrap" disabled={!!rollingDice || updateChar.isPending || ["Always On", "When Triggered"].includes(ability.definition.durationType)} onClick={() => { if (inputActive) changeAbilityApplications((character.effectApplications ?? []).filter(application => !(application.abilityId === ability.id && application.effectId === ability.definition!.id && application.targetId === "self"))); else handleAbilityRoll(ability); }}><Dice5 className="w-3 h-3 mr-1" />{ability.definition.durationType === "Always On" ? "Always On" : ability.definition.durationType === "When Triggered" ? (inputActive ? "Trigger Active" : "Triggered") : inputActive ? "Deactivate" : `Activate${ability.definition.linkedStats.length ? ` (${ability.definition.linkedStats.map(stat => stat.substring(0, 3).toUpperCase()).join(" / ")})` : ""}`}</Button> : ability.components ? <Button size="sm" className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-7 text-xs font-serif rounded-none cursor-pointer whitespace-nowrap" onClick={() => { if (!ability.active) toggleAbilityActive(ability); if (ability.rollFormula) handleAbilityRoll(ability); }}><Dice5 className="w-3 h-3 mr-1" />Activate{ability.linkedStats?.length ? ` (${ability.linkedStats.map(stat => stat.substring(0, 3).toUpperCase()).join(" / ")})` : ""}</Button> : ability.linkedStats && ability.linkedStats.length > 0 ? (
                               ability.linkedStats.map(statKey => (
                                 <Button
                                   key={statKey}
@@ -4577,7 +4582,19 @@ export default function CharacterSheet() {
                         {/* Expandable Content (Markdown + Stats + Formulas + Evolution Modifiers) */}
                         {isExpanded && (
                           <div className="border-t border-border/20 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200 mt-2">
-                            {displayRollFormula && (
+                            {!ability.definition && ability.components && <AbilityComponentList ability={ability} rank={character.rank} stats={finalStats}
+                              vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
+                              confirmations={character.triggerConfirmations ?? {}} applications={character.effectApplications ?? []}
+                              onApplicationsChange={changeAbilityApplications}
+                              onRoll={handleAbilityResultRoll} />}
+                            {ability.definition && <AbilityResultList ability={ability} rank={character.rank} stats={finalStats}
+                              vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
+                              confirmations={character.triggerConfirmations ?? {}} applications={character.effectApplications ?? []}
+                              onApplicationsChange={changeAbilityApplications}
+                              onRoll={handleAbilityResultRoll} onUse={nodeId => handleAbilityRoll(ability, undefined, nodeId)} onUseResult={resultId => { const entry = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).find(entry => entry.effect.id === resultId); if (entry) executeFavoriteResult(entry, false); }} familiars={character.familiars} movementSpeed={speed ?? character.speed}
+                              timing={character.abilityTiming} onTimingChange={(nodeId, patch) => updateChar.mutate({ id, data: { abilityTiming: { ...character.abilityTiming, [nodeId]: { ...character.abilityTiming?.[nodeId], ...patch } } } })}
+                              onPayMana={handleAbilityManaPayment} />}
+                            {!ability.definition && displayRollFormula && (
                               <div className="text-[10px] font-mono text-muted-foreground bg-background/50 border border-border/30 px-2.5 py-1.5 rounded-none flex items-center justify-between">
                                 <span>Formula: <code className="text-primary font-bold">{displayRollFormula}</code></span>
                               </div>
@@ -4589,7 +4606,7 @@ export default function CharacterSheet() {
                             />
 
                             {/* Sub-Abilities / Additional Base Effects (Only rendered if present) */}
-                            {ability.subAbilities && ability.subAbilities.length > 0 && (
+                            {!ability.definition && ability.subAbilities && ability.subAbilities.length > 0 && (
                               <div className="space-y-1.5 mt-2 pt-2 border-t border-border/30">
                                 {ability.subAbilities.map((sub, subIdx) => {
                                   let subTitle = sub.name?.trim() ? sub.name.trim() : `${ability.name} (${subIdx + 2})`;
@@ -5036,8 +5053,8 @@ export default function CharacterSheet() {
                 <CardContent className="p-6 space-y-6">
                   <div className="flex justify-between items-center border-b border-border/30 pb-3">
                     <div>
-                      <h3 className="font-serif text-2xl text-primary font-bold">Add Minion</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Minions & familiars share your adventure and can execute actions and attacks directly from your Hotbar.</p>
+                      <h3 className="font-serif text-2xl text-primary font-bold">Add Familiar</h3>
+                      <p className="text-xs text-muted-foreground mt-1">Familiars share your adventure and can execute actions and attacks directly from your Hotbar.</p>
                     </div>
                     {character.familiars && character.familiars.length > 0 && (
                       <Button variant="ghost" size="sm" onClick={() => setIsAddingFamiliar(false)} className="rounded-md">Cancel</Button>
@@ -5049,7 +5066,7 @@ export default function CharacterSheet() {
                     {/* Basic specs */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Minion Name</label>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Familiar Name</label>
                         <Input value={famName} onChange={e => setFamName(e.target.value)} required placeholder="e.g. Rocky, Hedwig" className="bg-background rounded-md h-8 text-sm" />
                       </div>
                       <div>
@@ -5131,25 +5148,25 @@ export default function CharacterSheet() {
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-border/20">
-                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Minion</Button>
+                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Familiar</Button>
                     </div>
                   </form>
                 </CardContent>
               </Card>
             ) : (
               
-              // Minion display sheets
+              // Familiar display sheets
               <div className="space-y-6">
                 
                 {/* Toolbar */}
                 <div className="flex justify-between items-center border-b border-border/20 pb-3">
-                  <h3 className="font-serif text-2xl text-primary font-bold">Minions ({character.familiars.length})</h3>
+                  <h3 className="font-serif text-2xl text-primary font-bold">Familiars ({character.familiars.length})</h3>
                   <Button onClick={() => setIsAddingFamiliar(true)} className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">
-                    <Plus className="w-4 h-4 mr-1.5" /> Add Minion
+                    <Plus className="w-4 h-4 mr-1.5" /> Add Familiar
                   </Button>
                 </div>
 
-                {/* Grid List of Minions */}
+                {/* Grid List of Familiars */}
                 <div className="grid grid-cols-1 gap-6">
                   {character.familiars.map(fam => {
                     const fMax = getFamiliarMaxValues(fam);
@@ -5187,7 +5204,7 @@ export default function CharacterSheet() {
                                       try {
                                         const dataUrl = await compressImage(file, 200, 200);
                                         updateFamiliarData(fam.id, { ...fam, avatar: dataUrl });
-                                        toast.success("Minion portrait updated!");
+                                        toast.success("Familiar portrait updated!");
                                       } catch (err) {
                                         toast.error("Failed to upload/compress image.");
                                       }
@@ -5264,7 +5281,7 @@ export default function CharacterSheet() {
                               Long Rest
                             </Button>
 
-                            <EditFamiliarDialog familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
+                            <EditFamiliarDialog characterId={id} familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
                             <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer h-7 text-[10px] font-bold px-2" 
                               onClick={() => handleReleaseFamiliarClick(fam.id)}>
                               Release
@@ -5286,7 +5303,7 @@ export default function CharacterSheet() {
                             </div>
                             <div className="text-center py-0.5">
                               <span className={`text-2xl font-mono font-bold ${flash === "hit" ? "text-destructive" : "text-foreground"}`}>
-                                {fam.currentDt}
+                                {!!fam.tempDt && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempDt}</span>}{fam.currentDt}
                               </span>
                               <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxDt}</span>
                             </div>
@@ -5317,27 +5334,16 @@ export default function CharacterSheet() {
                               </div>
                               <div className="flex gap-1">
                                 <Input
-                                  type="number" min="0" value={inputs.dtBuff || ""} placeholder="Buff val"
+                                  type="number" min="0" value={inputs.dtBuff || ""} placeholder="Temp val"
                                   onChange={e => updateFamInput(fam.id, "dtBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamDtBuff(fam)}>
-                                  Buff
+                                  Temp
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
-                                onClick={() => handleFamRestoreDt(fam)}>
-                                Full Restore DT
-                              </Button>
-                              {/* Fixed Height Container */}
-                              <div className="h-3 flex items-center justify-center mt-0.5">
-                                {latestFamDtLog && (
-                                  <p className={`text-[9px] font-mono text-center ${latestFamDtLog.result >= 0 ? "text-yellow-500 font-bold" : "text-destructive"}`}>
-                                    {latestFamDtLog.result >= 0 ? `+${latestFamDtLog.result}` : latestFamDtLog.result} DT ({latestFamDtLog.label})
-                                  </p>
-                                )}
-                              </div>
+
                             </div>
                           </div>
 
@@ -5348,7 +5354,7 @@ export default function CharacterSheet() {
                             </div>
                             <div className="text-center py-0.5">
                               <span className="text-2xl font-mono font-bold text-foreground">
-                                {fam.currentHp}
+                                {!!fam.tempHp && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempHp}</span>}{fam.currentHp}
                               </span>
                               <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxHp}</span>
                             </div>
@@ -5379,26 +5385,16 @@ export default function CharacterSheet() {
                               </div>
                               <div className="flex gap-1">
                                 <Input
-                                  type="number" min="0" value={inputs.hpBuff || ""} placeholder="Buff val"
+                                  type="number" min="0" value={inputs.hpBuff || ""} placeholder="Temp val"
                                   onChange={e => updateFamInput(fam.id, "hpBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamHpBuff(fam)}>
-                                  Buff
+                                  Temp
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
-                                onClick={() => handleFamFullRestoreHp(fam)}>
-                                Full Restore HP
-                              </Button>
-                              <div className="h-3 flex items-center justify-center mt-0.5">
-                                {latestFamHpLog && (
-                                  <p className={`text-[9px] font-mono text-center ${latestFamHpLog.result >= 0 ? "text-green-500 font-bold" : "text-destructive"}`}>
-                                    {latestFamHpLog.result >= 0 ? `+${latestFamHpLog.result}` : latestFamHpLog.result} HP ({latestFamHpLog.label})
-                                  </p>
-                                )}
-                              </div>
+
                             </div>
                           </div>
 
@@ -5409,7 +5405,7 @@ export default function CharacterSheet() {
                             </div>
                             <div className="text-center py-0.5">
                               <span className="text-2xl font-mono font-bold text-foreground">
-                                {fam.currentMana}
+                                {!!fam.tempMana && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempMana}</span>}{fam.currentMana}
                               </span>
                               <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxMana}</span>
                             </div>
@@ -5440,32 +5436,22 @@ export default function CharacterSheet() {
                               </div>
                               <div className="flex gap-1">
                                 <Input
-                                  type="number" min="0" value={inputs.manaBuff || ""} placeholder="Buff val"
+                                  type="number" min="0" value={inputs.manaBuff || ""} placeholder="Temp val"
                                   onChange={e => updateFamInput(fam.id, "manaBuff", e.target.value)}
                                   className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
                                 />
                                 <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
                                   onClick={() => handleFamManaBuff(fam)}>
-                                  Buff
+                                  Temp
                                 </Button>
                               </div>
-                              <Button variant="ghost" size="sm" className="w-full h-6 text-[9px] text-muted-foreground border border-border/20 hover:bg-accent/50 mt-0.5 rounded-none cursor-pointer btn-resource-restore"
-                                onClick={() => handleFamFullRestoreMana(fam)}>
-                                Full Restore Mana
-                              </Button>
-                              <div className="h-3 flex items-center justify-center mt-0.5">
-                                {latestFamManaLog && (
-                                  <p className={`text-[9px] font-mono text-center ${latestFamManaLog.result >= 0 ? "text-blue-400 font-bold" : "text-destructive"}`}>
-                                    {latestFamManaLog.result >= 0 ? `+${latestFamManaLog.result}` : latestFamManaLog.result} MP ({latestFamManaLog.label})
-                                  </p>
-                                )}
-                              </div>
+
                             </div>
                           </div>
 
                         </div>
 
-                        {/* Minion Attributes Grid with compact Stat Training (- X/Base +) Header */}
+                        {/* Familiar Attributes Grid with compact Stat Training (- X/Base +) Header */}
                         <div className="space-y-1.5 pt-1.5 border-t border-border/20">
                           <h5 className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Attributes (Click to Roll)</h5>
                           <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
@@ -5543,7 +5529,7 @@ export default function CharacterSheet() {
                             {isExpanded && (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1.5 animate-in slide-in-from-top-1 duration-150">
                                 {fam.abilities.map((ab) => (
-                                  <Card id={`fam-ability-card-${ab.id}`} key={ab.id} className="bg-background border border-border/30 rounded-none relative">
+                                  <Card id={`fam-ability-card-${fam.id}-${ab.id}`} key={ab.id} className="bg-background border border-border/30 rounded-none relative">
                                     <CardContent className="p-2.5 space-y-1.5">
                                       <div className="flex justify-between items-start pr-1 flex-wrap gap-2">
                                         <div>
@@ -5563,7 +5549,7 @@ export default function CharacterSheet() {
                                             {ab.rollFormula && <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">Formula: {ab.rollFormula}</Badge>}
 
                                             {/* Active Modifiers Summary Badges */}
-                                            {getAbilityActiveModifierBadges(ab, finalStats).map((b: ActiveModifierBadge, i: number) => (
+                                            {(!ab.definition ? getAbilityActiveModifierBadges(ab, getFamiliarAdjusted(fam).stats) : []).map((b: ActiveModifierBadge, i: number) => (
                                               <span 
                                                 key={i} 
                                                 title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
@@ -5587,14 +5573,13 @@ export default function CharacterSheet() {
                                         <Button
                                           size="sm"
                                           onClick={() => handleFamiliarAbilityRoll(fam, ab)}
+                                          disabled={!!ab.definition && ["Always On", "When Triggered"].includes(ab.definition.durationType)}
                                           className="bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 h-6 font-serif text-[10px] rounded-none cursor-pointer px-2"
                                         >
-                                          Activate
+                                          {ab.definition?.durationType === "Always On" ? "Always On" : ab.definition?.durationType === "When Triggered" ? "Triggered" : ab.definition && (fam.effectApplications ?? []).some(application => application.abilityId === ab.id && application.effectId === ab.definition!.id) ? "Deactivate" : "Activate"}
                                         </Button>
                                       </div>
-                                      {ab.description && (
-                                        <p className="text-[10px] text-muted-foreground/80 font-serif leading-relaxed mt-1 whitespace-pre-wrap">{ab.description}</p>
-                                      )}
+                                      {ab.definition && <details><summary className="text-xs text-primary cursor-pointer">Ability Details</summary>{renderOwnedAbilityDetails(familiarAbilityAsAbility(ab), fam)}</details>}
                                     </CardContent>
                                   </Card>
                                 ))}
@@ -5614,377 +5599,6 @@ export default function CharacterSheet() {
           </div>
         )}
 
-        {/* TAB 8: COMBAT TRACKER */}
-        {activeTab === "combat" && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center border-b border-border/20 pb-3 flex-wrap gap-4">
-              <div>
-                <h3 className="font-serif text-2xl text-primary font-bold">Combat Tracker</h3>
-                <p className="text-xs text-muted-foreground mt-1">Track turn initiatives, active statuses, and order of combatants.</p>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => {
-                    setCombatants([]);
-                    setCurrentTurnIdx(0);
-                    toast.success("Combat cleared.");
-                  }}
-                  className="rounded-md border-destructive/40 text-destructive hover:bg-destructive/10"
-                >
-                  Clear Tracker
-                </Button>
-                <Button 
-                  size="sm"
-                  onClick={() => {
-                    if (combatants.length === 0) return;
-                    setCurrentTurnIdx(prev => (prev + 1) % combatants.length);
-                  }}
-                  disabled={combatants.length === 0}
-                  className="bg-primary text-primary-foreground font-serif rounded-md"
-                >
-                  Next Turn →
-                </Button>
-              </div>
-            </div>
-
-            {/* Import options & Form row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-              
-              {/* Form & Imports Column */}
-              <div className="space-y-4 lg:col-span-1">
-                <Card className="bg-card border-border/50 rounded-md p-4 space-y-4 shadow-sm">
-                  <h4 className="font-serif text-sm font-bold text-primary uppercase tracking-widest border-b border-border/30 pb-2">Add Combatants</h4>
-                  
-                  {/* Quick Imports */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block">Quick Import</label>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => {
-                          const existing = combatants.find(c => c.name === character.name);
-                          if (existing) {
-                            toast.error(`${character.name} already in combat.`);
-                            return;
-                          }
-                          const newC: Combatant = {
-                            id: `pc-${character.id}-${Date.now()}`,
-                            name: character.name,
-                            initiative: 10 + (autoModifiers.agility || 0),
-                            statuses: []
-                          };
-                          setCombatants(prev => [...prev, newC].sort((a, b) => b.initiative - a.initiative));
-                          toast.success(`Imported ${character.name}!`);
-                        }}
-                        className="text-[10px] py-1 h-7 border-primary/40 text-primary hover:bg-primary/5 rounded"
-                      >
-                        + Import {character.name} (PC)
-                      </Button>
-
-                      {character.familiars && character.familiars.map(fam => (
-                        <Button
-                          key={fam.id}
-                          size="xs"
-                          variant="outline"
-                          onClick={() => {
-                            const newC: Combatant = {
-                              id: `fam-${fam.id}-${Date.now()}`,
-                              name: fam.name,
-                              initiative: 10 + Math.floor((Number(fam.agility) || 0) / 3),
-                              statuses: []
-                            };
-                            setCombatants(prev => [...prev, newC].sort((a, b) => b.initiative - a.initiative));
-                            toast.success(`Imported familiar ${fam.name}!`);
-                          }}
-                          className="text-[10px] py-1 h-7 border-primary/40 text-primary hover:bg-primary/5 rounded"
-                        >
-                          + Import {fam.name}
-                        </Button>
-                      ))}
-                    </div>
-
-                    {/* Notes Bestiary Import Selector */}
-                    {notes.filter(n => n.category === "bestiary").length > 0 && (
-                      <div className="pt-2 border-t border-border/20 mt-2 space-y-1">
-                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Import from Bestiary</label>
-                        <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto pr-1">
-                          {notes.filter(n => n.category === "bestiary").map(note => (
-                            <button
-                              key={note.id}
-                              type="button"
-                              onClick={() => {
-                                const newC: Combatant = {
-                                  id: `bestiary-${note.id}-${Date.now()}`,
-                                  name: note.title,
-                                  initiative: 10,
-                                  statuses: []
-                                };
-                                setCombatants(prev => [...prev, newC].sort((a, b) => b.initiative - a.initiative));
-                                // Add to recents
-                                setRecentCombatants(prev => {
-                                  const filtered = prev.filter(r => r.name !== note.title);
-                                  return [{ name: note.title, initiative: 10, statuses: [] }, ...filtered].slice(0, 10);
-                                });
-                                toast.success(`Imported ${note.title} from Bestiary!`);
-                              }}
-                              className="text-[9px] border border-border/60 bg-background/50 hover:border-primary/50 hover:bg-accent/40 px-2 py-1 rounded transition-all flex items-center gap-1 text-foreground"
-                            >
-                              🐉 {note.title}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Manual Creation Form */}
-                  <form 
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = e.currentTarget;
-                      const name = (form.elements.namedItem("cName") as HTMLInputElement).value.trim();
-                      const init = parseInt((form.elements.namedItem("cInit") as HTMLInputElement).value) || 0;
-                      if (!name) return;
-
-                      const newC: Combatant = {
-                        id: `manual-${Date.now()}`,
-                        name,
-                        initiative: init,
-                        statuses: []
-                      };
-                      setCombatants(prev => [...prev, newC].sort((a, b) => b.initiative - a.initiative));
-                      setRecentCombatants(prev => {
-                        const filtered = prev.filter(r => r.name !== name);
-                        return [{ name, initiative: init, statuses: [] }, ...filtered].slice(0, 10);
-                      });
-                      form.reset();
-                      toast.success(`Added ${name} to combat.`);
-                    }}
-                    className="space-y-3 pt-3 border-t border-border/20 text-xs"
-                  >
-                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-0.5">Manual Entry</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="col-span-2">
-                        <Input name="cName" required placeholder="Name / Creature" className="bg-background h-8 text-xs rounded" />
-                      </div>
-                      <div>
-                        <Input name="cInit" type="number" placeholder="Init" className="bg-background h-8 text-xs rounded text-center font-mono" />
-                      </div>
-                    </div>
-                    <Button type="submit" size="sm" className="w-full bg-primary text-primary-foreground font-serif rounded h-8 text-xs">
-                      + Add Combatant
-                    </Button>
-                  </form>
-                </Card>
-
-                {/* Recents Section */}
-                {recentCombatants.length > 0 && (
-                  <Card className="bg-card border-border/50 rounded-md p-4 space-y-2 shadow-sm">
-                    <h5 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest border-b border-border/20 pb-1 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-primary" /> Recent Combatants
-                    </h5>
-                    <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto">
-                      {recentCombatants.map((recent, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            const newC: Combatant = {
-                              id: `recent-${idx}-${Date.now()}`,
-                              name: recent.name,
-                              initiative: recent.initiative,
-                              statuses: []
-                            };
-                            setCombatants(prev => [...prev, newC].sort((a, b) => b.initiative - a.initiative));
-                            toast.success(`Added ${recent.name} from recents.`);
-                          }}
-                          className="text-[9px] border border-border/60 bg-background/50 hover:border-primary/50 px-2 py-1 rounded transition-all text-foreground"
-                        >
-                          {recent.name} ({recent.initiative})
-                        </button>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-              </div>
-
-              {/* Combat Timeline Column (2/3 width) */}
-              <div className="lg:col-span-2 space-y-4">
-                {combatants.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {combatants.map((c, idx) => {
-                      const isActive = idx === currentTurnIdx;
-                      
-                      const moveUp = (i: number) => {
-                        if (i === 0) return;
-                        setCombatants(prev => {
-                          const copy = [...prev];
-                          const temp = copy[i];
-                          copy[i] = copy[i - 1];
-                          copy[i - 1] = temp;
-                          return copy;
-                        });
-                      };
-
-                      const moveDown = (i: number) => {
-                        if (i === combatants.length - 1) return;
-                        setCombatants(prev => {
-                          const copy = [...prev];
-                          const temp = copy[i];
-                          copy[i] = copy[i + 1];
-                          copy[i + 1] = temp;
-                          return copy;
-                        });
-                      };
-
-                      const handleDragStart = (e: React.DragEvent) => {
-                        e.dataTransfer.setData("text/plain", idx.toString());
-                      };
-
-                      const handleDrop = (e: React.DragEvent) => {
-                        const fromIdx = Number(e.dataTransfer.getData("text/plain"));
-                        if (fromIdx !== idx) {
-                          setCombatants(prev => {
-                            const copy = [...prev];
-                            const item = copy.splice(fromIdx, 1)[0];
-                            copy.splice(idx, 0, item);
-                            return copy;
-                          });
-                        }
-                      };
-
-                      return (
-                        <Card 
-                          key={c.id}
-                          draggable
-                          onDragStart={handleDragStart}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={handleDrop}
-                          className={`bg-card border transition-all rounded-md overflow-hidden relative group cursor-grab active:cursor-grabbing ${
-                            isActive 
-                              ? "border-emerald-500 bg-emerald-500/[0.02] shadow-[0_0_12px_rgba(16,185,129,0.1)]" 
-                              : "border-border/40 hover:border-primary/20"
-                          }`}
-                        >
-                          {isActive && (
-                            <div className="absolute left-0 inset-y-0 w-1 bg-emerald-500" />
-                          )}
-                          <CardContent className="p-4 flex items-center justify-between gap-4 flex-wrap sm:flex-nowrap">
-                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                              {/* Turn indicator / index */}
-                              <span className={`text-[10px] font-mono font-bold w-5 h-5 flex items-center justify-center rounded-full ${
-                                isActive ? "bg-emerald-500 text-black" : "bg-muted text-muted-foreground"
-                              }`}>
-                                {idx + 1}
-                              </span>
-
-                              {/* Drag Handle Icon for Desktop */}
-                              <div className="hidden sm:flex flex-col gap-0.5 cursor-grab">
-                                <span className="w-3.5 h-0.5 bg-muted-foreground/30" />
-                                <span className="w-3.5 h-0.5 bg-muted-foreground/30" />
-                                <span className="w-3.5 h-0.5 bg-muted-foreground/30" />
-                              </div>
-
-                              <div className="min-w-0">
-                                <h5 className={`font-serif text-base font-bold ${isActive ? "text-emerald-400" : "text-foreground"}`}>
-                                  {c.name}
-                                </h5>
-                                
-                                {/* Statuses row */}
-                                <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                                  {c.statuses.map((status, sIdx) => (
-                                    <Badge 
-                                      key={sIdx} 
-                                      variant="secondary" 
-                                      onClick={() => {
-                                        setCombatants(prev => prev.map(p => p.id === c.id ? { ...p, statuses: p.statuses.filter((_, i) => i !== sIdx) } : p));
-                                        toast.success(`Removed status ${status}`);
-                                      }}
-                                      className="text-[9px] bg-destructive/10 text-destructive-foreground hover:bg-destructive/20 border-0 rounded cursor-pointer select-none flex items-center gap-1 font-semibold"
-                                    >
-                                      {status} <span className="text-[8px] opacity-60">&times;</span>
-                                    </Badge>
-                                  ))}
-                                  
-                                  {/* Add status form trigger */}
-                                  <form 
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      const input = e.currentTarget.elements.namedItem("newStatus") as HTMLInputElement;
-                                      const val = input.value.trim();
-                                      if (val) {
-                                        setCombatants(prev => prev.map(p => p.id === c.id ? { ...p, statuses: [...p.statuses, val] } : p));
-                                        input.value = "";
-                                        toast.success(`Added status ${val} to ${c.name}`);
-                                      }
-                                    }}
-                                    className="inline-flex items-center"
-                                  >
-                                    <Input
-                                      name="newStatus"
-                                      placeholder="+ status"
-                                      className="h-5 text-[9px] w-14 bg-background/50 border-border/40 px-1 py-0.5 rounded font-medium focus-visible:w-20 transition-all focus-visible:outline-none"
-                                    />
-                                  </form>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Initiative & Controls */}
-                            <div className="flex items-center gap-4 flex-shrink-0">
-                              <div className="text-right">
-                                <div className="text-sm font-bold font-mono text-foreground leading-none">{c.initiative}</div>
-                                <span className="text-[8px] uppercase tracking-wider text-muted-foreground font-semibold">Initiative</span>
-                              </div>
-
-                              {/* Mobile-friendly Up/Down sorting arrows */}
-                              <div className="flex flex-col gap-0.5">
-                                <button 
-                                  onClick={() => moveUp(idx)} 
-                                  disabled={idx === 0}
-                                  className="p-0.5 bg-accent hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed rounded cursor-pointer"
-                                >
-                                  <svg className="w-3 h-3 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 15l7-7 7 7" /></svg>
-                                </button>
-                                <button 
-                                  onClick={() => moveDown(idx)} 
-                                  disabled={idx === combatants.length - 1}
-                                  className="p-0.5 bg-accent hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed rounded cursor-pointer"
-                                >
-                                  <svg className="w-3 h-3 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
-                                </button>
-                              </div>
-
-                              {/* Remove button */}
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                onClick={() => {
-                                  setCombatants(prev => prev.filter(p => p.id !== c.id));
-                                  toast.success(`Removed ${c.name} from combat.`);
-                                }}
-                                className="h-8 w-8 text-destructive hover:bg-destructive/10 rounded cursor-pointer"
-                              >
-                                <X className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 bg-card/30 border border-dashed border-border/40 rounded-md text-sm text-muted-foreground/60 italic font-serif">
-                    No active combatants in timeline. Click Quick Import above or type a manual entry to start combat!
-                  </div>
-                )}
-              </div>
-
-            </div>
-          </div>
-        )}
 
       </div>
 

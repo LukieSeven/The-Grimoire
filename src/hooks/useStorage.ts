@@ -1,4 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { getFamiliarAdjusted } from "../lib/familiar-values";
+import { activeEffectModifier } from "../lib/active-effect-modifiers";
+import type { RollPurpose } from "../lib/active-effect-modifiers";
 import {
   storage,
   Character,
@@ -63,16 +66,28 @@ export function useCreateCharacter() {
 export function useUpdateCharacter() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Omit<Character, "id" | "createdAt" | "updatedAt">> }) => {
-      return Promise.resolve(storage.updateCharacter(id, data));
+    mutationFn: ({ id, data, resourceMode, consumeAbilityId }: { id: number; data: Partial<Omit<Character, "id" | "createdAt" | "updatedAt">>; resourceMode?: "reconcile" | "exact"; consumeAbilityId?: number }) => {
+      return Promise.resolve(consumeAbilityId === undefined ? storage.updateCharacter(id, data, resourceMode) : storage.useAbility(id, consumeAbilityId, data));
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["characters"] });
       queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(data.id) });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(data.id) });
+      queryClient.invalidateQueries({ queryKey: getListAbilitiesQueryKey(data.id) });
+      queryClient.invalidateQueries({ queryKey: getListInventoryQueryKey(data.id) });
     },
   });
 }
 
+export function useLongRestCharacter() {
+  const queryClient = useQueryClient();
+  return useMutation({ mutationFn: (id: number) => Promise.resolve(storage.longRestCharacter(id)), onSuccess: character => {
+    queryClient.invalidateQueries({ queryKey: ["characters"] });
+    queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(character.id) });
+    queryClient.invalidateQueries({ queryKey: getListAbilitiesQueryKey(character.id) });
+    queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(character.id) });
+  } });
+}
 export function useDeleteCharacter() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -99,10 +114,10 @@ export function useApplyDamage() {
       const ab = storage.getAbilities(id);
       const { maxDt } = getAdjustedStats(char, eq, ab);
       
-      const { amount } = data;
-      const dt = char.currentDt;
+      const amount = Math.max(0, data.amount - activeEffectModifier(char, ab, eq, "damageReduction"));
+      const dt = char.currentDt + (char.tempDt ?? 0);
       
-      const newDt = Math.max(0, dt - 1);
+      const newDt = char.currentDt - 1;
       let hpLost = 0;
       let dtDropped = true;
       let absorbed = false;
@@ -115,7 +130,7 @@ export function useApplyDamage() {
       }
       
       // Calculate current HP
-      const newHp = Math.max(0, char.currentHp - hpLost);
+      const newHp = char.currentHp - hpLost;
       
       const updated = storage.updateCharacter(id, {
         currentDt: newDt,
@@ -150,10 +165,10 @@ export function useApplyDamage() {
       return {
         dtDropped,
         hpLost,
-        newDt,
-        newHp,
+        newDt: updated.currentDt,
+        newHp: updated.currentHp,
         absorbed,
-        maxDt,
+        maxDt: getAdjustedStats(updated, eq, ab).maxDt,
       };
     },
     onSuccess: (_, variables) => {
@@ -365,6 +380,8 @@ export function useAddAbility() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: getListAbilitiesQueryKey(data.characterId) });
+      queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(data.characterId) });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(data.characterId) });
     },
   });
 }
@@ -377,6 +394,8 @@ export function useUpdateAbility() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: getListAbilitiesQueryKey(data.characterId) });
+      queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(data.characterId) });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(data.characterId) });
     },
   });
 }
@@ -390,6 +409,8 @@ export function useDeleteAbility() {
     },
     onSuccess: (charId) => {
       queryClient.invalidateQueries({ queryKey: getListAbilitiesQueryKey(charId) });
+      queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(charId) });
+      queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(charId) });
     },
   });
 }
@@ -519,10 +540,13 @@ export function useCreateRoll() {
         label?: string;
         statValue?: number;
         familiarId?: string | number;
+        rollPurpose?: RollPurpose;
+        rollScope?: string;
       };
     }) => {
       const charId = data.id;
-      const { diceType, modifier = 0, label, statValue, familiarId } = data.data;
+      const { diceType, label, statValue, familiarId } = data.data;
+      let modifier = data.data.modifier ?? 0;
       
       const char = storage.getCharacter(charId);
       if (!char) throw new Error("Character not found");
@@ -534,16 +558,7 @@ export function useCreateRoll() {
         const fam = char.familiars?.find(f => f.id === familiarId);
         if (fam) {
           rollingEntity = fam;
-          finalStats = {
-            power: fam.power,
-            vitality: fam.vitality,
-            spirit: fam.spirit,
-            agility: fam.agility,
-            endurance: fam.endurance,
-            precision: fam.precision,
-            willpower: fam.willpower,
-            charisma: fam.charisma
-          };
+          finalStats = getFamiliarAdjusted(fam).stats;
         }
       } else {
         const equipment = storage.getEquipment(charId);
@@ -553,6 +568,10 @@ export function useCreateRoll() {
         finalStats = adjusted.stats;
       }
 
+      if (data.data.rollPurpose) {
+        const key = data.data.rollPurpose === "attack" ? "bonusAttackRoll" : data.data.rollPurpose === "resistance" ? "bonusResistanceRoll" : "bonusSkillCheck";
+        modifier += activeEffectModifier(rollingEntity, storage.getAbilities(charId), familiarId === undefined ? storage.getEquipment(charId) : [], key, data.data.rollScope);
+      }
       function dieForValue(v: number): number {
         if (v <= 4) return 4;
         if (v <= 6) return 6;
@@ -601,9 +620,10 @@ export function useCreateRoll() {
         return { total: sum, desc, isCrit: crit };
       };
 
-      if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log") {
+      if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log" || diceType === "action-log") {
         const roll = storage.addRoll({
           characterId: charId,
+          ...(familiarId !== undefined ? { familiarId } : {}),
           diceType,
           result: modifier,
           modifier: 0,

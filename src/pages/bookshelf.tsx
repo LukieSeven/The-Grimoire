@@ -616,10 +616,6 @@ export default function Bookshelf() {
               <span className={smolderTarget === "codex" || smolderTarget === "chronicle" || smolderTarget === "all" ? "animate-rune-smolder" : ""}>᚜</span>
             </div>
 
-            {/* Faint engraving watermark signature on the right of the wooden ledge */}
-            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-mono text-amber-950/30 select-none uppercase tracking-widest pointer-events-none">
-              Crafted by Lukie Seven · Mark 66
-            </div>
           </div>
           <div className="wood-grain w-full h-4 bg-gradient-to-b from-black/80 to-transparent" />
         </div>
@@ -660,12 +656,6 @@ export default function Bookshelf() {
         )}
       </div>
 
-      {/* Tucked away footer */}
-      <footer className="mt-12 mb-4 border-t border-stone-900/45 pt-4 text-center z-10 w-full max-w-xl mx-auto">
-        <p className="text-[10px] font-mono text-stone-600/35 hover:text-stone-400/80 transition-colors tracking-widest uppercase">
-          Lovingly crafted by LukieSeven — Mark 93
-        </p>
-      </footer>
     </div>
   );
 }

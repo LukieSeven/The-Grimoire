@@ -1,3 +1,4 @@
+import { TEXTURES, applyTexture } from "../../lib/appearance";
 import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -18,15 +19,17 @@ const THEMES = [
   { id: "theme-emberborn", name: "Emberborn", bg: "bg-[#0a0605]", primary: "bg-[#ff6d00]", label: "ITS ON FIRE" },
 ];
 
-export function CustomizeToolDialog() {
+export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean }) {
   const [location] = useLocation();
   const [activeTheme, setActiveTheme] = useState("theme-grimoire");
   const [activeRadius, setActiveRadius] = useState("0px");
+  const [texture, setTexture] = useState("Slate / stone");
+  const [intensity, setIntensity] = useState(25);
   const [isOpen, setIsOpen] = useState(false);
 
   // Determine current scope based on url path
   let scope = "bookshelf";
-  if (location.startsWith("/grimoire") || location.match(/^\/characters\/\d+/)) {
+  if (location === "/" || location.startsWith("/grimoire") || location.match(/^\/characters\/\d+/)) {
     scope = "grimoire";
   } else if (location.startsWith("/codex")) {
     scope = "codex";
@@ -40,6 +43,8 @@ export function CustomizeToolDialog() {
       const savedRadius = localStorage.getItem(`aetherborne_radius_${scope}`) || "0px";
       setActiveTheme(savedTheme);
       setActiveRadius(savedRadius);
+      setTexture(localStorage.getItem(`aetherborne_texture_${scope}`) ?? "Slate / stone");
+      setIntensity(Number(localStorage.getItem(`aetherborne_texture_intensity_${scope}`) ?? "25"));
     }
   }, [isOpen, scope]);
 
@@ -65,8 +70,8 @@ export function CustomizeToolDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 text-xs border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer font-bold font-serif">
-          <Palette className="w-3.5 h-3.5 mr-1.5" /> Customize Tool
+        <Button variant="outline" size="sm" className={prominent ? "home-action" : "h-8 text-xs border-primary/45 text-primary hover:bg-primary/10 rounded-md cursor-pointer font-bold font-serif"}>
+          <Palette className={prominent ? "" : "w-3.5 h-3.5 mr-1.5"}/><span><span className="block">Customize Tool</span>{prominent && <span className="home-action-caption">Themes, textures, and more</span>}</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[420px] bg-card border border-border shadow-2xl rounded-md p-6 max-h-[90vh] overflow-y-auto">
@@ -87,7 +92,7 @@ export function CustomizeToolDialog() {
           </div>
 
           <p className="text-xs text-muted-foreground leading-relaxed font-sans">
-            Customize the colors and card corners for this book specifically. Other books will retain their own unique styles.
+            Customize the colors, textures, and card corners for this book specifically. Other books will retain their own unique styles.
           </p>
 
           <div className="space-y-2">
@@ -120,6 +125,7 @@ export function CustomizeToolDialog() {
             </div>
           </div>
 
+          <fieldset className="space-y-3 border-t border-border/30 pt-3"><legend className="text-sm font-bold">Surface texture</legend><div className="grid grid-cols-2 gap-2">{TEXTURES.map(value => <button type="button" key={value} aria-pressed={texture === value} className={`p-3 text-left text-xs rounded-md border ${texture === value ? "border-primary bg-primary/10 text-primary" : "border-border/50 hover:bg-accent/40"}`} onClick={() => { setTexture(value); localStorage.setItem(`aetherborne_texture_${scope}`, value); applyTexture(scope); }}>{value}</button>)}</div><label className="block text-xs">Texture intensity · {intensity}%<input type="range" min="0" max="100" value={intensity} className="block w-full mt-2 accent-primary" onChange={event => { const value = Number(event.target.value); setIntensity(value); localStorage.setItem(`aetherborne_texture_intensity_${scope}`, String(value)); applyTexture(scope); }}/></label><p className="text-xs text-muted-foreground font-sans">Textures follow your theme colors. Appearance settings do not change character data.</p></fieldset>
           {/* Corner Style Section */}
           <div className="pt-3 space-y-2 border-t border-border/30">
             <span className="text-xs font-bold text-foreground">Corner Style</span>

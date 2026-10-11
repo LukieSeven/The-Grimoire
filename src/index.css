@@ -1,6 +1,141 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Spectral:ital,wght@0,400;0,600;0,700;1,400&family=Space+Mono&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* Theme color and surface texture are independent appearance preferences. */
+:root { --texture-opacity: .25; --surface-texture: none; }
+[data-texture="Fine grain"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' opacity='.4' filter='url(%23n)'/%3E%3C/svg%3E"); }
+[data-texture="Slate / stone"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.035 .14' numOctaves='5' stitchTiles='stitch'/%3E%3CfeDiffuseLighting surfaceScale='3' diffuseConstant='.7' lighting-color='%23bbbbbb'%3E%3CfeDistantLight azimuth='45' elevation='45'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+[data-texture="Leather"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.12' numOctaves='3' stitchTiles='stitch'/%3E%3CfeDiffuseLighting surfaceScale='4' lighting-color='%23aaaaaa'%3E%3CfeDistantLight azimuth='60' elevation='55'/%3E%3C/feDiffuseLighting%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+[data-texture="Parchment"] { --surface-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.025' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.6'/%3E%3C/svg%3E"); }
+[data-texture="Brushed metal"] { --surface-texture: repeating-linear-gradient(0deg, #ffffff30 0 1px, transparent 1px 3px), linear-gradient(110deg, transparent, #ffffff30, transparent); }
+[data-texture="Woven cloth"] { --surface-texture: repeating-linear-gradient(0deg, #ffffff30 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, #ffffff30 0 1px, transparent 1px 4px); }
+.grimoire-shell::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: var(--surface-texture); opacity: var(--texture-opacity); mix-blend-mode: soft-light; }
+.grimoire-shell main > .pointer-events-none { display: none; }
+.home-surface { background: linear-gradient(135deg, hsl(var(--card) / .97), hsl(var(--background) / .93)); border: 1px solid hsl(var(--primary) / .3); box-shadow: 0 12px 35px #00000025, inset 0 1px 0 #ffffff06; }
+.home-action { height: auto; min-height: 4rem; padding: .75rem 1.1rem; display: flex; justify-content: flex-start; gap: .8rem; text-align: left; white-space: normal; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border) / .65); border-radius: .75rem; background: hsl(var(--background) / .35); font-size: .95rem; }
+.home-action > svg { width: 1.6rem; height: 1.6rem; flex-shrink: 0; color: hsl(var(--primary)); }
+.home-action-caption { display: block; margin-top: .15rem; font-family: Inter, sans-serif; font-size: .7rem; font-weight: 400; color: hsl(var(--muted-foreground)); }
+.home-action:hover { background: hsl(var(--primary) / .08); border-color: hsl(var(--primary) / .6); }
+.home-action-featured { border-color: hsl(var(--primary) / .8); background: hsl(var(--primary) / .1); box-shadow: 0 0 20px hsl(var(--primary) / .1); }
+.home-action-featured > span > :first-child { color: hsl(var(--primary)); }
+.home-page h2 { font-size: 1.75rem; border-color: hsl(var(--primary) / .25); }
+.home-roster-card { transition: border-color .2s, box-shadow .2s; }
+.home-roster-card:hover { border-color: hsl(var(--primary) / .65); box-shadow: 0 12px 40px #00000035; }
+.home-roster-card > button > div:last-child { position: relative; min-height: 290px; }
+.home-roster-card > button::after { content: "›"; position: absolute; right: 1.5rem; bottom: 1.5rem; color: hsl(var(--primary)); font-size: 2.5rem; line-height: 1; }
+.portrait-edit { position: absolute; left: 1.25rem; bottom: 1.25rem; width: 2rem; height: 2rem; padding: .5rem; color: hsl(var(--muted-foreground)); background: hsl(var(--background) / .45); border: none; box-shadow: none; opacity: .65; }
+.portrait-edit:hover, .portrait-edit:focus-visible { opacity: 1; color: hsl(var(--foreground)); background: hsl(var(--background) / .7); }
+.home-page .home-utilities > .h-4 { display: none; }
+@media (max-width: 639px) {
+  .home-utilities { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-action { min-width: 0; padding: .65rem; gap: .5rem; font-size: .8rem; }
+  .home-action-caption { font-size: .65rem; }
+  .home-toolbar > button { width: 100%; }
+  .portrait-edit { top: 1.25rem; bottom: auto; }
+  .home-roster-card > button::after { display: none; }
+}
+@media (min-width: 640px) {
+  .home-roster-card > button > div:last-child { display: block; }
+  .home-roster-card > button > div:last-child > div:first-child { width: 100%; }
+  .home-roster-card > button > div:last-child > div:first-child > div:first-child { width: 35%; max-width: 320px; }
+  .home-roster-card > button > div:last-child > div:first-child > div:last-child { max-width: 34%; }
+  .home-roster-card > button > div:last-child > div:last-child { position: absolute; top: 38%; right: 1.5rem; width: 22%; }
+}
+@media (prefers-reduced-motion: reduce) { .home-page *, .home-page { animation: none !important; transition: none !important; } }
+
+/* Character workspace: shared rhythm inside independently scrolling zones. */
+.grimoire-workspace .resource-zone,
+.grimoire-workspace .dice-zone {
+  padding: .75rem;
+}
+.grimoire-workspace .resource-zone > .space-y-4 {
+  padding-bottom: .75rem;
+}
+.grimoire-workspace > *, .grimoire-workspace input { min-width: 0; }
+.grimoire-workspace .workspace-scroll { scrollbar-gutter: stable; }
+.grimoire-workspace > [aria-label="Character trackers"] > [role="tablist"] { flex-shrink: 0; }
+.grimoire-workspace .resource-management > div {
+  display: grid;
+  grid-template-rows: 1.25rem minmax(2.25rem, auto) .5rem auto;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  container-type: inline-size;
+  align-content: start;
+  gap: .375rem;
+  padding: .5rem;
+  border-color: hsl(var(--border) / .65);
+}
+.grimoire-workspace .resource-management > div > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.grimoire-workspace .resource-management > div > :first-child {
+  font-size: .6875rem;
+  letter-spacing: .025em;
+  overflow-wrap: anywhere;
+}
+.grimoire-workspace .resource-management > div > :first-child svg {
+  flex-shrink: 0;
+}
+.grimoire-workspace .resource-management > div > .text-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: .25rem;
+  font-variant-numeric: tabular-nums;
+}
+.grimoire-workspace .resource-management .text-center > span {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.grimoire-workspace .resource-management .text-4xl {
+  font-size: clamp(1.25rem, 18cqi, 2rem);
+  line-height: 1.1;
+}
+.grimoire-workspace .resource-management .space-y-1 > .flex:has(input) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4rem;
+  gap: .375rem;
+}
+.grimoire-workspace .resource-management input { width: 100%; }
+.grimoire-workspace .resource-management .space-y-2,
+.grimoire-workspace .resource-management .space-y-2 > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.grimoire-workspace .resource-management button {
+  max-width: 100%;
+  padding-inline: .375rem;
+}
+.grimoire-workspace .resource-management .h-4 > p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grimoire-workspace .dice-zone .grid > button {
+  min-height: 2.5rem;
+  min-width: 0;
+}
+.grimoire-workspace .workspace-tabs button {
+  min-width: 0;
+  min-height: 1.75rem;
+  padding-inline: .375rem;
+  font-size: .625rem;
+  line-height: 1rem;
+  border: 0;
+}
+.grimoire-workspace .workspace-tabs button:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+.favorites-belt .grid > div {
+  min-width: 0;
+  min-height: 5.5rem;
+}
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));

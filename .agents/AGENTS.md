@@ -1,5 +1,7 @@
 # Project Rules
 
+- **Release Versions:** Version numbers are declared by the user only. Never automatically increment a version or use a Mark counter. The current release is V1.1 (package version 1.1.0).
+
 - **Git Push Remote:** Always use the `the-grimoire` remote (`https://github.com/LukieSeven/The-Grimoire`) for pushing changes. Never push to `origin` or any other remote.
 - **Local Process Execution:** Never run local development servers, builds, test runners, or any local diagnostic commands (such as `npm run build` or `npm run dev`) unless explicitly and directly requested by the user.
 - **Investigative Questions & Diagnostics:** When the user asks a question, requests an explanation, or asks to identify an issue, NEVER make code changes or attempt fixes automatically. Inspect the codebase, report the exact findings back to the user, and STOP to await explicit approval before touching any code.

@@ -5,7 +5,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const rightRunes = ["ᛃ", "ᛇ", "ᛈ", "ᛉ", "ᛊ", "ᛏ", "ᛒ", "ᛖ", "ᛗ", "ᛚ", "ᛜ"];
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden selection:bg-primary/30 relative">
+    <div className="grimoire-shell flex h-screen w-full bg-background overflow-hidden selection:bg-primary/30 relative">
       
       {/* Mystical Runic Margins (Elder Futhark guides - hidden on mobile/split screens to avoid overlap) */}
       <div className="hidden xl:flex flex-col gap-5 absolute left-6 top-1/2 -translate-y-1/2 text-stone-500/25 select-none pointer-events-none animate-pulse duration-[3000ms] text-xs font-mono tracking-widest text-center">

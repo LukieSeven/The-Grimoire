@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, ChevronDown, Library } from "lucide-react";
+import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, ChevronDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { RollGuideDialog } from "@/components/dialogs/roll-guide-dialog";
-import { exportGrimoireBackup, importGrimoireBackup } from "@/lib/storage";
+import { HowToPlayDialog } from "@/components/dialogs/how-to-play-dialog";
+import { PortraitDialog } from "@/components/dialogs/portrait-dialog";
+import { exportGrimoireBackup, importGrimoireBackup, getAdjustedStats, storage } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { importChronicleBundles, type CharacterBundle, type GrimoireCollections } from "@/lib/character-import";
@@ -249,7 +250,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="home-page p-4 sm:p-8 xl:px-12 max-w-[1680px] mx-auto space-y-8 sm:space-y-12 animate-in fade-in duration-500">
       <style>{`
         @keyframes ethereal-pulse {
           0% {
@@ -278,10 +279,10 @@ export default function Dashboard() {
           <img 
             src={`${import.meta.env.BASE_URL}logo.jpg`} 
             alt="The Grimoire Logo" 
-            className="w-16 h-16 rounded-lg object-cover border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.12)] flex-shrink-0" 
+            className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg object-cover border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.12)] flex-shrink-0"
           />
           <div className="space-y-1">
-            <h1 className="text-4xl sm:text-5xl font-serif font-black tracking-[0.25em] uppercase bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
+            <h1 className="text-3xl sm:text-5xl xl:text-6xl font-serif font-black tracking-[0.12em] sm:tracking-[0.2em] uppercase bg-gradient-to-r from-primary via-foreground to-primary bg-clip-text text-transparent">
               The Grimoire
             </h1>
             <p className="text-sm text-muted-foreground/80 font-serif italic tracking-wide">
@@ -292,20 +293,10 @@ export default function Dashboard() {
       </header>
 
       {/* Utility Control Panel Bar */}
-      <div className="bg-card/45 backdrop-blur-md border border-border/40 p-4 flex flex-wrap items-center justify-between gap-4 rounded-lg shadow-sm">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Button 
-            variant="outline" 
-            onClick={() => setLocation("/")}
-            className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
-            title="Return to the library bookcase"
-          >
-            <Library className="w-3.5 h-3.5 text-primary" /> Return to The Archive
-          </Button>
-          <div className="h-4 w-px bg-border/30" />
-          <CustomizeToolDialog />
-          <div className="h-4 w-px bg-border/30 hidden sm:block" />
-          <RollGuideDialog />
+      <div className="home-toolbar home-surface p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 rounded-xl">
+        <div className="home-utilities flex items-center gap-3 flex-wrap">
+          <HowToPlayDialog />
+          <CustomizeToolDialog prominent />
           <div className="h-4 w-px bg-border/30 hidden md:block" />
 
           <input
@@ -319,25 +310,25 @@ export default function Dashboard() {
           <Button 
             variant="outline" 
             onClick={handleImportClick}
-            className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
+            className="home-action"
             title="Import grimoire roster (.grimoire, .json)"
           >
-            <Upload className="w-3.5 h-3.5 text-primary" /> Import Data
+            <Upload aria-hidden="true"/><span><span className="block font-serif font-bold">Import Data</span><span className="home-action-caption">Load your saved data</span></span>
           </Button>
 
           <Button 
             variant="outline" 
             onClick={handleExportBackup}
-            className="h-9 text-xs font-serif border border-border/50 hover:bg-accent/40 hover:text-foreground rounded-md cursor-pointer flex items-center gap-1.5 px-3.5 font-bold text-muted-foreground transition-all"
+            className="home-action"
             title="Export grimoire roster sheets (.grimoire)"
           >
-            <Download className="w-3.5 h-3.5 text-primary" /> Export Backup
+            <Download aria-hidden="true"/><span><span className="block font-serif font-bold">Export Backup</span><span className="home-action-caption">Create a local backup</span></span>
           </Button>
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-serif font-bold tracking-wider px-5 py-4 h-9 rounded-md border border-primary/50 shadow-md transition-transform hover:scale-[1.02] cursor-pointer flex items-center gap-1">
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-serif font-bold tracking-wider px-6 py-4 h-16 rounded-md border border-primary/50 shadow-md transition-transform hover:scale-[1.02] cursor-pointer flex items-center gap-1">
               <Plus className="w-4 h-4 mr-1" /> Forge Hero <ChevronDown className="w-3.5 h-3.5 ml-0.5 opacity-80" />
             </Button>
           </DropdownMenuTrigger>
@@ -572,10 +563,10 @@ export default function Dashboard() {
       </div>
 
       {/* Two Column Layout: Roster (Left) & Recent Fate (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.85fr)_minmax(0,1fr)] gap-8 xl:gap-12 items-start">
         
         {/* Roster column (2/3 width) */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className=" space-y-6">
           <div className="flex items-center justify-between border-b border-border/20 pb-2">
             <h2 className="text-2xl font-serif font-bold text-foreground">Active Roster</h2>
           </div>
@@ -583,20 +574,24 @@ export default function Dashboard() {
           {loadingChars ? (
             <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
           ) : characters && characters.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {characters.map(char => (
+            <div className="grid grid-cols-1 gap-5">
+              {characters.map(char => {
+                const { maxHp } = getAdjustedStats(char, storage.getEquipment(char.id), storage.getAbilities(char.id));
+                const healthPercent = Number.isFinite(maxHp) && maxHp > 0
+                  ? Math.max(0, Math.min(100, (char.currentHp / maxHp) * 100)) : 0;
+                return (
+                <article key={char.id} className="home-roster-card home-surface relative rounded-xl">
                 <button 
-                  key={char.id} 
                   onClick={() => setLocation(`/characters/${char.id}`)}
-                  className="w-full text-left rounded-lg border border-border/40 bg-card/45 backdrop-blur-md hover:border-primary/40 hover:shadow-[0_0_15px_rgba(var(--primary),0.05)] hover:scale-[1.01] transition-all duration-300 cursor-pointer group relative overflow-hidden"
+                  className="w-full text-left cursor-pointer group relative rounded-xl overflow-hidden focus-visible:outline-2 focus-visible:outline-primary"
                 >
                   {/* Subtle top border glow on hover */}
                   <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary/0 to-transparent group-hover:via-primary/50 transition-all duration-300" />
                   
-                  <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                  <div className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 flex-1 min-w-0">
                       {/* Character Avatar Portrait with Rank Gradient fallback */}
-                      <div className={`w-12 h-12 rounded-full overflow-hidden border border-border/60 bg-background/40 flex-shrink-0 flex items-center justify-center relative shadow-inner ${
+                      <div className={`w-full sm:w-[38%] sm:max-w-72 aspect-square rounded-lg overflow-hidden border border-border/60 bg-background/40 flex-shrink-0 flex items-center justify-center relative shadow-inner ${
                         !char.avatar ? (
                           char.rank === "Iron" ? "bg-slate-700/20 border-slate-500/20"
                           : char.rank === "Bronze" ? "bg-amber-700/20 border-amber-600/35"
@@ -613,32 +608,36 @@ export default function Dashboard() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1 space-y-1">
-                        <h3 className="font-serif text-lg font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                        <h3 className="font-serif text-3xl sm:text-4xl font-bold text-foreground group-hover:text-primary transition-colors truncate">
                           {char.name}
                         </h3>
-                        <p className="text-[10px] text-muted-foreground/80 uppercase tracking-widest font-semibold font-mono truncate">
+                        <p className="text-sm text-muted-foreground/80 uppercase tracking-widest font-semibold font-mono truncate">
                           {char.race} · {char.rank}
                         </p>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1.5 sm:text-right min-w-[120px]">
+                    <div className="flex flex-col gap-3 sm:text-right w-full sm:w-36 shrink-0">
                       <div className="flex justify-between sm:justify-end items-baseline gap-1">
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold sm:hidden">Health</span>
-                        <span className="text-xl font-bold font-mono text-foreground leading-none">
-                          {char.currentHp}<span className="text-xs text-muted-foreground font-normal">/{char.maxHp}</span>
+                        <span className="text-3xl font-bold font-mono text-foreground leading-none">
+                          {(char.tempHp ?? 0) > 0 && <span className="text-cyan-400 mr-2" title="Temporary health">{char.tempHp}</span>}
+                          {char.currentHp}<span className="text-xs text-muted-foreground font-normal">/{maxHp}</span>
                         </span>
                       </div>
                       {/* Roster Card HP Progress Bar */}
                       <div className="w-full bg-background/50 h-1.5 rounded-full overflow-hidden border border-border/20">
                         <div 
                           className="h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full transition-all duration-300"
-                          style={{ width: `${Math.max(0, Math.min(100, (char.currentHp / char.maxHp) * 100))}%` }}
+                          style={{ width: `${healthPercent}%` }}
                         />
                       </div>
                     </div>
                   </div>
                 </button>
-              ))}
+                <PortraitDialog character={char}/>
+                </article>
+                );
+              })}
             </div>
           ) : (
             <Card className="bg-card/30 border-dashed border-border/50 rounded-md">
@@ -661,7 +660,7 @@ export default function Dashboard() {
         <div className="space-y-6">
           <h2 className="text-2xl font-serif font-bold text-foreground border-b border-border/20 pb-2">Recent Fate</h2>
           
-          <Card className="bg-card/60 backdrop-blur border border-border/50 rounded-md">
+          <Card className="home-surface rounded-xl">
             <CardHeader className="pb-3 border-b border-border/30 flex flex-row items-center justify-between">
               <CardTitle className="text-xs font-bold text-muted-foreground flex items-center uppercase tracking-widest">
                 <BookOpen className="w-4 h-4 mr-2 text-primary" /> 
@@ -734,8 +733,10 @@ export default function Dashboard() {
                   ))}
                 </div>
               ) : (
-                <div className="p-6 text-center text-xs text-muted-foreground font-serif italic">
-                  No session recaps have been logged yet.
+                <div className="p-8 sm:py-16 text-center text-sm text-muted-foreground font-serif">
+                  <BookOpen className="w-12 h-12 mx-auto mb-6 text-primary/40" aria-hidden="true"/>
+                  <p>No session recaps have been logged yet.</p>
+                  <p className="mt-3 italic leading-relaxed">Record your adventures to remember key moments, decisions, and discoveries.</p>
                 </div>
               )}
             </CardContent>
@@ -744,6 +745,11 @@ export default function Dashboard() {
 
       </div>
 
+      <footer className="border-t border-border/20 pt-6 pb-2 text-center">
+        <p className="text-[10px] sm:text-xs font-mono text-muted-foreground/50 tracking-widest">
+          Lovingly crafted by LukieSeven · V1.1
+        </p>
+      </footer>
     </div>
   );
 }

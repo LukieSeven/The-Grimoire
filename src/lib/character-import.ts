@@ -52,10 +52,12 @@ export function importChronicleBundles(
     cloneRecords(bundle.currencies, result.currencies, characterId);
     const inventoryIds = cloneRecords(bundle.inventory, result.inventory, characterId);
     const essenceIds = cloneRecords(bundle.essences, result.essences, characterId);
+    const abilityIds = new Map<number, number>();
     cloneRecords(bundle.skills, result.skills, characterId);
 
     for (const ability of bundle.abilities ?? []) {
       const id = nextId(result.abilities);
+      abilityIds.set(ability.id, id);
       const oldEquipmentId = Number(ability.equipmentId);
       const oldInventoryId = Number(ability.inventoryItemId);
       const oldEssenceId = Number(ability.essenceId);
@@ -67,6 +69,13 @@ export function importChronicleBundles(
         inventoryItemId: inventoryIds.get(oldInventoryId) ?? null,
         essenceId: essenceIds.get(oldEssenceId) ?? null,
       });
+    }
+    const cloned = result.characters[result.characters.length - 1];
+    if (Array.isArray(cloned.effectApplications)) {
+      cloned.effectApplications = cloned.effectApplications.map(application => ({
+        ...application,
+        abilityId: application.familiarId !== undefined ? application.abilityId : abilityIds.get(application.abilityId) ?? application.abilityId,
+      }));
     }
   }
 

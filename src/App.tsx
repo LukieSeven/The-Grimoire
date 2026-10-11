@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { lazy, Suspense, useEffect } from "react";
+import { applyTexture } from "./lib/appearance";
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   componentImport: () => Promise<{ default: T }>
@@ -29,9 +30,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 const NotFound = lazyWithRetry(() => import("@/pages/not-found"));
 const Dashboard = lazyWithRetry(() => import("@/pages/dashboard"));
 const CharacterSheet = lazyWithRetry(() => import("@/pages/character-sheet"));
-const Bookshelf = lazyWithRetry(() => import("@/pages/bookshelf"));
-const Codex = lazyWithRetry(() => import("@/pages/codex"));
-const Chronicle = lazyWithRetry(() => import("@/pages/chronicle"));
+// Archive pages remain in the repository, but are parked for this release.
 
 const queryClient = new QueryClient();
 
@@ -40,7 +39,7 @@ function Router() {
 
   useEffect(() => {
     let scope = "bookshelf";
-    if (location.startsWith("/grimoire") || location.match(/^\/characters\/\d+/)) {
+    if (location === "/" || location.startsWith("/grimoire") || location.match(/^\/characters\/\d+/)) {
       scope = "grimoire";
     } else if (location.startsWith("/codex")) {
       scope = "codex";
@@ -53,16 +52,15 @@ function Router() {
     
     const savedRadius = localStorage.getItem(`aetherborne_radius_${scope}`) || "0px";
     document.documentElement.style.setProperty("--radius", savedRadius);
+    applyTexture(scope);
   }, [location]);
 
   return (
     <Layout>
-      <Suspense fallback={<div className="min-h-[40vh] grid place-items-center text-muted-foreground">Opening the archive…</div>}>
+      <Suspense fallback={<div className="min-h-[40vh] grid place-items-center text-muted-foreground">Opening the Grimoire…</div>}>
         <Switch>
-          <Route path="/" component={Bookshelf} />
+          <Route path="/" component={Dashboard} />
           <Route path="/grimoire" component={Dashboard} />
-          <Route path="/codex" component={Codex} />
-          <Route path="/chronicle" component={Chronicle} />
           <Route path="/characters/:id" component={CharacterSheet} />
           <Route component={NotFound} />
         </Switch>
