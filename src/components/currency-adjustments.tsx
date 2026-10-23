@@ -29,7 +29,7 @@ export function CurrencyAdjustments({ currency }: { currency: Currency }) {
       onError: error => toast.error(error.message),
     });
   };
-  return <form onSubmit={event => { event.preventDefault(); adjust(); }} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5 min-w-0 flex-1 sm:max-w-md">
+  return <form onSubmit={event => { event.preventDefault(); adjust(); }} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 min-w-0 w-full max-w-md">
     {(["add", "remove"] as const).map(mode =>
       <Input key={mode} type="number" min="0" step="any" aria-label={`${mode === "add" ? "Add" : "Remove"} ${currency.name}`} placeholder={mode === "add" ? "Add" : "Remove"} value={mode === "add" ? add : remove} onChange={event => mode === "add" ? setAdd(event.target.value) : setRemove(event.target.value)} className="h-8 min-w-0 text-xs text-center px-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"/>
     )}

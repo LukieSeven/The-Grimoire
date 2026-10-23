@@ -97,3 +97,17 @@ test("character import retains familiar nested fields and remaps effect applicat
   assert.equal((nested.subAbilities as unknown[]).length, 1);
   assert.equal(loaded.effectApplications![0].abilityId, storage.getAbilities(loaded.id)[0].id);
 });
+
+test("character import reconnects weapon, item and skill favorites to their new IDs", () => {
+  const loaded = importCharacterJSON(JSON.stringify({
+    character: { name: "Favorite import fixture", favorites: [
+      { type: "weapon", targetId: 701, label: "Blade" },
+      { type: "item", targetId: 702, label: "Potion" },
+      { type: "skill", targetId: 703, label: "Climb" },
+    ] },
+    equipment: [{ id: 701, name: "Blade" }], inventory: [{ id: 702, name: "Potion" }], skills: [{ id: 703, name: "Climb" }],
+  }));
+  assert.equal(loaded.favorites![0]!.targetId, storage.getEquipment(loaded.id)[0].id);
+  assert.equal(loaded.favorites![1]!.targetId, storage.getInventory(loaded.id)[0].id);
+  assert.equal(loaded.favorites![2]!.targetId, storage.getSkills(loaded.id)[0].id);
+});

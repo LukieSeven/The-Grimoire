@@ -10,6 +10,8 @@ import {
   validateArchiveRelationships,
 } from "./archive-schema.ts";
 import { commitStorageUpdates } from "./persistence.ts";
+import { refreshExistingCharacter, type CharacterRefreshBundle } from "./character-refresh.ts";
+import type { EntityRecord } from "./character-import.ts";
 import { spendTemporary } from "./temporary-resources.ts";
 import { selectStackedEffects } from "./effect-stacking.ts";
 import type { AbilityComponent, ManualTrackedEffect } from "./ability-components.ts";
@@ -112,7 +114,7 @@ export interface Character {
   tempHp?: number; tempMana?: number; tempDt?: number;
   abilityTiming?: Record<string, { elapsed?: string; spent?: string }>;
   abilityOptions?: AbilityOptions;
-  uiPreferences?: { autoScrollRolls?: boolean };
+  uiPreferences?: { autoScrollRolls?: boolean; layout?: import("./workspace-layout").WorkspaceLayout; layoutPresets?: import("./workspace-presets").WorkspacePreset[]; deletedLayoutPresetIds?: string[] };
   manualTrackedEffects?: ManualTrackedEffect[];
   triggerConfirmations?: Record<string, boolean>;
   trackerEncounter?: TrackerEncounter;
@@ -1960,6 +1962,29 @@ export function exportCharacterJSON(charId: number): void {
   URL.revokeObjectURL(url);
 }
 
+/** Update a known character without touching its workspace, history, or peers.
+ * The complete replacement is validated before any persistent writes occur. */
+export function refreshCharacterJSON(characterId: number, jsonString: string): Character {
+  const bundle = JSON.parse(jsonString) as CharacterRefreshBundle;
+  if (!bundle.character || typeof bundle.character.name !== "string" || !bundle.character.name.trim()) throw new Error("Invalid character data structure");
+  const collections = {
+    characters: getList<EntityRecord>(KEYS.characters),
+    equipment: getList<EntityRecord>(KEYS.equipment),
+    currencies: getList<EntityRecord>(KEYS.currencies),
+    inventory: getList<EntityRecord>(KEYS.inventory),
+    essences: getList<EntityRecord>(KEYS.essences),
+    abilities: getList<EntityRecord>(KEYS.abilities),
+    skills: getList<EntityRecord>(KEYS.skills),
+    notes: getList<EntityRecord>(KEYS.notes),
+  };
+  const next = refreshExistingCharacter(collections, characterId, bundle);
+  const updated = next.characters.find(character => character.id === characterId)!;
+  updated.updatedAt = new Date().toISOString();
+  const updates = Object.fromEntries(Object.entries(next).map(([key, value]) => [KEYS[key as keyof typeof next], JSON.stringify(value)]));
+  commitStorageUpdates(safeStorage, updates);
+  return storage.getCharacter(characterId)!;
+}
+
 export function importCharacterJSON(jsonString: string): Character {
   const data = JSON.parse(jsonString);
   if (!data.character || !data.character.name) {
@@ -2023,7 +2048,7 @@ export function importCharacterJSON(jsonString: string): Character {
     let nextId = list.length > 0 ? Math.max(...list.map(e => e.id)) + 1 : 1;
     data.equipment.forEach((item: any) => {
       const newId = nextId++;
-      if (item.id) {
+      if (item.id !== undefined && item.id !== null) {
         equipmentIdMap[item.id] = newId;
       }
       list.push({
@@ -2056,7 +2081,7 @@ export function importCharacterJSON(jsonString: string): Character {
     let nextId = list.length > 0 ? Math.max(...list.map(i => i.id)) + 1 : 1;
     data.inventory.forEach((item: any) => {
       const newId = nextId++;
-      if (item.id) {
+      if (item.id !== undefined && item.id !== null) {
         inventoryIdMap[item.id] = newId;
       }
       list.push({
@@ -2075,7 +2100,7 @@ export function importCharacterJSON(jsonString: string): Character {
     let nextId = list.length > 0 ? Math.max(...list.map(e => e.id)) + 1 : 1;
     data.essences.forEach((item: any) => {
       const newId = nextId++;
-      if (item.id) {
+      if (item.id !== undefined && item.id !== null) {
         essenceIdMap[item.id] = newId;
       }
       list.push({
@@ -2125,10 +2150,12 @@ export function importCharacterJSON(jsonString: string): Character {
     setList(KEYS.abilities, list);
   }
 
+  const skillIdMap: Record<number, number> = {};
   if (Array.isArray(data.skills)) {
     const list = getList<Skill>(KEYS.skills);
     let nextId = list.length > 0 ? Math.max(...list.map(s => s.id)) + 1 : 1;
     data.skills.forEach((item: any) => {
+      if (item.id !== undefined && item.id !== null) skillIdMap[item.id] = nextId;
       list.push({
         ...DEFAULT_SKILL,
         ...item,
@@ -2156,7 +2183,11 @@ export function importCharacterJSON(jsonString: string): Character {
   }
 
   if (Array.isArray(importedChar.favorites)) {
-    importedChar.favorites = importedChar.favorites.map(slot => slot && ["ability", "sub-ability", "ability-result"].includes(slot.type) ? { ...slot, targetId: abilityIdMap[Number(slot.targetId)] ?? slot.targetId } : slot);
+    importedChar.favorites = importedChar.favorites.map(slot => {
+      if (!slot) return slot;
+      const map = ["ability", "sub-ability", "ability-result"].includes(slot.type) ? abilityIdMap : slot.type === "weapon" ? equipmentIdMap : slot.type === "item" ? inventoryIdMap : slot.type === "skill" ? skillIdMap : undefined;
+      return map ? { ...slot, targetId: map[Number(slot.targetId)] ?? slot.targetId } : slot;
+    });
     setList(KEYS.characters, chars);
   }
   if (Array.isArray(importedChar.manualTrackedEffects)) {

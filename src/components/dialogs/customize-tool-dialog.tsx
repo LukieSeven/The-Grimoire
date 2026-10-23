@@ -1,3 +1,4 @@
+import { useWorkspace } from "../dockable-workspace";
 import { TEXTURES, applyTexture } from "../../lib/appearance";
 import { surfaceTexture } from "../../lib/surface-textures";
 import { CARD_FRAMES, cardFrame, applyCardAppearance } from "../../lib/card-appearance";
@@ -24,6 +25,7 @@ const THEMES = [
 
 export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean }) {
   const [location] = useLocation();
+  const workspace = useWorkspace();
   const [activeTheme, setActiveTheme] = useState("theme-grimoire");
   const [activeRadius, setActiveRadius] = useState("0px");
   const [activeFrame, setActiveFrame] = useState("OG Theme");
@@ -91,6 +93,7 @@ export function CustomizeToolDialog({ prominent = false }: { prominent?: boolean
           </DialogTitle>
         </DialogHeader>
         <div className="py-4 space-y-5 font-serif z-10 relative">
+          {workspace && <Button onClick={() => { setIsOpen(false); workspace.begin(); }}>Customize Layout</Button>}
           <div className="space-y-1">
             <span className="text-[10px] uppercase font-bold text-stone-500 tracking-wider">Active Book Profile</span>
             <span className="block text-xs font-mono font-bold text-primary uppercase bg-primary/5 border border-primary/10 px-2 py-1">

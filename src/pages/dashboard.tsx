@@ -9,7 +9,6 @@ import { AlertCircle, Loader2, Plus, Trash2, BookOpen, Upload, Download, Chevron
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog";
-import { HowToPlayDialog } from "@/components/dialogs/how-to-play-dialog";
 import { PortraitDialog } from "@/components/dialogs/portrait-dialog";
 import { exportGrimoireBackup, importGrimoireBackup, getAdjustedStats, storage } from "@/lib/storage";
 import { useQueryClient } from "@tanstack/react-query";
@@ -295,7 +294,6 @@ export default function Dashboard() {
       {/* Utility Control Panel Bar */}
       <div className="home-toolbar home-surface p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3 rounded-xl">
         <div className="home-utilities flex items-center gap-3 flex-wrap">
-          <HowToPlayDialog />
           <CustomizeToolDialog prominent />
           <div className="h-4 w-px bg-border/30 hidden md:block" />
 
@@ -747,7 +745,7 @@ export default function Dashboard() {
 
       <footer className="border-t border-border/20 pt-6 pb-2 text-center">
         <p className="text-[10px] sm:text-xs font-mono text-muted-foreground/50 tracking-widest">
-          Lovingly crafted by LukieSeven · V1.1
+          Lovingly crafted by LukieSeven · V1.2
         </p>
       </footer>
     </div>

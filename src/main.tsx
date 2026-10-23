@@ -21,4 +21,11 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 });
 
-createRoot(document.getElementById("root")!).render(<App />);
+async function start() {
+  if (import.meta.env.DEV) {
+    try { await (await import("./lib/local-preview")).refreshLocalPreview(); }
+    catch (error) { console.error("Local preview refresh did not complete; saved data was retained.", error); }
+  }
+  createRoot(document.getElementById("root")!).render(<App />);
+}
+void start();

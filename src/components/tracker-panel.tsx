@@ -1,3 +1,4 @@
+import { DockableTool } from "./dockable-workspace";
 import { useListSkills } from "../hooks/useStorage";
 import { EffectChip } from "./effect-chip";
 import { effectDetails, outcomeLabel, saveReference } from "../lib/effect-details";
@@ -176,7 +177,7 @@ export function TrackerPanel(props: Props) {
   return <section aria-label="Character trackers" className="grimoire-card rounded-xl border border-border bg-card p-3 flex flex-col gap-3 min-w-0 min-h-0 h-[var(--workspace-panel-height)] max-h-[var(--workspace-panel-height)] overflow-hidden">
     <div role="tablist" aria-label="Tracker views" className="workspace-tabs flex gap-1 bg-background/50 rounded-none p-1 border border-border/30">{(["combat", "passive", "triggers"] as const).map((view, index, views) => <button type="button" key={view} role="tab" tabIndex={tab === view ? 0 : -1} id={`tracker-${view}`} aria-selected={tab === view} aria-controls={`tracker-panel-${view}`} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider ${tab === view ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} onClick={() => setTab(view)} onKeyDown={event => { const next = event.key === "ArrowRight" ? views[(index + 1) % views.length] : event.key === "ArrowLeft" ? views[(index + views.length - 1) % views.length] : event.key === "Home" ? views[0] : event.key === "End" ? views[views.length - 1] : null; if (next) { event.preventDefault(); setTab(next); document.getElementById(`tracker-${next}`)?.focus(); } }}>{view === "triggers" ? "Triggers" : view === "passive" ? "Passive" : "Combat"}</button>)}</div>
     <div role="tabpanel" id={`tracker-panel-${tab}`} aria-labelledby={`tracker-${tab}`} className={`min-h-0 flex-1 ${tab === "combat" ? "workspace-scroll overflow-y-auto space-y-3" : "flex flex-col gap-3 overflow-hidden"}`}>
-      {tab === "combat" && <>
+      <DockableTool id="combat"><div className="tracker-combat space-y-3">
         <form className="grid grid-cols-[minmax(0,1fr)_4.5rem_auto] gap-2 items-end" onSubmit={event => { event.preventDefault(); if (!name.trim() || !initiative.trim() || !Number.isFinite(Number(initiative))) return; const combatant = { name: name.trim(), initiative: Number(initiative), statuses: [] }; updateCombatants([...props.combatants, { id: crypto.randomUUID(), ...combatant }]); props.onRememberCombatant(combatant); setName(""); setInitiative(""); }}>
           <label className="min-w-0"><span className="sr-only">Combatant</span><input aria-label="Combatant" placeholder="Combatant" className={`${field} !mt-0 h-8 normal-case text-foreground`} value={name} onChange={event => setName(event.target.value)} required/></label><label className="min-w-0"><span className="sr-only">Initiative</span><input aria-label="Initiative" placeholder="Initiative" type="number" className={`${field} !mt-0 h-8 text-center text-foreground`} value={initiative} onChange={event => setInitiative(event.target.value)} required/></label><Button size="sm" type="submit" className="h-8 px-2">Add</Button>
         </form>
@@ -196,10 +197,13 @@ export function TrackerPanel(props: Props) {
           </div>
           </div>
         </details>)}
-      </>}
-      {tab === "passive" && <>
-        <div aria-label="Character and active auras" className="shrink-0 border border-border/40 bg-background/30 p-2">
-          <div className="relative h-[10.5rem] grid place-items-center">
+    <footer className="shrink-0 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
+      <div className="flex gap-2"><Button size="sm" disabled={!props.combatants.length} onClick={() => { rememberCombatChange(); const next = (props.turn + 1) % props.combatants.length; props.onLifetimeEvent("turn", props.combatants[next]); props.onTurnChange(next); }}>Next Turn</Button><Button size="sm" variant="outline" disabled={undoHistory.at(-1)?.characterId !== props.character.id} onClick={undoCombatChange}>Undo</Button></div>
+      <Button size="sm" variant="destructive" disabled={!props.combatants.length} onClick={() => setConfirmClear(true)}>Clear Encounter</Button>
+    </footer>      </div></DockableTool>
+      <DockableTool id="passive"><div className="tracker-passive">
+        <div aria-label="Character and active auras" className="passive-origin shrink-0 border border-border/40 bg-background/30 p-2">
+          <div className="passive-diagram relative h-[10.5rem] grid place-items-center">
             <svg viewBox="0 0 260 260" className="absolute h-full aspect-square max-w-full" aria-label="Active aura ranges">{rings.map((ring, index) => {
               const bandWidth = 70 / rings.length;
               const label = [...new Set(selfEffects.filter(entry => entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === ring).map(entry => entry.effect.name).concat(selfManual.filter(effect => effect.radius !== undefined && ringKey(effect.radius, effect.radiusUnit) === ring).map(effect => effect.name)))].join(", ");
@@ -213,15 +217,15 @@ export function TrackerPanel(props: Props) {
           </div>
           <div className="flex flex-wrap justify-center gap-1">{rings.map(ring => <button type="button" key={ring} aria-pressed={selectedRadius === ring} className={`border px-2 py-1 text-xs ${selectedRadius === ring ? "border-primary text-primary" : "border-border"}`} onClick={() => setRadius(ring)}>{ring.replace("|", " ")}</button>)}</div>
         </div>
-        <div tabIndex={0} role="region" aria-label="Active effect details" className="workspace-scroll space-y-3 flex-1 min-h-0 overflow-y-auto border border-border/50 bg-background/30 p-3">
+        <div tabIndex={0} role="region" aria-label="Active effect details" data-tracker-scroll="passive" className="workspace-scroll space-y-3 flex-1 min-h-0 border border-border/50 bg-background/30 p-3">
           {selfEffects.filter(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined).map(entry => renderEffect(entry, "self", false))}
           {!selectedRadius && props.abilities.filter(ability => !ability.definition && !ability.components && ability.active).map(ability => <article key={ability.id} className="border border-border/40 p-3 text-sm space-y-2"><button type="button" className="text-primary underline" onClick={() => props.onInspect(ability.id)}>{ability.name}</button>{calculateAbilityEvolutions(ability, props.character.rank, props.stats).activeModifiers.filter(modifier => modifier.assignedToMechanicsTracker).map(modifier => <p key={modifier.id}>{modifier.name}: {modifier.effect}</p>)}</article>)}
           {!selfEffects.some(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined) && !selfManual.some(effect => selectedRadius ? effect.radius !== undefined && ringKey(effect.radius, effect.radiusUnit) === selectedRadius : effect.radius === undefined) && !(!selectedRadius && props.abilities.some(ability => !ability.definition && !ability.components && ability.active)) && <p className="text-xs text-muted-foreground">No active effects in this view.</p>}
         </div>
-      </>}
-      {tab === "triggers" && <>
+      </div></DockableTool>
+      <DockableTool id="triggers"><div className="tracker-triggers">
         <label className="text-xs">Trigger<select className={field} value={selectedTrigger} onChange={event => setSituation(event.target.value)}><option value="">{triggerGroups.length ? "All tagged triggers" : "No tagged triggers"}</option>{triggerGroups.map(group => <option key={group.name}>{group.name}</option>)}</select></label>
-        <div role="region" aria-label="Trigger references" tabIndex={0} className="workspace-scroll flex-1 min-h-0 overflow-y-auto border border-border/40 p-3 space-y-3">
+        <div role="region" aria-label="Trigger references" tabIndex={0} data-tracker-scroll="triggers" className="workspace-scroll flex-1 min-h-0 border border-border/40 p-3 space-y-3">
           {visibleTriggerGroups.map(group => <section key={group.name} aria-label={group.name} className="space-y-3">
             {!selectedTrigger && <div className="border-b border-primary/40 pb-2">
               <h4 className="text-sm text-primary font-semibold">{group.name}</h4>
@@ -232,12 +236,9 @@ export function TrackerPanel(props: Props) {
           </section>)}
           {!triggerGroups.length && <p className="text-xs text-muted-foreground">No abilities have tagged triggers.</p>}
         </div>
-      </>}
+      </div></DockableTool>
     </div>
-    {tab === "combat" && <footer className="shrink-0 flex items-center justify-between gap-2 border-t border-border/40 pt-3">
-      <div className="flex gap-2"><Button size="sm" disabled={!props.combatants.length} onClick={() => { rememberCombatChange(); const next = (props.turn + 1) % props.combatants.length; props.onLifetimeEvent("turn", props.combatants[next]); props.onTurnChange(next); }}>Next Turn</Button><Button size="sm" variant="outline" disabled={undoHistory.at(-1)?.characterId !== props.character.id} onClick={undoCombatChange}>Undo</Button></div>
-      <Button size="sm" variant="destructive" disabled={!props.combatants.length} onClick={() => setConfirmClear(true)}>Clear Encounter</Button>
-    </footer>}
+
     <Dialog open={effectSettings !== null} onOpenChange={open => { if (!open) setEffectSettings(null); }}><DialogContent className="sm:max-w-[70rem] max-h-[90dvh] overflow-y-auto"><DialogHeader><DialogTitle>Settings · Custom Effects</DialogTitle></DialogHeader>{effectSettings && <AbilityOptionsFields skillNames={skills.map(skill => skill.name)} initialCategory="effects" options={effectSettings} onChange={setEffectSettings} onSave={options => props.onOptionsChange(options, () => setEffectSettings(null))}/>}<div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEffectSettings(null)}>Cancel</Button></div></DialogContent></Dialog>
     <AlertDialog open={confirmClear} onOpenChange={setConfirmClear}>
       <AlertDialogContent>

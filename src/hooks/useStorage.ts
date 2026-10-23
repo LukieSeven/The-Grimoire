@@ -1,11 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatRollBreakdown } from "../lib/roll-display";
+import { resolveDiceExpression } from "../lib/dice-expression";
+import { formulaActorRank, requireStatValue, resolveStatExpression } from "../lib/stat-expression";
 import { getFamiliarAdjusted } from "../lib/familiar-values";
 import { activeEffectModifier } from "../lib/active-effect-modifiers";
 import type { RollPurpose } from "../lib/active-effect-modifiers";
 import {
   storage,
   Character,
+  Familiar,
   Equipment,
   Currency,
   InventoryItem,
@@ -553,15 +556,14 @@ export function useCreateRoll() {
       const char = storage.getCharacter(charId);
       if (!char) throw new Error("Character not found");
 
-      let rollingEntity: any = char;
+      let rollingEntity: Character | Familiar = char;
       let finalStats: Record<string, number> = {};
 
       if (familiarId !== undefined) {
         const fam = char.familiars?.find(f => f.id === familiarId);
-        if (fam) {
-          rollingEntity = fam;
-          finalStats = getFamiliarAdjusted(fam).stats;
-        }
+        if (!fam) throw new Error("The familiar is no longer available. Record it before rolling its stats.");
+        rollingEntity = fam;
+        finalStats = getFamiliarAdjusted(fam).stats;
       } else {
         const equipment = storage.getEquipment(charId);
         const abilities = storage.getAbilities(charId);
@@ -594,6 +596,7 @@ export function useCreateRoll() {
       }
 
       const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
+        requireStatValue(statVal, "selected");
         const diceSides = getStatDiceSides(statVal);
         let sum = 0;
         const rollDetails: string[] = [];
@@ -642,10 +645,7 @@ export function useCreateRoll() {
       let isCrit = false;
       let diceTypeStr = diceType;
 
-      const hasStatPrefix = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"].some(p => diceType.toLowerCase().includes(p));
-      const hasOperators = /[+\-*/]/.test(diceType);
-
-      if (statValue === undefined && (hasStatPrefix || hasOperators)) {
+      if (statValue === undefined) {
         // Advanced Math/Stat-Based formula parser
         let expression = diceType.replace(/\s+/g, "").toLowerCase();
         let breakdown = diceType;
@@ -653,108 +653,43 @@ export function useCreateRoll() {
         // 1. If formula contains '=', strip any description on the left-hand side
         if (expression.includes("=")) {
           expression = expression.split("=").pop() || expression;
+          breakdown = breakdown.split("=").pop() || breakdown;
         }
 
         // 2. Replace multiplication symbols '×' and 'x' with standard asterisk '*'
         expression = expression.replace(/×/g, "*").replace(/x/g, "*");
 
-        const statsKeys = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];
-        const statPrefixes = ["pow", "vit", "spi", "agi", "end", "pre", "wil", "cha"];
+        // A/B. Resolve complete base/rolled stat aliases using this actor's data.
+        const statExpression = resolveStatExpression(expression, breakdown, finalStats, statVal => {
+          const statMod = data.data.criticalContinuation ? 0 : getModifierForStat(statVal, formulaActorRank(rollingEntity));
+          const rolled = rollStatDice(statVal);
+          return {
+            total: rolled.total + statMod,
+            breakdown: statMod !== 0 ? `${rolled.desc}+${statMod}` : rolled.desc,
+            isCrit: rolled.isCrit,
+          };
+        });
+        expression = statExpression.expression;
+        breakdown = statExpression.breakdown;
+        if (statExpression.isCrit) isCrit = true;
 
-        // A. Resolve rolled stats (e.g., wilr, willpowerr)
-        for (let i = 0; i < statPrefixes.length; i++) {
-          const prefix = statPrefixes[i];
-          const statKey = statsKeys[i];
-          
-          const rolledFullPattern = `${statKey}r`;
-          const rolledPrefixPattern = `${prefix}r`;
-          
-          const regexFull = new RegExp(rolledFullPattern, "g");
-          const regexPrefix = new RegExp(rolledPrefixPattern, "g");
-          
-          if (regexFull.test(expression) || regexPrefix.test(expression)) {
-            const statVal = (finalStats[statKey] !== undefined ? finalStats[statKey] : 10) as number;
-            const statMod = data.data.criticalContinuation ? 0 : getModifierForStat(statVal, rollingEntity?.rank || "Iron");
-            const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statVal);
-            if (crit) isCrit = true;
-            
-            const totalRolled = rolledSum + statMod;
-            expression = expression.split(rolledFullPattern).join(String(totalRolled));
-            expression = expression.split(rolledPrefixPattern).join(String(totalRolled));
-            
-            const breakdownText = statMod !== 0 
-              ? `${desc}+${statMod}`
-              : `${desc}`;
-            const regexFullInsensitive = new RegExp(rolledFullPattern, "gi");
-            const regexPrefixInsensitive = new RegExp(rolledPrefixPattern, "gi");
-            breakdown = breakdown.replace(regexFullInsensitive, breakdownText);
-            breakdown = breakdown.replace(regexPrefixInsensitive, breakdownText);
-          }
-        }
-
-        // B. Resolve base stats (e.g., wil, willpower)
-        for (let i = 0; i < statPrefixes.length; i++) {
-          const prefix = statPrefixes[i];
-          const statKey = statsKeys[i];
-          
-          const regexFull = new RegExp(statKey, "g");
-          const regexPrefix = new RegExp(prefix, "g");
-          
-          if (regexFull.test(expression) || regexPrefix.test(expression)) {
-            const statVal = (finalStats[statKey] !== undefined ? finalStats[statKey] : 10) as number;
-            
-            expression = expression.split(statKey).join(String(statVal));
-            expression = expression.split(prefix).join(String(statVal));
-            
-            const regexFullInsensitive = new RegExp(statKey, "gi");
-            const regexPrefixInsensitive = new RegExp(prefix, "gi");
-            breakdown = breakdown.replace(regexFullInsensitive, String(statVal));
-            breakdown = breakdown.replace(regexPrefixInsensitive, String(statVal));
-          }
-        }
-
-        // C. Resolve standard dice
-        const diceRegex = /d(\d+)/gi;
-        let match;
-        while ((match = diceRegex.exec(expression)) !== null) {
-          const sides = parseInt(match[1], 10);
-          const r = rollOnce(sides);
-          if (r.isCrit) isCrit = true;
-          
-          const matchStr = match[0];
-          expression = expression.replace(new RegExp(matchStr, "i"), String(r.result));
-          breakdown = breakdown.replace(new RegExp(matchStr, "i"), String(r.result));
-        }
-
-        // D. Evaluate expression
-        let evaluated = 0;
-        if (/^[0-9+\-*/().]+$/.test(expression)) {
-          try {
-            evaluated = new Function(`return (${expression})`)();
-          } catch {
-            evaluated = 0;
-          }
-        }
-        result = Math.floor(evaluated);
+        // C. Resolve every complete dice term, including its count, and evaluate.
+        const resolved = resolveDiceExpression(expression, breakdown, rollOnce);
+        if (resolved.isCrit) isCrit = true;
+        result = resolved.result;
         total = result + modifier;
-        diceTypeStr = breakdown;
-      } else if (statValue !== undefined) {
+        diceTypeStr = resolved.breakdown;
+      } else {
         const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statValue);
         result = rolledSum;
         total = rolledSum + modifier;
         isCrit = crit;
         diceTypeStr = desc;
-      } else {
-        const sides = parseInt(diceTypeStr.replace("d", ""), 10) || 20;
-        const r = rollOnce(sides);
-        result = r.result;
-        isCrit = r.isCrit;
-        total = result + modifier;
-        diceTypeStr = String(r.result);
       }
 
       const roll = storage.addRoll({
         characterId: charId,
+        ...(familiarId !== undefined ? { familiarId } : {}),
         diceType: formatRollBreakdown(diceTypeStr),
         result,
         modifier,

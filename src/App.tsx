@@ -1,6 +1,7 @@
 import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as ActionToaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -90,6 +91,7 @@ function App() {
             <Router />
           </WouterRouter>
           <Toaster />
+          <ActionToaster />
         </TooltipProvider>
       </QueryClientProvider>
     </ErrorBoundary>

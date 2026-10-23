@@ -1,3 +1,12 @@
+import { CompactResources } from "@/components/compact-resources";
+import { resourceDisplay } from "@/lib/resource-display";
+import { HistoryList } from "@/components/history-list";
+import { DieButton } from "@/components/die-button";
+import { DiceToolLayout } from "@/components/dice-tool-layout";
+import { customRollTitle } from "@/lib/custom-roll-title";
+import { getChainDie } from "@/lib/critical-continuation";
+import { FavoritesGrid } from "@/components/favorites-grid";
+import { WorkspaceProvider, WorkspaceCanvas, DockableTool, revealWorkspaceTool } from "@/components/dockable-workspace";
 import React, { useState, useEffect, useRef } from "react";
 import { upsertCharacterInitiative } from "@/lib/initiative-entry";
 import { CurrencyAdjustments } from "@/components/currency-adjustments";
@@ -9,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import {
@@ -34,7 +44,7 @@ import {
 } from "@/hooks/useStorage";
 import { 
   getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
-  Ability, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
+  Ability, Character, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
   getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum,
   getAbilityActiveModifierBadges, ActiveModifierBadge, isAbilityTriggerActive
 } from "@/lib/storage";
@@ -64,14 +74,14 @@ import { AbilityComponentList } from "@/components/ability-component-list";
 import { EditItemAbilityDialog } from "@/components/dialogs/edit-item-ability-dialog";
 
 const STATS = [
-  { key: "power",     label: "POW", desc: "Physical strength & raw force" },
-  { key: "vitality",  label: "VIT", desc: "Durability & stamina" },
-  { key: "agility",   label: "AGI", desc: "Speed & reflexes" },
-  { key: "endurance", label: "END", desc: "Resistance to pain & fatigue" },
-  { key: "spirit",    label: "SPI", desc: "Magical energy & mana" },
-  { key: "precision", label: "PRE", desc: "Accuracy & critical hits" },
-  { key: "willpower", label: "WIL", desc: "Mental toughness & focus" },
-  { key: "charisma",  label: "CHA", desc: "Presence & social ability" },
+  { key: "power",     label: "POW" },
+  { key: "vitality",  label: "VIT" },
+  { key: "agility",   label: "AGI" },
+  { key: "endurance", label: "END" },
+  { key: "spirit",    label: "SPI" },
+  { key: "precision", label: "PRE" },
+  { key: "willpower", label: "WIL" },
+  { key: "charisma",  label: "CHA" },
 ];
 
 const CRIT_TIERS = [
@@ -91,7 +101,7 @@ function parseMarkdown(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-  
+
   html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
   html = html.replace(/^### (.*?)$/gm, '<h4 class="font-serif text-sm font-bold text-primary mt-2 mb-0.5">$1</h4>');
@@ -104,7 +114,7 @@ function ResourceBar({ current, max, color }: { current: number; max: number; co
   const percent = max > 0 ? Math.max(0, Math.min(100, (current / max) * 100)) : 0;
   const isOverMax = current > max;
   return (
-    <div className={`w-full bg-accent/50 h-2 rounded-none overflow-hidden relative ${isOverMax ? "ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.2)]" : ""}`}>
+    <div className={`resource-meter w-full bg-accent/50 h-2 rounded-none overflow-hidden relative ${isOverMax ? "ring-1 ring-amber-400/50 shadow-[0_0_8px_rgba(245,158,11,0.2)]" : ""}`}>
       <div
         className={`h-full rounded-none transition-all duration-300 ${isOverMax ? "animate-pulse" : ""}`}
         style={{ width: `${percent}%`, background: color }}
@@ -132,22 +142,6 @@ const getFavorites = (char: any, eq: any[], ab: any[]): (FavoriteSlot | null)[] 
     if (idx < 20) slots[idx++] = { type: "ability", targetId: a.id, label: a.name };
   });
   return slots;
-};
-
-// Crit Chain Die Resolution Helper
-const getChainDie = (formula: string): string => {
-  const parts = formula.split(/[+\-*/()]/).map(p => p.trim()).filter(Boolean);
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i];
-    const dieMatch = part.match(/d\d+/i);
-    if (dieMatch) {
-      return dieMatch[0].toLowerCase();
-    }
-    if (/^[a-z]+$/i.test(part)) {
-      return part;
-    }
-  }
-  return "d8";
 };
 
 interface Combatant {
@@ -249,7 +243,7 @@ export default function CharacterSheet() {
   const deleteChar = useDeleteCharacter();
   const createRoll = useCreateRoll();
   const applyDamageMut = useApplyDamage();
-  
+
   // Equipment mutators for toggling equipped/quick status
   const updateEq = useUpdateEquipment();
   const deleteEq = useDeleteEquipment();
@@ -276,6 +270,13 @@ export default function CharacterSheet() {
   // Collapsible skill category state
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [expandedEssences, setExpandedEssences] = useState<Record<number, boolean>>({});
+  const [wideRows, setWideRows] = useState(() => window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setWideRows(query.matches);
+    update(); query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   const hasAllFourEssences = [1, 2, 3, 4].every(s => essences.some(e => e.slot === s));
 
@@ -499,7 +500,6 @@ export default function CharacterSheet() {
   // ── New Features State ──
   const [favoriteRollPicker, setFavoriteRollPicker] = useState<{ abilityId: number; inputId: string } | null>(null);
   const [familiarRollPicker, setFamiliarRollPicker] = useState<{ familiarId: string | number; abilityId: number; inputId: string } | null>(null);
-  const [recentRollActions, setRecentRollActions] = useState<{ diceType: string; label: string; modifier: number; familiarId?: string | number }[]>([]);
   const [discardItem, setDiscardItem] = useState<any | null>(null);
   const [discardCount, setDiscardCount] = useState<number>(1);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
@@ -534,14 +534,9 @@ export default function CharacterSheet() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
   // ── Roll state ────────────────────────────────────────────
-  const [rollTab, setRollTab] = useState<"stats" | "dice" | "history">("stats");
-  const [rollMod, setRollMod] = useState("0");
-  const [rollLabel, setRollLabel] = useState("");
-  const [rollPurpose, setRollPurpose] = useState<"" | "attack" | "check" | "resistance">("");
-  const [rollScope, setRollScope] = useState("");
   const [rollingDice, setRollingDice] = useState<string | null>(null);
   const [customFormula, setCustomFormula] = useState("");
-  
+
   const [critChain, setCritChain] = useState<{
     chainCount: number;
     chainDie: string;
@@ -588,7 +583,9 @@ export default function CharacterSheet() {
     previousRollEvent.current = { rollingDice, lastRoll, critChain };
     if (previous.rollingDice === rollingDice && previous.lastRoll === lastRoll && previous.critChain === critChain) return;
     if (!autoScrollRolls || (!rollingDice && !lastRoll && !critChain)) return;
-    const frame = requestAnimationFrame(() => document.getElementById("dice-roll-result")?.scrollIntoView({
+    const visibleReadout = () => Array.from(document.querySelectorAll<HTMLElement>("[data-dice-readout]")).find(node => node.getClientRects().length > 0);
+    if (!visibleReadout()) revealWorkspaceTool("stats");
+    const frame = requestAnimationFrame(() => visibleReadout()?.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center",
     }));
     return () => cancelAnimationFrame(frame);
@@ -614,9 +611,6 @@ export default function CharacterSheet() {
     hpBuffBonus,
     manaBuffBonus,
     dtBuffBonus,
-    abilityHpBonus, 
-    abilityManaBonus, 
-    abilityDtBonus 
   } = adjustedStats;
 
   // ── Derived max values for familiar ───────────────────────
@@ -725,31 +719,37 @@ export default function CharacterSheet() {
 
   // famMax is calculated dynamically per-familiar
 
+  // Storage consumes temporary pools before base resources. Always display the
+  // returned base values, including when spending changes only a temporary pool.
+  const syncResourceState = (updated: Pick<Character, "currentHp" | "currentMana" | "currentDt">) => {
+    setHp(updated.currentHp);
+    setMana(updated.currentMana);
+    setCurrentDt(updated.currentDt);
+  };
+
   // ── HP Adjustments ────────────────────────────────────────
-  const handleHpAdd = () => {
-    const amount = parseInt(hpAdd) || 1;
+  const handleHpAdd = (override?: string) => {
+    const amount = parseInt(override ?? hpAdd) || 1;
     const cur = hp ?? character.currentHp;
-    const limit = maxHp + abilityHpBonus;
+    const limit = maxHp;
     const next = Math.min(limit, cur + amount);
-    setHp(next);
     setHpAdd("");
-    updateChar.mutate({ id, data: { currentHp: next } });
+    updateChar.mutate({ id, data: { currentHp: next } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - cur, label: "Healed HP" } });
   };
 
-  const handleHpRemove = () => {
-    const amount = parseInt(hpRemove) || 1;
+  const handleHpRemove = (override?: string) => {
+    const amount = parseInt(override ?? hpRemove) || 1;
     const cur = hp ?? character.currentHp;
     const next = Math.max(0, cur - amount);
     const diff = next - cur !== 0 ? next - cur : -amount;
-    setHp(next);
     setHpRemove("");
-    updateChar.mutate({ id, data: { currentHp: cur - amount } });
+    updateChar.mutate({ id, data: { currentHp: cur - amount } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: diff, label: "Direct DMG" } });
   };
 
-  const handleHpBuff = () => {
-    const amount = Number(hpBuff);
+  const handleHpBuff = (override?: string) => {
+    const amount = Number(override ?? hpBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     setHpBuff("");
     updateChar.mutate({ id, data: { tempHp: (character.tempHp ?? 0) + amount } });
@@ -759,8 +759,7 @@ export default function CharacterSheet() {
   const handleFullRestoreHp = () => {
     const cur = hp ?? character.currentHp;
     const limit = maxHp;
-    setHp(limit);
-    updateChar.mutate({ id, data: { currentHp: limit } });
+    updateChar.mutate({ id, data: { currentHp: limit } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: limit - cur, label: "Full Restore HP" } });
   };
 
@@ -784,30 +783,27 @@ export default function CharacterSheet() {
     });
   };
 
-  const handleDtRemoveDirect = () => {
-    const amount = parseInt(dtRemove) || 1;
+  const handleDtRemoveDirect = (override?: string) => {
+    const amount = parseInt(override ?? dtRemove) || 1;
     const cur = currentDt ?? character.currentDt;
-    const next = Math.max(0, cur - amount);
-    setCurrentDt(next);
     setDtRemove("");
-    updateChar.mutate({ id, data: { currentDt: cur - amount } });
+    updateChar.mutate({ id, data: { currentDt: cur - amount } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: "Manual DT Reduction" } });
     toast.success(`Deducted ${amount} from DT directly.`);
   };
 
-  const handleDtAdd = () => {
-    const amount = parseInt(dtAdd) || 1;
+  const handleDtAdd = (override?: string) => {
+    const amount = parseInt(override ?? dtAdd) || 1;
     const cur = currentDt ?? character.currentDt;
-    const limit = maxDt + abilityDtBonus;
+    const limit = maxDt;
     const next = Math.min(limit, cur + amount);
-    setCurrentDt(next);
     setDtAdd("");
-    updateChar.mutate({ id, data: { currentDt: next } });
+    updateChar.mutate({ id, data: { currentDt: next } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: next - cur, label: "Added DT" } });
   };
 
-  const handleDtBuff = () => {
-    const amount = Number(dtBuff);
+  const handleDtBuff = (override?: string) => {
+    const amount = Number(override ?? dtBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     setDtBuff("");
     updateChar.mutate({ id, data: { tempDt: (character.tempDt ?? 0) + amount } });
@@ -816,40 +812,37 @@ export default function CharacterSheet() {
 
   const handleRestoreDt = () => {
     const cur = currentDt ?? character.currentDt;
-    const limit = maxDt + abilityDtBonus;
-    setCurrentDt(limit);
+    const limit = maxDt;
     setDtFlash("restore");
     setDamageResult(null);
     setTimeout(() => setDtFlash(null), 600);
-    updateChar.mutate({ id, data: { currentDt: limit } });
+    updateChar.mutate({ id, data: { currentDt: limit } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: limit - cur, label: "Restore DT" } });
   };
 
   // ── Mana Adjustments ──────────────────────────────────────
-  const handleManaAdd = () => {
-    const amount = parseInt(manaAdd) || 1;
+  const handleManaAdd = (override?: string) => {
+    const amount = parseInt(override ?? manaAdd) || 1;
     const cur = mana ?? character.currentMana;
-    const limit = maxMana + abilityManaBonus;
+    const limit = maxMana;
     const next = Math.min(limit, cur + amount);
-    setMana(next);
     setManaAdd("");
-    updateChar.mutate({ id, data: { currentMana: next } });
+    updateChar.mutate({ id, data: { currentMana: next } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - cur, label: "Restored Mana" } });
   };
 
-  const handleManaRemove = () => {
-    const amount = parseInt(manaRemove) || 1;
+  const handleManaRemove = (override?: string) => {
+    const amount = parseInt(override ?? manaRemove) || 1;
     const cur = mana ?? character.currentMana;
     const next = Math.max(0, cur - amount);
     const diff = next - cur !== 0 ? next - cur : -amount;
-    setMana(next);
     setManaRemove("");
-    updateChar.mutate({ id, data: { currentMana: cur - amount } });
+    updateChar.mutate({ id, data: { currentMana: cur - amount } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: diff, label: "Spent Mana" } });
   };
 
-  const handleManaBuff = () => {
-    const amount = Number(manaBuff);
+  const handleManaBuff = (override?: string) => {
+    const amount = Number(override ?? manaBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     setManaBuff("");
     updateChar.mutate({ id, data: { tempMana: (character.tempMana ?? 0) + amount } });
@@ -859,8 +852,7 @@ export default function CharacterSheet() {
   const handleFullRestoreMana = () => {
     const cur = mana ?? character.currentMana;
     const limit = maxMana;
-    setMana(limit);
-    updateChar.mutate({ id, data: { currentMana: limit } });
+    updateChar.mutate({ id, data: { currentMana: limit } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: limit - cur, label: "Full Restore Mana" } });
   };
 
@@ -923,8 +915,8 @@ export default function CharacterSheet() {
   };
 
   // ── Familiar HP Adjustments ───────────────────────────────
-  const handleFamHpAdd = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.hpAdd || "";
+  const handleFamHpAdd = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.hpAdd ?? "";
     const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxHp, fam.currentHp + amount);
@@ -933,17 +925,18 @@ export default function CharacterSheet() {
     createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} Heal`, familiarId: fam.id } });
   };
 
-  const handleFamHpRemove = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.hpRemove || "";
+  const handleFamHpRemove = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.hpRemove ?? "";
     const amount = parseInt(inputVal) || 1;
-    const next = Math.max(0, fam.currentHp - amount);
+    const spent = spendTemporary(fam, { currentHp: fam.currentHp - amount });
+    const change = (spent.currentHp ?? fam.currentHp) - fam.currentHp + (spent.tempHp ?? fam.tempHp ?? 0) - (fam.tempHp ?? 0);
     updateFamiliarData(fam.id, { ...fam, currentHp: fam.currentHp - amount });
     updateFamInput(fam.id, "hpRemove", "");
-    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: next - fam.currentHp, label: `Fam: ${fam.name} DMG`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "hp-log", modifier: change, label: `Fam: ${fam.name} DMG`, familiarId: fam.id } });
   };
 
-  const handleFamHpBuff = (fam: Familiar) => {
-    const amount = Number(famInputs[fam.id]?.hpBuff);
+  const handleFamHpBuff = (fam: Familiar, value?: string) => {
+    const amount = Number(value ?? famInputs[fam.id]?.hpBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     updateFamiliarData(fam.id, { ...fam, tempHp: (fam.tempHp ?? 0) + amount });
     updateFamInput(fam.id, "hpBuff", "");
@@ -982,7 +975,7 @@ export default function CharacterSheet() {
       ...prev,
       [fam.id]: { hpLost, absorbed }
     }));
-    
+
     setFamDtFlashes(prev => ({
       ...prev,
       [fam.id]: "hit" as const
@@ -990,25 +983,26 @@ export default function CharacterSheet() {
 
     updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
     updateFamInput(fam.id, "damageAmount", "");
-    
+
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: dtVal - fam.currentDt, label: `Fam: ${fam.name} Took DMG`, familiarId: fam.id } });
     if (hpLost > 0) {
       createRoll.mutate({ id, data: { diceType: "hp-log", modifier: -hpLost, label: `Fam: ${fam.name} Took HP DMG`, familiarId: fam.id } });
     }
   };
 
-  const handleFamDtRemoveDirect = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.dtRemove || "";
+  const handleFamDtRemoveDirect = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.dtRemove ?? "";
     const amount = parseInt(inputVal) || 1;
-    const next = Math.max(0, fam.currentDt - amount);
+    const spent = spendTemporary(fam, { currentDt: fam.currentDt - amount });
+    const change = (spent.currentDt ?? fam.currentDt) - fam.currentDt + (spent.tempDt ?? fam.tempDt ?? 0) - (fam.tempDt ?? 0);
     updateFamiliarData(fam.id, { ...fam, currentDt: fam.currentDt - amount });
     updateFamInput(fam.id, "dtRemove", "");
-    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: -amount, label: `Fam: ${fam.name} Manual DT Deduct`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "dt-log", modifier: change, label: `Fam: ${fam.name} Manual DT Deduct`, familiarId: fam.id } });
     toast.success(`Deducted ${amount} from ${fam.name}'s DT directly.`);
   };
 
-  const handleFamDtAdd = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.dtAdd || "";
+  const handleFamDtAdd = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.dtAdd ?? "";
     const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxDt, fam.currentDt + amount);
@@ -1041,7 +1035,7 @@ export default function CharacterSheet() {
       ...prev,
       [fam.id]: { hpLost, absorbed }
     }));
-    
+
     setFamDtFlashes(prev => ({
       ...prev,
       [fam.id]: "hit" as const
@@ -1049,7 +1043,7 @@ export default function CharacterSheet() {
 
     updateFamiliarData(fam.id, { ...fam, currentHp: hpVal, currentDt: dtVal });
     updateFamInput(fam.id, "dtRemove", "");
-    
+
     createRoll.mutate({ id, data: { diceType: "dt-log", modifier: dtVal - fam.currentDt, label: `Fam: ${fam.name} Took DMG`, familiarId: fam.id } });
     if (hpLost > 0) {
       createRoll.mutate({ id, data: { diceType: "hp-log", modifier: -hpLost, label: `Fam: ${fam.name} Took HP DMG`, familiarId: fam.id } });
@@ -1063,8 +1057,8 @@ export default function CharacterSheet() {
     }, 600);
   };
 
-  const handleFamDtBuff = (fam: Familiar) => {
-    const amount = Number(famInputs[fam.id]?.dtBuff);
+  const handleFamDtBuff = (fam: Familiar, value?: string) => {
+    const amount = Number(value ?? famInputs[fam.id]?.dtBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     updateFamiliarData(fam.id, { ...fam, tempDt: (fam.tempDt ?? 0) + amount });
     updateFamInput(fam.id, "dtBuff", "");
@@ -1094,8 +1088,8 @@ export default function CharacterSheet() {
   };
 
   // ── Familiar Mana Adjustments ─────────────────────────────
-  const handleFamManaAdd = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.manaAdd || "";
+  const handleFamManaAdd = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.manaAdd ?? "";
     const amount = parseInt(inputVal) || 1;
     const fMax = getFamiliarMaxValues(fam);
     const next = Math.min(fMax.maxMana, fam.currentMana + amount);
@@ -1104,17 +1098,18 @@ export default function CharacterSheet() {
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Mana Add`, familiarId: fam.id } });
   };
 
-  const handleFamManaRemove = (fam: Familiar) => {
-    const inputVal = famInputs[fam.id]?.manaRemove || "";
+  const handleFamManaRemove = (fam: Familiar, value?: string) => {
+    const inputVal = value ?? famInputs[fam.id]?.manaRemove ?? "";
     const amount = parseInt(inputVal) || 1;
-    const next = Math.max(0, fam.currentMana - amount);
+    const spent = spendTemporary(fam, { currentMana: fam.currentMana - amount });
+    const change = (spent.currentMana ?? fam.currentMana) - fam.currentMana + (spent.tempMana ?? fam.tempMana ?? 0) - (fam.tempMana ?? 0);
     updateFamiliarData(fam.id, { ...fam, currentMana: fam.currentMana - amount });
     updateFamInput(fam.id, "manaRemove", "");
-    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: next - fam.currentMana, label: `Fam: ${fam.name} Spent Mana`, familiarId: fam.id } });
+    createRoll.mutate({ id, data: { diceType: "mana-log", modifier: change, label: `Fam: ${fam.name} Spent Mana`, familiarId: fam.id } });
   };
 
-  const handleFamManaBuff = (fam: Familiar) => {
-    const amount = Number(famInputs[fam.id]?.manaBuff);
+  const handleFamManaBuff = (fam: Familiar, value?: string) => {
+    const amount = Number(value ?? famInputs[fam.id]?.manaBuff);
     if (!Number.isFinite(amount) || amount <= 0) return;
     updateFamiliarData(fam.id, { ...fam, tempMana: (fam.tempMana ?? 0) + amount });
     updateFamInput(fam.id, "manaBuff", "");
@@ -1137,33 +1132,13 @@ export default function CharacterSheet() {
   const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number, familiarId?: string | number, rollPurpose?: "attack" | "check" | "resistance", rollScope?: string, onResolved?: () => void, onRollTotal?: (total: number) => void) => {
     if (familiarId !== undefined && !character.familiars?.some(familiar => familiar.id === familiarId)) { toast.error("Record this familiar in Familiars before rolling its imported abilities."); return; }
     const rollKey = label || diceType;
-    const varsForMod = {
-      power: finalStats.power, pow: finalStats.power,
-      vitality: finalStats.vitality, vit: finalStats.vitality,
-      spirit: finalStats.spirit, spi: finalStats.spirit,
-      agility: finalStats.agility, agi: finalStats.agility,
-      endurance: finalStats.endurance, end: finalStats.endurance,
-      precision: finalStats.precision, pre: finalStats.precision,
-      willpower: finalStats.willpower, wil: finalStats.willpower,
-      charisma: finalStats.charisma, cha: finalStats.charisma,
-      powr: autoModifiers.power,
-      vitr: autoModifiers.vitality,
-      spir: autoModifiers.spirit,
-      agir: autoModifiers.agility,
-      endr: autoModifiers.endurance,
-      prer: autoModifiers.precision,
-      wilr: autoModifiers.willpower,
-      char: autoModifiers.charisma,
-    };
-    const modifier = autoModifier !== undefined 
-      ? autoModifier 
-      : (/[a-zA-Z]/.test(rollMod) ? evaluateFormula(rollMod, varsForMod) : (parseInt(rollMod, 10) || 0));
+    const modifier = autoModifier ?? 0;
     setRollingDice(rollKey);
     setLastRoll(null);
     setCritChain(null);
-    
+
     createRoll.mutate(
-      { id, data: { diceType, modifier, rollPurpose, rollScope, label: label || rollLabel || diceType, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
+      { id, data: { diceType, modifier, rollPurpose, rollScope, label: label || diceType, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
         onSuccess: (data) => {
           onResolved?.();
@@ -1171,26 +1146,18 @@ export default function CharacterSheet() {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
             const chainDie = getChainDie(diceType);
-            const lbl = label || rollLabel || diceType;
-            
-            setRecentRollActions(prev => {
-              const next = { diceType, label: lbl, modifier, familiarId };
-              const filtered = prev.filter(a => !(a.label === next.label && a.diceType === next.diceType && a.modifier === next.modifier && a.familiarId === next.familiarId));
-              return [next, ...filtered].slice(0, 10);
-            });
+            const lbl = label || diceType;
 
-            const isCustomFormula = !statValue && (/[a-zA-Z]/.test(diceType) || /[+\-*/]/.test(diceType));
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
 
             if (wasCrit) {
-              const chainMod = onRollTotal ? data.modifier ?? modifier : isCustomFormula ? 0 : modifier;
               setCritChain({
                 chainCount: 0,
                 onRollTotal,
                 chainDie,
                 runningDiceTotal: rolled,
-                modifier: chainMod,
+                modifier: data.modifier ?? data.total - rolled,
                 label: lbl,
                 lastRolledValue: rolled,
                 statValue,
@@ -1199,41 +1166,31 @@ export default function CharacterSheet() {
               });
             } else {
               onRollTotal?.(data.total);
-              if (isCustomFormula) {
-                setLastRoll({
-                  rawRoll: rolled,
-                  modifier: 0,
-                  total: rolled,
-                  hadCrit: false,
-                  maxChainCount: -1,
-                  diceType: data.diceType,
-                  label: lbl,
-                  rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
-                });
-              } else {
-                setLastRoll({
-                  rawRoll: rolled,
-                  modifier,
-                  total: rolled + modifier,
-                  hadCrit: false,
-                  maxChainCount: -1,
-                  diceType: data.diceType,
-                  label: lbl,
-                  rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
-                });
-              }
+              setLastRoll({
+                rawRoll: rolled,
+                modifier: data.modifier ?? data.total - rolled,
+                total: data.total,
+                hadCrit: false,
+                maxChainCount: -1,
+                diceType: data.diceType,
+                label: lbl,
+                rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }]
+              });
             }
             setRollingDice(null);
           }, 600);
         },
-        onError: () => setRollingDice(null),
+        onError: error => {
+          setRollingDice(null);
+          toast.error(error.message || "Unable to resolve this roll formula.");
+        },
       }
     );
   };
 
   const handleCustomFormulaRoll = () => {
     if (!customFormula.trim()) return;
-    handleRoll(customFormula.trim(), rollLabel || "Custom Roll", undefined, undefined, undefined, rollPurpose || undefined, rollScope);
+    handleRoll(customFormula.trim(), customRollTitle(customFormula), undefined, 0);
   };
 
 
@@ -1241,7 +1198,7 @@ export default function CharacterSheet() {
     if (!critChain) return;
     const { chainDie, runningDiceTotal, modifier, label, chainCount, statValue, familiarId, rolls: prevRolls, onRollTotal } = critChain;
     setRollingDice("chain");
-    
+
     createRoll.mutate(
       { id, data: { diceType: chainDie, modifier: 0, criticalContinuation: true, label, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
@@ -1250,7 +1207,7 @@ export default function CharacterSheet() {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
             const newTotal = runningDiceTotal + rolled;
-            
+
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             const rollTotal = rolled;
@@ -1285,8 +1242,7 @@ export default function CharacterSheet() {
     }
     const current = mana ?? character.currentMana;
     if (amount > current + (character.tempMana ?? 0)) { toast.error("Not enough mana; adjust the resource manually if your table permits it."); return; }
-    setMana(current - amount);
-    updateChar.mutate({ id, data: { currentMana: current - amount } });
+    updateChar.mutate({ id, data: { currentMana: current - amount } }, { onSuccess: syncResourceState });
     createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -amount, label } });
   };
 
@@ -1307,7 +1263,7 @@ export default function CharacterSheet() {
     const dice = item.diceType || "d8";
     let formula = dice;
     let flatMod = 0;
-    
+
     if (item.modifier !== undefined && String(item.modifier).trim() !== "") {
       const modStr = String(item.modifier).trim();
       const hasLetters = /[a-zA-Z]/.test(modStr);
@@ -1368,6 +1324,27 @@ export default function CharacterSheet() {
     }
     // Ending a legacy buff does not consume charges or mana, or roll again.
     if (ability.active && hasStatModifiers(ability)) { toggleAbilityActive(ability); return; }
+    let effectiveCost = ability.cost;
+    let effectiveRollFormula = ability.rollFormula;
+    const curMana = mana ?? character.currentMana;
+
+    for (const trig of ability.triggers ?? []) {
+      if (trig && trig.triggerAction === "update_attached" && isAbilityTriggerActive(trig, {
+        hp: hp ?? character.currentHp, maxHp,
+        mana: curMana, maxMana,
+        dt: currentDt ?? character.currentDt, maxDt,
+      })) {
+        if (trig.updatedCost !== undefined) effectiveCost = trig.updatedCost;
+        if (trig.updatedRollFormula) effectiveRollFormula = trig.updatedRollFormula;
+      }
+    }
+    const availableMana = curMana + (character.tempMana ?? 0);
+    if (availableMana < effectiveCost) {
+      toast.error(`Not enough Mana! Requires ${effectiveCost} MP (Have ${availableMana} MP)`);
+      return;
+    }
+
+    // Validate every prerequisite before consuming charges, inventory or mana.
     // 1. Rechargeable charges check
     if (ability.usageType === "rechargeable") {
       const curCharges = ability.currentCharges ?? ability.maxCharges ?? 0;
@@ -1395,7 +1372,7 @@ export default function CharacterSheet() {
           window.dispatchEvent(event);
           return;
         }
-        
+
         const nextQty = parentItem.quantity - 1;
         if (nextQty <= 0) {
           // Delete item and ability
@@ -1412,75 +1389,21 @@ export default function CharacterSheet() {
       }
     }
 
-    let effectiveCost = ability.cost;
-    let effectiveRollFormula = ability.rollFormula;
-
-    if (ability.triggers && ability.triggers.length > 0) {
-      for (const trig of ability.triggers) {
-        if (trig && trig.triggerAction === "update_attached" && isAbilityTriggerActive(trig, {
-          hp: character.currentHp,
-          maxHp,
-          mana: character.currentMana,
-          maxMana,
-          dt: character.currentDt,
-          maxDt,
-        })) {
-          if (trig.updatedCost !== undefined) effectiveCost = trig.updatedCost;
-          if (trig.updatedRollFormula) effectiveRollFormula = trig.updatedRollFormula;
-        }
-      }
-    }
-
-    const curMana = mana ?? character.currentMana;
-    if (curMana < effectiveCost) {
-      toast.error(`Not enough Mana! Requires ${effectiveCost} MP (Have ${curMana} MP)`);
-      return;
-    }
-
     const nextMana = curMana - effectiveCost;
-    setMana(nextMana);
 
     const updates: Record<string, number> = { currentMana: nextMana };
-    const changes: string[] = [];
 
     if (effectiveCost > 0) {
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -effectiveCost, label: `${ability.name} Cost` } });
     }
 
-    const evalVars = {
-      power: finalStats.power || 0,
-      pow: finalStats.power || 0,
-      vitality: finalStats.vitality || 0,
-      vit: finalStats.vitality || 0,
-      spirit: finalStats.spirit || 0,
-      spi: finalStats.spirit || 0,
-      agility: finalStats.agility || 0,
-      agi: finalStats.agility || 0,
-      endurance: finalStats.endurance || 0,
-      end: finalStats.endurance || 0,
-      precision: finalStats.precision || 0,
-      pre: finalStats.precision || 0,
-      willpower: finalStats.willpower || 0,
-      wil: finalStats.willpower || 0,
-      charisma: finalStats.charisma || 0,
-      cha: finalStats.charisma || 0,
-      powr: autoModifiers.power || 0,
-      vitr: autoModifiers.vitality || 0,
-      spir: autoModifiers.spirit || 0,
-      agir: autoModifiers.agility || 0,
-      endr: autoModifiers.endurance || 0,
-      prer: autoModifiers.precision || 0,
-      wilr: autoModifiers.willpower || 0,
-      char: autoModifiers.charisma || 0,
-    };
-
     // Toggle active state for stat-modifying or pool-modifying abilities
     const parentAb = abilities.find(a => a.id === ability.id);
     if (parentAb && hasStatModifiers(ability)) {
-      toggleAbilityActive(parentAb);
+      toggleAbilityActive(parentAb, effectiveCost);
       if (parentAb.active) return; // Deactivating does not roll formula
     } else if (Object.keys(updates).length > 0) {
-      updateChar.mutate({ id, data: updates });
+      updateChar.mutate({ id, data: updates }, { onSuccess: syncResourceState });
     }
 
     if (effectiveRollFormula) {
@@ -1545,8 +1468,8 @@ export default function CharacterSheet() {
 
       const totalMod = statMod + eqMod;
       handleRoll(rollFormulaToUse, `${ability.name} Cast`, undefined, totalMod);
-    } else if (changes.length === 0) {
-      toast.success(`${ability.name} activated! (-${ability.cost} MP)`);
+    } else {
+      toast.success(`${ability.name} activated! (-${effectiveCost} MP)`);
     }
   };
 
@@ -1561,7 +1484,7 @@ export default function CharacterSheet() {
     });
   };
 
-  const toggleAbilityActive = (ability: Ability) => {
+  const toggleAbilityActive = (ability: Ability, manaCost = 0) => {
     const nextActive = !ability.active;
     const prevStats = getAdjustedStats(character, equipment, abilities);
     const updatedAbilities = abilities.map(a => a.id === ability.id ? { ...a, active: nextActive } : a);
@@ -1598,7 +1521,8 @@ export default function CharacterSheet() {
     }
 
     const curHp = hp ?? character.currentHp;
-    const curMana = mana ?? character.currentMana;
+    const spent = spendTemporary(character, { currentMana: (mana ?? character.currentMana) - manaCost });
+    const curMana = spent.currentMana ?? (mana ?? character.currentMana);
     const curDt = currentDt ?? character.currentDt;
 
     let newHp = curHp;
@@ -1615,31 +1539,9 @@ export default function CharacterSheet() {
       newMana = isManaFull ? newStats.totalMaxMana : Math.min(newStats.totalMaxMana, curMana + valManaAdd + valManaBuff);
       newDt = isDtFull ? newStats.totalMaxDt : Math.min(newStats.totalMaxDt, curDt + valDtAdd + valDtBuff);
     } else {
-      // Deactivating:
-      // Hard Rule:
-      // "Add": Adds to Base total. Removing resets the base value altogether (bonus is lost).
-      // "Buff": Adds a Bonus to maximum that ONLY goes away once spent.
-
-      // HP Add resets base value altogether:
-      let targetHp = curHp;
-      if (valHpAdd > 0) {
-        targetHp -= valHpAdd;
-      }
-      // HP Buff only caps current HP if it still exceeds new totalMaxHp
+      // Remove the source's remaining contribution without spending temporary pools.
       newHp = removeResourceBonus(curHp, prevStats.totalMaxHp, newStats.totalMaxHp);
-
-      // Mana Add resets base value altogether:
-      let targetMana = curMana;
-      if (valManaAdd > 0) {
-        targetMana -= valManaAdd;
-      }
       newMana = removeResourceBonus(curMana, prevStats.totalMaxMana, newStats.totalMaxMana);
-
-      // DT Add resets base value altogether:
-      let targetDt = curDt;
-      if (valDtAdd > 0) {
-        targetDt -= valDtAdd;
-      }
       newDt = removeResourceBonus(curDt, prevStats.totalMaxDt, newStats.totalMaxDt);
     }
 
@@ -1650,16 +1552,18 @@ export default function CharacterSheet() {
       onSuccess: () => {
         updateChar.mutate({
           id,
+          // Source changes are already reconciled by storage. These are final
+          // pool values, not damage that should spend temporary HP/DT again.
+          resourceMode: "exact",
           data: {
             currentHp: newHp,
             currentMana: newMana,
-            currentDt: newDt
+            currentDt: newDt,
+            ...(manaCost > 0 ? { tempMana: spent.tempMana ?? character.tempMana ?? 0 } : {})
           }
         }, {
-          onSuccess: () => {
-            setHp(newHp);
-            setMana(newMana);
-            setCurrentDt(newDt);
+          onSuccess: updated => {
+            syncResourceState(updated);
             toast.success(`${ability.name} ${nextActive ? "activated" : "deactivated"}`);
           }
         });
@@ -1699,9 +1603,9 @@ export default function CharacterSheet() {
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             if (wasCrit) {
-              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: mod, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             } else {
-              setLastRoll({ rawRoll: rolled, modifier: mod, total: rolled + mod, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+              setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             }
             setRollingDice(null);
           }, 600);
@@ -1772,12 +1676,12 @@ export default function CharacterSheet() {
       return;
     }
     const curMana = fam.currentMana;
-    if (curMana < ability.cost) {
+    if (curMana + (fam.tempMana ?? 0) < ability.cost) {
       toast.error(`${fam.name} not enough Mana! Requires ${ability.cost} MP`);
       return;
     }
     const nextMana = curMana - ability.cost;
-    
+
     const fMax = getFamiliarMaxValues(fam);
     const updates: Partial<Familiar> = { currentMana: nextMana };
     const changes: string[] = [];
@@ -1836,13 +1740,13 @@ export default function CharacterSheet() {
             setTimeout(() => {
               const rolled = data.result ?? 0;
               const wasCrit = (data as any).isCrit ?? false;
-              const chainDie = ability.rollFormula.split("+").pop() ?? ability.rollFormula;
+              const chainDie = getChainDie(ability.rollFormula);
               const rawDiceStr = String(data.diceType || "");
               const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
               if (wasCrit) {
-                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: 0, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               } else {
-                setLastRoll({ rawRoll: rolled, modifier: 0, total: rolled, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+                setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               }
               setRollingDice(null);
             }, 600);
@@ -1988,21 +1892,21 @@ export default function CharacterSheet() {
     if (!fav) return;
 
     if (fav.type === "ability" || fav.type === "ability-result" || fav.type === "sub-ability") {
-      setActiveTab("abilities");
+      (setActiveTab("abilities"), revealWorkspaceTool("abilities"));
       const abId = Number(fav.targetId);
       setExpandedAbilities(prev => ({ ...prev, [abId]: true }));
       toast.success(`Navigated to Shaped Ability: ${fav.label}`);
       scrollToElement(`ability-card-${abId}`);
     } else if (fav.type === "familiar-ability") {
-      setActiveTab("familiar");
-      if (fav.familiarId) {
-        setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
-      }
+      (setActiveTab("familiar"), revealWorkspaceTool("familiar"));
       toast.success(`Navigated to Familiar Action: ${fav.label}`);
       const familiar = character.familiars?.find(fam => fav.familiarId != null ? fam.id === fav.familiarId : fam.abilities.some(ability => ability.id === Number(fav.targetId)));
-      if (familiar) scrollToElement(`fam-ability-card-${familiar.id}-${fav.targetId}`);
+      if (familiar) {
+        setExpandedFamiliars(prev => ({ ...prev, [familiar.id]: true }));
+        scrollToElement(`fam-ability-card-${familiar.id}-${fav.targetId}`);
+      }
     } else if (fav.type === "weapon" || fav.type === "item") {
-      setActiveTab("inventory");
+      (setActiveTab("inventory"), revealWorkspaceTool("inventory"));
       toast.success(`Navigated to Inventory: ${fav.label}`);
       const targetId = Number(fav.targetId);
       const isEq = equipment.some(e => e.id === targetId);
@@ -2012,7 +1916,7 @@ export default function CharacterSheet() {
         scrollToElement(`inventory-card-${targetId}`);
       }
     } else if (fav.type === "skill") {
-      setActiveTab("skills");
+      (setActiveTab("skills"), revealWorkspaceTool("skills"));
       const skillId = Number(fav.targetId);
       const skill = skills.find(s => s.id === skillId);
       if (skill) {
@@ -2022,13 +1926,13 @@ export default function CharacterSheet() {
       toast.success(`Navigated to Skills Log: ${fav.label}`);
       scrollToElement(`skill-card-${skillId}`);
     } else if (fav.type === "attribute") {
-      setActiveTab("stats");
+      (setActiveTab("stats"), revealWorkspaceTool("attributes"));
       toast.success(`Navigated to Attributes: ${fav.label}`);
       scrollToElement(`stat-card-${fav.targetId}`);
     } else if (fav.type === "familiar-attribute") {
-      setActiveTab("familiar");
-      if (fav.familiarId) {
-        setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: true }));
+      (setActiveTab("familiar"), revealWorkspaceTool("familiar"));
+      if (fav.familiarId != null) {
+        setExpandedFamiliars(prev => ({ ...prev, [fav.familiarId!]: false }));
       }
       toast.success(`Navigated to Familiar: ${fav.label}`);
       scrollToElement(`familiar-card-${fav.familiarId}`);
@@ -2113,7 +2017,7 @@ export default function CharacterSheet() {
   const handleSaveEssence = (e: React.FormEvent) => {
     e.preventDefault();
     if (!essenceName.trim() || essenceSlotInput === null) return;
-    
+
     addEssence.mutate({
       characterId: id,
       name: essenceName,
@@ -2350,7 +2254,7 @@ export default function CharacterSheet() {
         if (!Array.isArray(importedNotes)) {
           throw new Error("Invalid format. Expected an array of notes.");
         }
-        
+
         let importCount = 0;
         const existingNotes = notes || [];
         for (const note of importedNotes) {
@@ -2472,7 +2376,7 @@ export default function CharacterSheet() {
     const items = [...fam.abilities];
     const [draggedItem] = items.splice(draggedFamAbIdx, 1);
     items.splice(targetIdx, 0, draggedItem);
-    
+
     updateFamiliarData(fam.id, { ...fam, abilities: items });
     setDraggedFamAbIdx(null);
     toast.success("Familiar abilities reordered.");
@@ -2547,9 +2451,114 @@ export default function CharacterSheet() {
   const tier = critChain ? CRIT_TIERS[Math.min(critChain.chainCount, CRIT_TIERS.length - 1)] : null;
   const finalTier = lastRoll?.hadCrit ? CRIT_TIERS[Math.min(lastRoll.maxChainCount, CRIT_TIERS.length - 1)] : null;
 
+  const diceReadout = (
+              <div
+                data-dice-readout="true" aria-label="Dice readout" role="region"
+                className="dice-readout p-4 border-2 border-slate-700/60 rounded-md text-center flex flex-col items-center justify-center transition-all duration-500 bg-[#0c100e] shadow-[inset_0_0_15px_rgba(0,0,0,0.95)] relative group"
+                style={
+                  tier
+                    ? { borderColor: tier.color + "88", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 20px ${tier.color}33`, background: `${tier.color}05` }
+                    : finalTier
+                      ? { borderColor: finalTier.color + "55", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 15px ${finalTier.color}22`, background: `${finalTier.color}03` }
+                      : {}
+                }
+              >
+                {/* LCD backlight overlay */}
+                <div className="absolute inset-0 bg-emerald-500/[0.02] pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
+
+                {rollingDice ? (
+                  <Dice5 className="w-10 h-10 animate-spin text-emerald-400 opacity-75 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />
+                ) : critChain ? (
+                  <div className="dice-screen-content animate-in zoom-in duration-200 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)] space-y-3">
+                    <p className="text-[11px] uppercase tracking-[0.25em] mb-2 font-bold animate-pulse text-center" style={{ color: tier!.color }}>
+                      ✦ {tier!.name} — Crit! ✦
+                    </p>
+
+                    <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide text-center">
+                      {critChain.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
+                      {critChain.modifier !== 0 && (critChain.modifier > 0 ? ` + ${critChain.modifier}` : ` - ${Math.abs(critChain.modifier)}`)}
+                    </div>
+
+                    <div className="text-5xl font-bold font-serif my-1 text-center" style={{ color: tier!.color }}>
+                      {critChain.runningDiceTotal + critChain.modifier}
+                    </div>
+
+                    <div className="mt-3 text-center">
+                      <button
+                        onClick={handleChainRoll}
+                        disabled={!!rollingDice}
+                        className="px-5 py-1.5 rounded font-bold text-xs uppercase tracking-widest animate-pulse disabled:opacity-50 hover:scale-105 hover:animate-none transition-all cursor-pointer font-serif"
+                        style={{
+                          color: tier!.color,
+                          border: `1px solid ${tier!.color}`,
+                          boxShadow: `0 0 10px 2px ${tier!.color}22`,
+                          background: tier!.color + "15",
+                        }}
+                      >
+                        One More!
+                      </button>
+                    </div>
+                  </div>
+                ) : lastRoll ? (
+                  <div className="dice-screen-content animate-in zoom-in duration-300 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)]">
+                    {lastRoll.hadCrit ? (
+                      <p className="text-xs font-bold tracking-[0.25em] uppercase mb-2" style={{ color: finalTier?.color ?? "#ffd700" }}>
+                        ✦ {finalTier ? `${finalTier.name} Critical` : "Critical"} Hit! ✦
+                      </p>
+                    ) : (
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/60 mb-2 font-semibold">{lastRoll.label}</p>
+                    )}
+                    {lastRoll.rolls && lastRoll.rolls.length > 0 ? (
+                      <div className="space-y-2 my-2 text-center">
+                        <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide">
+                          {lastRoll.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
+                          {lastRoll.modifier !== 0 && (lastRoll.modifier > 0 ? ` + ${lastRoll.modifier}` : ` - ${Math.abs(lastRoll.modifier)}`)}
+                        </div>
+                      </div>
+                    ) : lastRoll.diceType && (lastRoll.diceType.includes("(") || lastRoll.diceType.includes("+") || lastRoll.diceType.includes("-") || lastRoll.diceType.includes("*")) ? (
+                      <div className="text-sm font-semibold text-emerald-300/90 mb-3 font-mono bg-emerald-950/30 py-1.5 px-3 border border-emerald-500/10 rounded inline-block max-w-[90%] mx-auto leading-normal">
+                        {formatRollBreakdown(lastRoll.diceType)}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
+                        <div className="text-center">
+                          <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Roll</span>
+                          <span className="text-2xl font-semibold text-emerald-300">{lastRoll.rawRoll}</span>
+                        </div>
+                        {lastRoll.modifier !== 0 && (
+                          <>
+                            <span className="text-lg text-emerald-500/40 font-light mt-2">+</span>
+                            <div className="text-center">
+                              <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Mod</span>
+                              <span className="text-2xl font-semibold text-emerald-400">{lastRoll.modifier}</span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                    <div className="h-px w-24 mx-auto my-2"
+                      style={{ background: finalTier ? finalTier.color + "60" : "rgba(16,185,129,0.2)" }} />
+                    <div>
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/50 block">Total</span>
+                      <span className="text-6xl font-bold leading-none"
+                        style={{ color: finalTier?.color ?? "rgb(52,211,153)" }}>
+                        {lastRoll.total}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-emerald-500/70 text-xs font-mono tracking-widest animate-pulse uppercase">
+                    THE DICE AWAIT...
+                  </span>
+                )}
+              </div>
+  );
+
   return (
+    <WorkspaceProvider key={id} initial={character.uiPreferences?.layout} initialPresets={character.uiPreferences?.layoutPresets} initialDeletedPresetIds={character.uiPreferences?.deletedLayoutPresetIds} saving={updateChar.isPending} onSave={(layout, layoutPresets, done, deletedLayoutPresetIds) => updateChar.mutate({ id, data: { uiPreferences: { ...character.uiPreferences, layout, layoutPresets, deletedLayoutPresetIds } } }, { onSuccess: done, onError: error => toast.error(error.message) })}>
     <div className="w-full p-3 sm:p-4 max-w-[96rem] mx-auto animate-in fade-in duration-500 space-y-4">
-      
+
       {/* ── Top Header Controls ── */}
       <div className="grimoire-card bg-card/45 backdrop-blur-md border border-border/40 rounded-lg shadow-sm w-full mb-4 shrink-0">
       <div className="p-3.5 flex items-center justify-between gap-2 overflow-x-auto whitespace-nowrap flex-nowrap">
@@ -2576,7 +2585,7 @@ export default function CharacterSheet() {
             <span className="hidden md:inline">Export Character</span>
             <span className="md:hidden">Export</span>
           </Button>
-          
+
           <div className="h-4 w-px bg-border/30" />
           <EditCharacterDialog character={character} />
           <Button variant="destructive" size="icon" className="h-8 w-8 rounded-md cursor-pointer flex items-center justify-center transition-all" onClick={handleDelete} title="Delete Character">
@@ -2586,19 +2595,21 @@ export default function CharacterSheet() {
       </div>
 
       </div>
+      <WorkspaceCanvas />
+      <div className="workspace-source" hidden>
       {/* Resources occupy half the desktop workspace; tracker and dice each occupy a quarter. */}
       <div className="grimoire-workspace grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 items-start" style={{ "--workspace-panel-height": "clamp(26rem, 50dvh, 28rem)" } as React.CSSProperties}>
 
         {/* Character identity and resources share the wider left panel. */}
-        <div className="md:col-span-2 lg:col-span-2 min-w-0">
+        <DockableTool id="resources"><div className="md:col-span-2 lg:col-span-2 min-w-0">
           <Card tabIndex={0} aria-label="Character resources" className="character-resource-card bg-card border-border/40 shadow-lg relative min-h-[var(--workspace-panel-height)] rounded-none">
             <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-primary/10 via-primary/50 to-primary/10" />
-            
+
             <CardContent className="resource-zone p-4 flex flex-col gap-3">
               <div className="space-y-3">
               {adjustedStats.warnings.map(warning => <p key={warning} role="alert" className="text-xs text-amber-400 border border-amber-500/40 rounded-md p-2">{warning}</p>)}
               {/* Profile HUD Header */}
-              <div className="space-y-2 border-b border-border/30 pb-2">
+              <div className="resource-profile space-y-2 border-b border-border/30 pb-2">
                 {/* Single Row Layout: Identity (Left) | Speed (Right) */}
                 <div className="flex justify-between items-center gap-3">
                   {/* Left: Portrait, Name, Rank & Race Badges */}
@@ -2693,8 +2704,13 @@ export default function CharacterSheet() {
               </div>
 
               {/* Resource Management HUD grids */}
+              <CompactResources resources={[
+                { name: "DT", current: currentDt ?? character.currentDt, max: baseMaxDt, barMax: maxDt, color: "#eab308", bonus: dtBuffBonus, temporary: character.tempDt, add: handleDtAdd, remove: handleDtRemoveDirect, temp: handleDtBuff },
+                { name: "HP", current: hp ?? character.currentHp, max: baseMaxHp, barMax: maxHp, color: hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))", bonus: hpBuffBonus, temporary: character.tempHp, add: handleHpAdd, remove: handleHpRemove, temp: handleHpBuff },
+                { name: "MP", current: mana ?? character.currentMana, max: baseMaxMana, barMax: maxMana, color: mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6", bonus: manaBuffBonus, temporary: character.tempMana, add: handleManaAdd, remove: handleManaRemove, temp: handleManaBuff },
+              ]} />
               <div className="resource-management grid grid-cols-1 sm:grid-cols-3 gap-3 items-stretch">
-                
+
                 {/* 1. DT (Damage Threshold) - Ordered First */}
                 <div className={`rounded-md border p-2 flex flex-col gap-2 min-w-0 transition-colors duration-200 ${
                   dtFlash === "hit" ? "border-destructive/70 bg-destructive/10"
@@ -2710,7 +2726,7 @@ export default function CharacterSheet() {
                       : (currentDt ?? character.currentDt) > baseMaxDt ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" 
                       : "text-foreground"
                     }`}>
-                      {!!character.tempDt && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempDt}</span>}{currentDt ?? character.currentDt}
+                      {!!character.tempDt && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempDt}</span>}<span className="resource-displayed-current" data-has-temporary={resourceDisplay(currentDt ?? character.currentDt, character.tempDt).hasTemporary || undefined}>{resourceDisplay(currentDt ?? character.currentDt, character.tempDt).total}</span>
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
@@ -2726,7 +2742,7 @@ export default function CharacterSheet() {
                     </span>
                   </div>
                   <ResourceBar current={currentDt ?? character.currentDt} max={maxDt} color="#eab308" />
-                  
+
                   {/* dt quick actions: add/remove/buff */}
                   <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
@@ -2736,7 +2752,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleDtAdd}>
+                        onClick={() => handleDtAdd()}>
                         Add
                       </Button>
                     </div>
@@ -2747,7 +2763,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
-                        onClick={handleDtRemoveDirect}>
+                        onClick={() => handleDtRemoveDirect()}>
                         Dmg
                       </Button>
                     </div>
@@ -2758,7 +2774,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
-                        onClick={handleDtBuff}>
+                        onClick={() => handleDtBuff()}>
                         Temp
                       </Button>
                     </div>
@@ -2774,7 +2790,7 @@ export default function CharacterSheet() {
                   <div className="text-center py-1">
                     {!!character.tempHp && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempHp}</span>}
                     <span className={`text-4xl font-mono font-bold ${hp && hp > baseMaxHp ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
-                      {hp ?? character.currentHp}
+                      <span className="resource-displayed-current" data-has-temporary={resourceDisplay(hp ?? character.currentHp, character.tempHp).hasTemporary || undefined}>{resourceDisplay(hp ?? character.currentHp, character.tempHp).total}</span>
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
@@ -2790,7 +2806,7 @@ export default function CharacterSheet() {
                     </span>
                   </div>
                   <ResourceBar current={hp ?? character.currentHp} max={maxHp} color={hp && hp > baseMaxHp ? "#f59e0b" : "hsl(var(--destructive))"} />
-                  
+
                   {/* hp quick actions: add/remove/buff */}
                   <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
@@ -2800,7 +2816,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleHpAdd}>
+                        onClick={() => handleHpAdd()}>
                         Heal
                       </Button>
                     </div>
@@ -2811,7 +2827,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
-                        onClick={handleHpRemove}>
+                        onClick={() => handleHpRemove()}>
                         Dmg
                       </Button>
                     </div>
@@ -2822,7 +2838,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
-                        onClick={handleHpBuff}>
+                        onClick={() => handleHpBuff()}>
                         Temp
                       </Button>
                     </div>
@@ -2838,7 +2854,7 @@ export default function CharacterSheet() {
                   <div className="text-center py-1">
                     {!!character.tempMana && <span className="text-cyan-400 text-4xl font-mono font-bold mr-2" title="Temporary pool">{character.tempMana}</span>}
                     <span className={`text-4xl font-mono font-bold ${mana && mana > baseMaxMana ? "text-amber-400 drop-shadow-[0_0_6px_rgba(245,158,11,0.3)]" : "text-foreground"}`}>
-                      {mana ?? character.currentMana}
+                      <span className="resource-displayed-current" data-has-temporary={resourceDisplay(mana ?? character.currentMana, character.tempMana).hasTemporary || undefined}>{resourceDisplay(mana ?? character.currentMana, character.tempMana).total}</span>
                     </span>
                     <span className="text-xs text-muted-foreground font-mono">
                       /
@@ -2854,7 +2870,7 @@ export default function CharacterSheet() {
                     </span>
                   </div>
                   <ResourceBar current={mana ?? character.currentMana} max={maxMana} color={mana && mana > baseMaxMana ? "#f59e0b" : "#3b82f6"} />
-                  
+
                   {/* mana quick actions: add/remove/buff */}
                   <div className="space-y-1 mt-1">
                     <div className="flex gap-1.5">
@@ -2864,7 +2880,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-green-600/40 text-green-500 hover:bg-green-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-add"
-                        onClick={handleManaAdd}>
+                        onClick={() => handleManaAdd()}>
                         Add
                       </Button>
                     </div>
@@ -2875,7 +2891,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="destructive" size="sm" className="h-6 text-xs px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-dmg"
-                        onClick={handleManaRemove}>
+                        onClick={() => handleManaRemove()}>
                         Use
                       </Button>
                     </div>
@@ -2886,7 +2902,7 @@ export default function CharacterSheet() {
                         className="h-6 text-xs text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-md"
                       />
                       <Button variant="outline" size="sm" className="h-6 text-xs border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-3 w-16 rounded-md cursor-pointer font-bold btn-resource-buff"
-                        onClick={handleManaBuff}>
+                        onClick={() => handleManaBuff()}>
                         Temp
                       </Button>
                     </div>
@@ -2897,9 +2913,9 @@ export default function CharacterSheet() {
               </div>
               </div>
                   {/* Resource actions share the Combat footer baseline. */}
-                  <div className="shrink-0 flex items-center gap-2 border-t border-border/40 pt-3">
+                  <div className="resource-actions shrink-0 flex items-center gap-2 border-t border-border/40 pt-3">
                     {/* Pulsing Red Damage Box */}
-                    <div className="flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-8 shrink-0">
+                    <div className="resource-damage-action flex items-center border border-red-500/60 bg-red-950/30 rounded-md shadow-[0_0_10px_rgba(239,68,68,0.25)] animate-border-red-pulse overflow-hidden h-8 shrink-0">
                       <Input
                         type="number"
                         min="0"
@@ -2937,13 +2953,14 @@ export default function CharacterSheet() {
                       }}
                       className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
                       title="Roll Initiative (Agility Check)"
+                      aria-label="Roll Initiative"
                     >
                       <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
-                      <span>Roll Initiative</span>
+                      <span className="resource-init-full-label">Roll Initiative</span><span className="resource-init-compact-label">Roll Init</span>
                     </Button>
 
                     {/* Long Rest Confirmation Trigger */}
-                    <div className="ml-auto">
+                    <div className="resource-rest-action ml-auto">
                     <Dialog open={isLongRestConfirmOpen} onOpenChange={setIsLongRestConfirmOpen}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="h-8 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-xs">
@@ -2976,6 +2993,7 @@ export default function CharacterSheet() {
 
         </div>
 
+        </DockableTool>
         <TrackerPanel key={id} character={character} abilities={abilities} stats={finalStats}
           optionsPending={updateChar.isPending}
           onOptionsChange={(abilityOptions, onSaved) => updateChar.mutate({ id, data: { abilityOptions } }, { onSuccess: onSaved, onError: error => toast.error(error.message) })}
@@ -2997,18 +3015,18 @@ export default function CharacterSheet() {
           onRoll={handleAbilityResultRoll}
           onInspect={(abilityId, familiarId) => {
             if (familiarId !== undefined) {
-              setActiveTab("familiar");
+              (setActiveTab("familiar"), revealWorkspaceTool("familiar"));
               setExpandedFamiliars(previous => ({ ...previous, [familiarId]: true }));
               scrollToElement(`fam-ability-card-${familiarId}-${abilityId}`);
               return;
             }
             const source = abilities.find(ability => ability.id === abilityId);
             if (source?.equipmentId || source?.inventoryItemId) {
-              setActiveTab("inventory");
+              (setActiveTab("inventory"), revealWorkspaceTool("inventory"));
               scrollToElement(source.equipmentId ? `equipment-card-${source.equipmentId}` : `inventory-card-${source.inventoryItemId}`);
               return;
             }
-            setActiveTab("abilities"); setExpandedAbilities(previous => ({ ...previous, [abilityId]: true })); scrollToElement(`ability-card-${abilityId}`);
+            (setActiveTab("abilities"), revealWorkspaceTool("abilities")); setExpandedAbilities(previous => ({ ...previous, [abilityId]: true })); scrollToElement(`ability-card-${abilityId}`);
           }}
           combatantSources={[character.name, ...(character.familiars ?? []).map(familiar => familiar.name), ...notes.filter(note => note.category === "bestiary").map(note => note.title)]}
           recentCombatants={recentCombatants}
@@ -3020,41 +3038,13 @@ export default function CharacterSheet() {
           <Card tabIndex={0} aria-label="Character dice" className="workspace-scroll bg-card border-border/40 shadow-lg relative h-full max-h-full overflow-hidden rounded-none">
             <div className="absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" />
             <CardContent className="dice-zone p-4 h-full min-h-0 flex flex-col gap-3">
-              
-              <div className="flex flex-col gap-3 flex-1 min-h-0">
-                {/* Tabs */}
-                <div className="workspace-tabs flex shrink-0 gap-1 bg-background/50 rounded-none p-1 border border-border/30">
-                  <button
-                    onClick={() => setRollTab("stats")}
-                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-none uppercase tracking-wider transition-all cursor-pointer ${
-                      rollTab === "stats" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Stats
-                  </button>
-                  <button
-                    onClick={() => setRollTab("dice")}
-                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-none uppercase tracking-wider transition-all cursor-pointer ${
-                      rollTab === "dice" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Dice
-                  </button>
-                  <button
-                    onClick={() => setRollTab("history")}
-                    className={`flex-1 py-1.5 text-[10px] font-bold rounded-none uppercase tracking-wider transition-all cursor-pointer ${
-                      rollTab === "history" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    History
-                  </button>
-                </div>
 
+              <div className="flex flex-col gap-3 flex-1 min-h-0">
                 <div className="workspace-scroll flex-1 min-h-0 overflow-y-auto">
                 {/* Stats tab */}
-                {rollTab === "stats" && (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-4 gap-1.5">
+                <DockableTool id="stats">
+                  <DiceToolLayout>
+                    <div className="stat-inputs grid grid-cols-4 gap-1.5">
                       {STATS.map(stat => {
                         const value = finalStats[stat.key];
                         const mod = autoModifiers[stat.key];
@@ -3065,13 +3055,13 @@ export default function CharacterSheet() {
                             key={stat.key}
                             onClick={() => handleStatRoll(stat.key, stat.label)}
                             disabled={!!rollingDice}
-                            title={`${stat.desc} — ${dice}`}
+                            title={`${stat.key.charAt(0).toUpperCase() + stat.key.slice(1)} — ${dice}`}
                             className={`rounded-none p-1 text-center border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                               isRolling ? "border-primary bg-primary/10 animate-pulse"
                               : "border-border/40 hover:border-primary/60 hover:bg-primary/5 cursor-pointer"
                             }`}
                           >
-                            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-wide">{stat.label}</div>
+                            <div className="stat-input-label font-bold text-muted-foreground uppercase tracking-wide">{stat.label}</div>
                             <div className="text-xl font-serif text-foreground leading-tight">{value}</div>
                             <div className="text-[10px] font-mono text-primary">+{mod}</div>
                             <div className="text-[8px] font-mono text-muted-foreground/60">{dice}</div>
@@ -3079,40 +3069,23 @@ export default function CharacterSheet() {
                         );
                       })}
                     </div>
-                  </div>
-                )}
+                    {diceReadout}
+                  </DiceToolLayout>
+                </DockableTool>
 
                 {/* Dice tab */}
-                {rollTab === "dice" && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <Input
-                        value={rollLabel}
-                        onChange={e => setRollLabel(e.target.value)}
-                        placeholder="Label (optional)"
-                        className="bg-background/50 border-border/50 text-xs h-7 flex-1 rounded-none"
-                      />
-                      <Input
-                        type="text"
-                        value={rollMod}
-                        onChange={e => setRollMod(e.target.value)}
-                        placeholder="Mod / Formula (e.g. POWr*3)"
-                        className="bg-background/50 border-border/50 text-center font-mono text-xs h-7 w-[45%] min-w-0 rounded-none text-ellipsis overflow-hidden"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2"><label className="text-xs">Roll purpose<select className="block w-full bg-background border border-border p-1" value={rollPurpose} onChange={event => setRollPurpose(event.target.value as typeof rollPurpose)}><option value="">General roll</option><option value="attack">Attack</option><option value="check">Skill / Check</option><option value="resistance">Resistance</option></select></label>{rollPurpose && <label className="text-xs">Attribute / skill scope<input className="block w-full bg-background border border-border p-1" value={rollScope} onChange={event => setRollScope(event.target.value)}/></label>}</div>
-                    <div className="grid grid-cols-4 gap-1">
+                <DockableTool id="dice">
+                  <DiceToolLayout>
+                  <div className="dice-inputs space-y-2">
+                    <div className="dice-buttons grid grid-cols-4 gap-1">
                       {(["d4","d6","d8","d10","d12","d20","d100"] as const).map(d => (
-                        <Button
+                        <DieButton
                           key={d}
-                          variant="outline"
-                          size="sm"
-                          className={`font-mono font-bold text-xs h-8 rounded-none cursor-pointer ${rollingDice === d ? "animate-pulse bg-primary/20 border-primary" : "bg-background/50 hover:border-primary/50"}`}
+                          die={d}
+                          rolling={rollingDice === customRollTitle(d)}
                           disabled={!!rollingDice}
-                          onClick={() => handleRoll(d, undefined, undefined, undefined, undefined, rollPurpose || undefined, rollScope)}
-                        >
-                          {d}
-                        </Button>
+                          onClick={() => handleRoll(d, customRollTitle(d), undefined, 0)}
+                        />
                       ))}
                     </div>
 
@@ -3136,145 +3109,45 @@ export default function CharacterSheet() {
                       </div>
                     </div>
                   </div>
-                )}
+
+                  {diceReadout}
+                  </DiceToolLayout>
+                </DockableTool>
 
                 {/* History tab */}
-                {rollTab === "history" && (
-                  <div className="space-y-2 pr-1">
+                <DockableTool id="history">
+                  <div className="history-layout">
                     {loadingRolls ? (
                       <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
                     ) : rolls && rolls.length > 0 ? (
-                      <div className="divide-y divide-border/20">
+                      <HistoryList>
                         {rolls.map(roll => (
-                          <div key={roll.id} className="py-2 flex justify-between items-center hover:bg-accent/10 px-1 transition-colors">
-                            <div>
-                              <div className="font-semibold text-xs text-foreground flex items-center gap-1">
-                                {roll.label || "Roll"}
+                          <div key={roll.id} data-roll-id={roll.id} className="history-entry flex justify-between items-center hover:bg-accent/10 transition-colors">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-xs text-foreground flex items-center gap-1" title={roll.label || roll.diceType}>
+                                <span className="truncate">{roll.label || "Roll"}</span>
                                 {roll.isCrit && <span className="text-[8px] font-bold text-yellow-500 uppercase tracking-widest">crit</span>}
                               </div>
-                              <div className="text-[9px] text-muted-foreground font-mono">
+                              <div className="text-xs text-muted-foreground font-mono truncate" title={`${formatRollBreakdown(roll.diceType)}${roll.modifier ? ` + ${roll.modifier}` : ""}`}>
                                 {roll.diceType === "action-log" ? "Ability action" : roll.diceType === "hp-log" ? "Health change" : roll.diceType === "dt-log" ? "DT change" : roll.diceType === "mana-log" ? "Mana change" : formatRollBreakdown(roll.diceType)}{roll.modifier ? (roll.modifier > 0 ? ` + ${roll.modifier}` : ` - ${Math.abs(roll.modifier)}`) : ""}
                               </div>
                             </div>
-                            <div className="text-right">
+                            <div className="text-right shrink-0">
                               <div className={`text-base font-serif font-bold ${roll.isCrit ? "text-yellow-500 animate-pulse" : "text-primary"}`}>{roll.diceType === "action-log" ? "—" : ["hp-log", "dt-log", "mana-log"].includes(roll.diceType) && roll.total > 0 ? `+${roll.total}` : roll.total}</div>
                               <div className="text-[8px] text-muted-foreground/45 font-mono">{format(new Date(roll.rolledAt), "MMM d, HH:mm")}</div>
                             </div>
                           </div>
                         ))}
-                      </div>
+                      </HistoryList>
                     ) : (
                       <div className="py-8 text-center text-xs text-muted-foreground font-serif italic">No activity recorded yet.</div>
                     )}
                   </div>
-                )}
+                </DockableTool>
               </div>
 
               </div>
-              {rollTab !== "history" && <>
-              {/* LCD-Style Dice HUD Roll Screen */}
-              <div id="dice-roll-result" className="scroll-mt-4 shrink-0" />
-              <div
-                className="p-4 border-2 border-slate-700/60 rounded-md text-center flex flex-col items-center justify-center transition-all duration-500 h-[150px] shrink-0 bg-[#0c100e] shadow-[inset_0_0_15px_rgba(0,0,0,0.95)] relative overflow-y-auto group"
-                style={
-                  tier
-                    ? { borderColor: tier.color + "88", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 20px ${tier.color}33`, background: `${tier.color}05` }
-                    : finalTier
-                      ? { borderColor: finalTier.color + "55", boxShadow: `inset 0 0 15px rgba(0,0,0,0.95), 0 0 15px ${finalTier.color}22`, background: `${finalTier.color}03` }
-                      : {}
-                }
-              >
-                {/* LCD backlight overlay */}
-                <div className="absolute inset-0 bg-emerald-500/[0.02] pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-b from-white/[0.04] to-transparent pointer-events-none" />
-                
-                {rollingDice ? (
-                  <Dice5 className="w-10 h-10 animate-spin text-emerald-400 opacity-75 drop-shadow-[0_0_4px_rgba(52,211,153,0.5)]" />
-                ) : critChain ? (
-                  <div className="animate-in zoom-in duration-200 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)] space-y-3">
-                    <p className="text-[11px] uppercase tracking-[0.25em] mb-2 font-bold animate-pulse text-center" style={{ color: tier!.color }}>
-                      ✦ {tier!.name} — Crit! ✦
-                    </p>
-                    
-                    <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide text-center">
-                      {critChain.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
-                      {critChain.modifier !== 0 && (critChain.modifier > 0 ? ` + ${critChain.modifier}` : ` - ${Math.abs(critChain.modifier)}`)}
-                    </div>
 
-                    <div className="text-5xl font-bold font-serif my-1 text-center" style={{ color: tier!.color }}>
-                      {critChain.runningDiceTotal + critChain.modifier}
-                    </div>
-
-                    <div className="mt-3 text-center">
-                      <button
-                        onClick={handleChainRoll}
-                        disabled={!!rollingDice}
-                        className="px-5 py-1.5 rounded font-bold text-xs uppercase tracking-widest animate-pulse disabled:opacity-50 hover:scale-105 hover:animate-none transition-all cursor-pointer font-serif"
-                        style={{
-                          color: tier!.color,
-                          border: `1px solid ${tier!.color}`,
-                          boxShadow: `0 0 10px 2px ${tier!.color}22`,
-                          background: tier!.color + "15",
-                        }}
-                      >
-                        One More!
-                      </button>
-                    </div>
-                  </div>
-                ) : lastRoll ? (
-                  <div className="animate-in zoom-in duration-300 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)]">
-                    {lastRoll.hadCrit ? (
-                      <p className="text-xs font-bold tracking-[0.25em] uppercase mb-2" style={{ color: finalTier?.color ?? "#ffd700" }}>
-                        ✦ {finalTier ? `${finalTier.name} Critical` : "Critical"} Hit! ✦
-                      </p>
-                    ) : (
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/60 mb-2 font-semibold">{lastRoll.label}</p>
-                    )}
-                    {lastRoll.rolls && lastRoll.rolls.length > 0 ? (
-                      <div className="space-y-2 my-2 text-center">
-                        <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide">
-                          {lastRoll.rolls.map(r => formatRollBreakdown(r.breakdown)).join(" + ")}
-                          {lastRoll.modifier !== 0 && (lastRoll.modifier > 0 ? ` + ${lastRoll.modifier}` : ` - ${Math.abs(lastRoll.modifier)}`)}
-                        </div>
-                      </div>
-                    ) : lastRoll.diceType && (lastRoll.diceType.includes("(") || lastRoll.diceType.includes("+") || lastRoll.diceType.includes("-") || lastRoll.diceType.includes("*")) ? (
-                      <div className="text-sm font-semibold text-emerald-300/90 mb-3 font-mono bg-emerald-950/30 py-1.5 px-3 border border-emerald-500/10 rounded inline-block max-w-[90%] mx-auto leading-normal">
-                        {formatRollBreakdown(lastRoll.diceType)}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-2 mb-1 flex-wrap">
-                        <div className="text-center">
-                          <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Roll</span>
-                          <span className="text-2xl font-semibold text-emerald-300">{lastRoll.rawRoll}</span>
-                        </div>
-                        {lastRoll.modifier !== 0 && (
-                          <>
-                            <span className="text-lg text-emerald-500/40 font-light mt-2">+</span>
-                            <div className="text-center">
-                              <span className="text-[10px] text-emerald-500/50 block uppercase tracking-wider">Mod</span>
-                              <span className="text-2xl font-semibold text-emerald-400">{lastRoll.modifier}</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    <div className="h-px w-24 mx-auto my-2"
-                      style={{ background: finalTier ? finalTier.color + "60" : "rgba(16,185,129,0.2)" }} />
-                    <div>
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-500/50 block">Total</span>
-                      <span className="text-6xl font-bold leading-none"
-                        style={{ color: finalTier?.color ?? "rgb(52,211,153)" }}>
-                        {lastRoll.total}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <span className="text-emerald-500/70 text-xs font-mono tracking-widest animate-pulse uppercase">
-                    THE DICE AWAIT...
-                  </span>
-                )}
-              </div>
-              </>}
             </CardContent>
           </Card>
         </div>
@@ -3282,14 +3155,12 @@ export default function CharacterSheet() {
       </div>
 
       {/* ── Custom Favorites Hotbar ── */}
-      <div className="favorites-belt mt-3 w-full">
+      <DockableTool id="favorites"><div className="favorites-belt mt-3 w-full">
         <Card className="favorites-frame bg-card/75 border-border/40 p-4 rounded-lg shadow-md">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" /> Favorites Hotbar
-          </h3>
-          
-          {/* 20 Card Grid (10-on-10 on desktop, 5-on-4 on mobile) */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 auto-rows-fr gap-3 items-stretch">
+          {/* Uniform slots adapt to the card interior; paging preserves every assignment. */}
+          <FavoritesGrid heading={<h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" /><span className="truncate" title="Favorites Hotbar">Favorites Hotbar</span>
+          </h3>}>
             {activeFavorites.map((fav, index) => {
               if (fav) {
                 const details = getSlotDetails(fav);
@@ -3313,11 +3184,12 @@ export default function CharacterSheet() {
                     title={`Favorite #${index + 1}: ${fav.label}${isToggleable ? (isSlotActive ? " (ACTIVE)" : " (INACTIVE)") : ""}`}
                   >
                     {/* Actions Panel */}
-                    <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <div className="favorite-slot-actions absolute top-1 right-1 flex gap-1 z-10">
                       <button
                         onClick={(e) => handleLocateFavorite(fav, e)}
                         className="h-4 w-4 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center rounded border border-border cursor-pointer"
                         title="Locate in tab"
+                        aria-label={`Go to ${details.name}`}
                       >
                         <ExternalLink className="w-2.5 h-2.5" />
                       </button>
@@ -3331,7 +3203,7 @@ export default function CharacterSheet() {
                     </div>
 
                     {/* Header slot ID + Type badge or Active/Inactive blurb */}
-                    <div className="flex justify-between items-center w-full pr-8">
+                    <div className="favorite-slot-header flex justify-between items-center w-full pr-8">
                       <span className="text-[8px] font-mono text-muted-foreground/75 font-semibold">#{index + 1}</span>
                       {isToggleable ? (
                         <span className={`text-[7px] font-mono uppercase tracking-wider border px-1 py-0.25 rounded font-black ${
@@ -3349,12 +3221,12 @@ export default function CharacterSheet() {
                     </div>
 
                     {/* Name Row */}
-                    <div className="text-[10px] font-bold text-foreground truncate max-w-full leading-tight font-serif text-left mt-1">
+                    <div className="favorite-slot-name text-[10px] font-bold text-foreground truncate max-w-full leading-tight font-serif text-left mt-1" title={details.name}>
                       {details.name}
                     </div>
 
                     {/* Footer Cost + Stat */}
-                    <div className="flex justify-between items-center w-full mt-1 border-t border-border/20 pt-1 text-[8px] font-mono">
+                    <div className="favorite-slot-cost flex justify-between items-center w-full mt-1 border-t border-border/20 pt-1 text-[8px] font-mono">
                       <span className="text-muted-foreground">{details.costStr || "-"}</span>
                       <span className="text-primary font-bold">{details.statStr || "-"}</span>
                     </div>
@@ -3374,7 +3246,7 @@ export default function CharacterSheet() {
                 );
               }
             })}
-          </div>
+          </FavoritesGrid>
 
           <Dialog open={familiarRollPicker !== null} onOpenChange={open => { if (!open) setFamiliarRollPicker(null); }}><DialogContent><DialogHeader><DialogTitle>Choose target roll</DialogTitle></DialogHeader><div className="space-y-2">{familiarRollPicker && (() => {
             const familiar = character.familiars?.find(entry => entry.id === familiarRollPicker.familiarId); const ability = familiar?.abilities.find(entry => entry.id === familiarRollPicker.abilityId);
@@ -3404,7 +3276,7 @@ export default function CharacterSheet() {
               </DialogHeader>
 
               <div className="space-y-4 mt-4 text-xs font-sans">
-                
+
                 {/* Attributes */}
                 <div>
                   <h4 className="font-bold text-muted-foreground uppercase tracking-wider mb-1.5 border-b border-border/10 pb-0.5">Attributes</h4>
@@ -3552,39 +3424,11 @@ export default function CharacterSheet() {
             </DialogContent>
           </Dialog>
         </Card>
-      </div>
-
-      {/* ── TABBED TOOL SCREEN BAR ── */}
-      <div className="character-section-tabs flex gap-1 border-b border-border/40 mt-6 overflow-x-auto pb-1 flex-nowrap" aria-label="Character sections">
-        {[
-          { key: "stats", label: "Stats and Essence", icon: Hammer },
-          { key: "abilities", label: "Abilities", icon: Flame },
-          { key: "skills", label: "Skills", icon: BookText },
-          { key: "familiar", label: "Familiars", icon: UserCheck },
-          { key: "inventory", label: "Bag / Gear", icon: Coins },
-          { key: "notes", label: "Campaign Notes", icon: BookText },
-          { key: "settings", label: "Settings", icon: Palette },
-        ].map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <Button
-              key={tab.key}
-              variant="ghost"
-              onClick={() => setActiveTab(tab.key as any)}
-              className={`shrink-0 whitespace-nowrap rounded-none border-b-2 font-serif text-xs sm:text-sm px-2 sm:px-3 py-2 flex items-center gap-1.5 h-10 cursor-pointer ${
-                isActive ? "border-primary text-primary bg-primary/5" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/40"
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </Button>
-          );
-        })}
-      </div>
+      </div></DockableTool>
 
       {/* ── ACTIVE TOOL SCREEN AREA ── */}
       <div className="mt-4 animate-in fade-in duration-300">
-        {activeTab === "settings" && <section className="max-w-2xl border border-border/40 bg-card p-4 space-y-4">
+        <DockableTool id="settings"><section className="max-w-2xl border border-border/40 bg-card p-4 space-y-4">
           <h3 className="text-xl text-primary">Settings</h3>
           <AbilityOptionsFields skillNames={skills.map(skill => skill.name)} options={character.abilityOptions ?? mergeOptions(...(abilities ?? []).map(ability => ability.definition?.options))} onChange={abilityOptions => updateChar.mutate({ id, data: { abilityOptions } }, { onError: error => toast.error(error.message) })}/>
           <label className="flex items-start gap-3 cursor-pointer">
@@ -3592,20 +3436,19 @@ export default function CharacterSheet() {
             <span><span className="block text-sm font-semibold">Auto-scroll to dice results</span><span className="block text-sm text-muted-foreground mt-1">Show the dice result automatically when rolling, including familiar rolls. Turning this off keeps your current page position.</span></span>
           </label>
           <p className="text-xs text-muted-foreground">Saved for this character. Favorites’ Take to action still navigates and scrolls to the selected entry.</p>
-        </section>}
+        </section></DockableTool>
 
-        {activeTab === "stats" && (
-          <div className="space-y-4">
+        <DockableTool id="attributes">
+          <div className="attribute-stat-section space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
                 <Hammer className="w-5 h-5 text-primary" />
                 <div>
                   <h3 className="font-serif text-lg font-bold text-primary">Attributes & Training</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Manage base stats and track training progress</p>
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="attribute-stat-grid">
             {STATS.map(stat => {
               const baseValue = (character as any)[stat.key] as number;
               const trainingKey = `${stat.key}Training`;
@@ -3617,51 +3460,50 @@ export default function CharacterSheet() {
                   id={`stat-card-${stat.key}`} 
                   key={stat.key} 
                   onClick={() => handleStatRoll(stat.key, stat.label)}
-                  className="bg-card border-border/50 hover:border-primary/60 transition-all cursor-pointer shadow-sm flex flex-col justify-between rounded-none group"
+                  className="attribute-stat-card bg-card border-border/50 hover:border-primary/60 transition-all cursor-pointer shadow-sm flex flex-col justify-between rounded-none group"
                 >
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="text-xs font-serif font-extrabold text-foreground group-hover:text-primary transition-colors capitalize tracking-wide">{fullName}</h4>
-                        <p className="text-[10px] text-muted-foreground leading-snug line-clamp-1">{stat.desc}</p>
-                      </div>
-                      <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary bg-background/45 rounded-none h-5 px-1 py-0">
+                  <CardContent className="attribute-stat-content">
+                    <div className="attribute-stat-heading">
+                      <h4 className="attribute-stat-name font-serif font-extrabold text-foreground group-hover:text-primary transition-colors capitalize">{fullName}</h4>
+                      <Badge variant="outline" className="attribute-stat-die font-mono text-[10px] border-primary/30 text-primary bg-background/45 rounded-none h-5 px-1 py-0">
                         {getDiceLabel(baseValue)}
                       </Badge>
                     </div>
 
-                    <div className="flex items-baseline justify-between py-0.5">
-                      <div className="flex items-baseline gap-1">
+                    <div className="attribute-stat-value-row">
+                      <div className="flex items-baseline gap-1 whitespace-nowrap">
                         <span className="text-3xl font-serif font-bold text-primary">{baseValue}</span>
                         <span className="text-[11px] font-mono text-primary/80 font-bold">
                           +{autoModifiers[stat.key]}
                         </span>
                       </div>
-                      <span className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-1 group-hover:text-primary transition-colors">
+                      <span className="attribute-stat-roll font-mono text-muted-foreground/60 flex items-center gap-1 group-hover:text-primary transition-colors">
                         <Dice5 className="w-3.5 h-3.5" /> Roll
                       </span>
                     </div>
 
                     {/* Stat training tracker */}
                     <div 
-                      className="border-t border-border/20 pt-2 flex flex-col gap-1"
+                      className="stat-training border-t border-border/20 pt-2 flex flex-col gap-1"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <div className="flex justify-between items-center text-[9px] font-mono">
-                        <span className="text-muted-foreground uppercase">Training Points</span>
-                        <span className="text-primary font-bold">{curTraining}/{baseValue}</span>
+                      <div className="stat-training-heading font-mono">
+                        <span className="stat-training-label text-muted-foreground uppercase">Training Points</span>
+                        <span className="stat-training-count text-primary font-bold">{curTraining}/{baseValue}</span>
                       </div>
-                      <div className="flex gap-1.5 items-center">
-                        <div className="flex-1 bg-accent/40 h-1 rounded-none overflow-hidden">
+                      <div className="stat-training-controls">
+                        <div className="stat-training-progress bg-accent/40 h-1 rounded-none overflow-hidden">
                           <div
                             className="bg-primary h-full rounded-none transition-all"
                             style={{ width: `${Math.min(100, (curTraining / baseValue) * 100)}%` }}
                           />
                         </div>
-                        
+
                         {/* +/- Increment/Decrement group */}
-                        <div className="flex border border-border/50">
+                        <div className="stat-training-buttons flex border border-border/50">
                           <button
+                            type="button"
+                            aria-label={`Decrease ${fullName} training`}
                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -3673,6 +3515,8 @@ export default function CharacterSheet() {
                           </button>
                           <div className="h-5 w-[1px] bg-border/50" />
                           <button
+                            type="button"
+                            aria-label={`Increase ${fullName} training`}
                             className="h-5 w-5 text-xs font-bold bg-background/50 hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
                             onClick={(e) => {
                               e.stopPropagation();
@@ -3690,17 +3534,15 @@ export default function CharacterSheet() {
             })}
           </div>
         </div>
-        )}
 
         {/* ESSENCE IMBUEMENT — part of Stats and Essence */}
-        {activeTab === "stats" && (
+
           <div className="space-y-4 mt-8">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
                 <Layers className="w-5 h-5 text-primary" />
                 <div>
                   <h3 className="font-serif text-lg font-bold text-primary">Essence Imbuement</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">Bind and align essence crystals to unlock attributes</p>
                 </div>
               </div>
             </div>
@@ -3709,7 +3551,8 @@ export default function CharacterSheet() {
               {[1, 2, 3, 4].map(slot => {
                 const essence = essences.find(e => e.slot === slot);
                 const label = slot === 1 ? "First Essence" : slot === 2 ? "Second Essence" : slot === 3 ? "Third Essence" : "Confluence";
-                const isExpanded = essence ? !!expandedEssences[essence.id] : false;
+                const essenceRow = wideRows ? essences.filter(entry => [1, 2, 3, 4].includes(entry.slot)) : essence ? [essence] : [];
+                const isExpanded = essenceRow.some(entry => expandedEssences[entry.id]);
 
                 return (
                   <Card key={slot} className={`bg-card border-border/50 relative overflow-hidden flex flex-col justify-between rounded-none ${
@@ -3734,7 +3577,10 @@ export default function CharacterSheet() {
                       {essence ? (
                         <div
                           className="space-y-1.5 cursor-pointer select-none"
-                          onClick={() => setExpandedEssences(prev => ({ ...prev, [essence.id]: !isExpanded }))}
+                          onClick={() => setExpandedEssences(prev => {
+                            const open = !essenceRow.some(entry => prev[entry.id]);
+                            return { ...prev, ...Object.fromEntries(essenceRow.map(entry => [entry.id, open])) };
+                          })}
                         >
                           <div className="flex items-center justify-between gap-1">
                             <h4 className={`font-serif text-lg font-bold leading-tight ${slot === 4 ? "text-amber-400" : "text-foreground"}`}>{essence.name}</h4>
@@ -3794,10 +3640,10 @@ export default function CharacterSheet() {
               </Card>
             )}
           </div>
-        )}
+        </DockableTool>
 
         {/* TAB 2: SKILLS (Card click rolls) */}
-        {activeTab === "skills" && (
+        <DockableTool id="skills">
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
@@ -3887,7 +3733,7 @@ export default function CharacterSheet() {
                                             style={{ width: `${Math.min(100, (skill.training / skill.value) * 100)}%` }}
                                           />
                                         </div>
-                                        
+
                                         {/* +/- training buttons */}
                                         <div className="flex border border-border/50">
                                           <button
@@ -3924,10 +3770,10 @@ export default function CharacterSheet() {
               </div>
             )}
           </div>
-        )}
+        </DockableTool>
 
         {/* TAB 3: INVENTORY */}
-        {activeTab === "inventory" && (
+        <DockableTool id="inventory">
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
@@ -3938,13 +3784,13 @@ export default function CharacterSheet() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-            
+            <div className="flex flex-col gap-6 min-w-0">
+
             {/* Currencies */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-border/30 pb-2">
+            <div className="space-y-4 min-w-0">
+              <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border/30 pb-2">
                 <h4 className="font-serif text-lg text-primary font-bold flex items-center gap-1.5">
-                  <Coins className="w-4 h-4 text-primary" /> Currencies
+                  <Coins className="w-4 h-4 shrink-0 text-primary" /> Currencies
                 </h4>
                 <Button size="sm" variant="ghost" className="h-7 text-xs text-primary px-2 rounded-none cursor-pointer" onClick={() => triggerAddInventory("currency")}>
                   Add Currency
@@ -3955,17 +3801,17 @@ export default function CharacterSheet() {
                 <div className="space-y-2">
                   {currencies.map(c => (
                     <Card key={c.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all rounded-none">
-                      <CardContent className="p-3 flex flex-wrap justify-between items-center gap-3">
-                        <div className="flex items-baseline gap-2 shrink-0">
-                          <span className="font-serif font-semibold text-foreground">{c.name}</span>
-                          <span className="font-mono font-bold text-lg text-primary">{c.amount}</span>
-                        </div>
-                        <CurrencyAdjustments currency={c}/>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground rounded-none cursor-pointer" onClick={() => triggerEditInventory("currency", c)}>
+                      <CardContent className="p-3 space-y-3">
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span className="font-serif font-semibold text-foreground">{c.name}</span>
+                            <span className="font-mono font-bold text-lg text-primary">{c.amount}</span>
+                          </div>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 text-muted-foreground rounded-none cursor-pointer" onClick={() => triggerEditInventory("currency", c)}>
                             <Edit2 className="w-3 h-3" />
                           </Button>
                         </div>
+                        <CurrencyAdjustments currency={c}/>
                       </CardContent>
                     </Card>
                   ))}
@@ -3976,10 +3822,10 @@ export default function CharacterSheet() {
             </div>
 
             {/* Equipment */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-border/30 pb-2">
+            <div className="space-y-4 min-w-0">
+              <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border/30 pb-2">
                 <h4 className="font-serif text-lg text-primary font-bold flex items-center gap-1.5">
-                  <Hammer className="w-4 h-4 text-primary" /> Equipment
+                  <Hammer className="w-4 h-4 shrink-0 text-primary" /> Equipment
                 </h4>
                 <Button size="sm" variant="ghost" className="h-7 text-xs text-primary px-2 rounded-none cursor-pointer" onClick={() => triggerAddInventory("equipment")}>
                   [Add]
@@ -3992,20 +3838,20 @@ export default function CharacterSheet() {
                     const bonusList = Object.entries(eq.statModifiers || {}).map(([stat, val]) => `${stat.toUpperCase()}: +${val}`);
                     const eqDtVal = parseFormulaOrNum(eq.dtBonus, {});
                     if (eqDtVal > 0 || String(eq.dtBonus).trim().length > 0) bonusList.push(`DT: +${eq.dtBonus}`);
-                    
+
                     return (
                       <Card id={`equipment-card-${eq.id}`} key={eq.id} className={`bg-card/50 border-border/40 transition-all rounded-none ${eq.equipped ? "border-primary/40 shadow-sm bg-primary/[0.01]" : ""}`}>
                         <CardContent className="p-3 space-y-2">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="font-serif font-bold text-foreground flex items-center gap-1.5">
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-serif font-bold text-foreground flex flex-wrap items-center gap-1.5">
                                 {eq.name}
-                                {eq.equipped && <span className="text-[8px] bg-primary/10 border border-primary/30 text-primary px-1 rounded-none uppercase font-semibold">Equipped</span>}
+                                {eq.equipped && <span className="shrink-0 whitespace-nowrap text-[8px] bg-primary/10 border border-primary/30 text-primary px-1 rounded-none uppercase font-semibold">Equipped</span>}
                               </div>
-                              <p className="text-[10px] text-muted-foreground/80 font-serif line-clamp-1 mt-0.5">{eq.description}</p>
+                              <p className="text-[10px] text-muted-foreground/80 font-serif whitespace-pre-wrap leading-relaxed mt-1">{eq.description}</p>
                             </div>
-                            
-                            <div className="flex items-center gap-1">
+
+                            <div className="flex shrink-0 items-center gap-1">
                               <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" onClick={() => triggerEditInventory("equipment", eq)}>
                                 <Edit2 className="w-3 h-3" />
                               </Button>
@@ -4036,8 +3882,8 @@ export default function CharacterSheet() {
                                   {eqAbilities.map(ab => {
                                     return (
                                       <div key={ab.id} className="bg-background/30 p-2 border border-border/10">
-                                        <div className="flex justify-between items-center gap-2">
-                                          <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap justify-between items-center gap-3">
+                                          <div className="min-w-0 flex-1 basis-48">
                                             <div className="font-serif text-xs font-bold text-foreground flex items-center gap-1.5 flex-wrap">
                                               {ab.name}
                                               {ab.cost > 0 && <span className="text-[9px] text-blue-400 font-mono">({ab.cost} MP)</span>}
@@ -4074,7 +3920,7 @@ export default function CharacterSheet() {
                                                );
                                              })()}
                                           </div>
-                                          <div className="flex items-center gap-1.5">
+                                          <div className="flex flex-wrap shrink-0 items-center gap-1.5">
                                             <button
                                               type="button"
                                               onClick={() => ab.definition ? handleAbilityRoll(ab) : toggleAbilityActive(ab)}
@@ -4096,7 +3942,7 @@ export default function CharacterSheet() {
                                             </Button>
                                           </div>
                                         </div>
-                                        
+
                                         {ab.definition && <details className="mt-2"><summary className="text-xs text-primary cursor-pointer">Ability Details</summary>{renderOwnedAbilityDetails(ab)}</details>}
                                         {/* Rechargeable charge counter training stats style */}
                                         {ab.usageType === "rechargeable" && (
@@ -4146,8 +3992,8 @@ export default function CharacterSheet() {
                             );
                           })()}
 
-                          <div className="flex items-center justify-between border-t border-border/30 pt-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                            <label className="flex items-center gap-1 cursor-pointer">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/30 pt-2 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                            <label className="flex items-center gap-1 whitespace-nowrap cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={eq.equipped}
@@ -4157,7 +4003,7 @@ export default function CharacterSheet() {
                               Equipped
                             </label>
                             {eq.diceType && (
-                              <label className="flex items-center gap-1 cursor-pointer opacity-70">
+                              <label className="flex items-center gap-1 whitespace-nowrap cursor-pointer opacity-70">
                                 <input
                                   type="checkbox"
                                   checked={eq.assignedToQuickRolls}
@@ -4179,10 +4025,10 @@ export default function CharacterSheet() {
             </div>
 
             {/* General Items */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-border/30 pb-2">
+            <div className="space-y-4 min-w-0">
+              <div className="flex flex-wrap justify-between items-center gap-2 border-b border-border/30 pb-2">
                 <h4 className="font-serif text-lg text-primary font-bold flex items-center gap-1.5">
-                  <Package className="w-4 h-4 text-primary" /> General Items
+                  <Package className="w-4 h-4 shrink-0 text-primary" /> General Items
                 </h4>
                 <Button size="sm" variant="ghost" className="h-7 text-xs text-primary px-2 rounded-none cursor-pointer" onClick={() => triggerAddInventory("item")}>
                   [Add]
@@ -4194,14 +4040,14 @@ export default function CharacterSheet() {
                   {inventory.map(item => (
                     <Card id={`inventory-card-${item.id}`} key={item.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all rounded-none">
                       <CardContent className="p-3 space-y-2">
-                        <div className="flex justify-between items-start">
-                          <div>
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="min-w-0 flex-1">
                             <div className="font-serif font-semibold text-foreground">
                               {item.name} <span className="font-mono text-muted-foreground/80 font-normal">x{item.quantity}</span>
                             </div>
-                            {item.description && <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">{item.description}</p>}
+                            {item.description && <p className="text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">{item.description}</p>}
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex shrink-0 items-center gap-1">
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" onClick={() => triggerEditInventory("item", item)}>
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
@@ -4233,8 +4079,8 @@ export default function CharacterSheet() {
                               <div className="space-y-1.5">
                                 {itemAbils.map(ab => (
                                   <div key={ab.id} className="bg-background/30 p-2 border border-border/10">
-                                    <div className="flex justify-between items-center gap-2">
-                                      <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap justify-between items-center gap-3">
+                                      <div className="min-w-0 flex-1 basis-48">
                                         <div className="font-serif text-xs font-bold text-foreground flex items-center gap-1.5 flex-wrap">
                                           {ab.name}
                                           {ab.cost > 0 && <span className="text-[9px] text-blue-400 font-mono">({ab.cost} MP)</span>}
@@ -4242,7 +4088,7 @@ export default function CharacterSheet() {
 
                                         {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                       </div>
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex flex-wrap shrink-0 items-center gap-1.5">
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -4331,10 +4177,10 @@ export default function CharacterSheet() {
             />
           </div>
         </div>
-        )}
+        </DockableTool>
 
         {/* TAB 5: ABILITIES */}
-        {activeTab === "abilities" && (
+        <DockableTool id="abilities">
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px]">
               <div className="flex items-center gap-2.5">
@@ -4380,7 +4226,7 @@ export default function CharacterSheet() {
               };
 
               // Helper to render ability card
-                const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean) => {
+                const renderAbilityCard = (ability: Ability, allList: Ability[], isRowExpanded: boolean, row: Ability[]) => {
                   const isExpanded = isRowExpanded;
                   const bonuses = getAbilityBonusList(ability);
                   const rankInfo = getAbilityHighestRank(ability, finalStats);
@@ -4426,7 +4272,10 @@ export default function CharacterSheet() {
                           {/* Header row (Clickable card body toggles expansion except buttons) */}
                           <div 
                             className="flex flex-wrap justify-between items-start gap-x-3 gap-y-2 cursor-pointer select-none"
-                            onClick={() => setExpandedAbilities(prev => ({ ...prev, [ability.id]: !expandedAbilities[ability.id] }))}
+                            onClick={() => setExpandedAbilities(prev => {
+                              const open = !row.some(entry => prev[entry.id]);
+                              return { ...prev, ...Object.fromEntries(row.map(entry => [entry.id, open])) };
+                            })}
                           >
                             <div className="space-y-1.5 flex-1 min-w-0 basis-[20rem]">
                               <div className="flex items-center gap-2 min-w-0 flex-nowrap">
@@ -4450,12 +4299,12 @@ export default function CharacterSheet() {
                                 </h4>
                                 <svg className={`w-3.5 h-3.5 text-muted-foreground/60 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" /></svg>
                               </div>
-                              
+
                               <div className="flex flex-wrap items-center gap-1.5">
                                 <Badge variant="outline" className="text-[9px] font-mono border-primary/20 text-primary rounded-none bg-background/50">{displayCost} MP</Badge>
                                 <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{displayRange}</Badge>
                                 <Badge variant="outline" className="text-[9px] font-mono border-border/60 text-muted-foreground rounded-none bg-background/50">{displaySpeed}</Badge>
-                              
+
                               {/* Active Toggle Switch */}
                               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                                 <button
@@ -4764,14 +4613,14 @@ export default function CharacterSheet() {
               };
 
               const renderAbilityGrid = (abilitiesList: Ability[]) => {
-                const chunks = chunkArray(abilitiesList, 2);
+                const chunks = chunkArray(abilitiesList, wideRows ? 2 : 1);
                 return (
                   <div className="space-y-4">
                     {chunks.map((row, rowIdx) => {
                       const isRowExpanded = row.some(ab => expandedAbilities[ab.id]);
                       return (
                         <div key={rowIdx} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {row.map(ab => renderAbilityCard(ab, abilitiesList, isRowExpanded))}
+                          {row.map(ab => renderAbilityCard(ab, abilitiesList, isRowExpanded, row))}
                         </div>
                       );
                     })}
@@ -4870,10 +4719,10 @@ export default function CharacterSheet() {
               );
             })()}
           </div>
-        )}
+        </DockableTool>
 
         {/* TAB 6: CAMPAIGN NOTES (Search and Thematic Filter) */}
-        {activeTab === "notes" && (
+        <DockableTool id="notes">
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b border-border/20 pb-2 mb-4 min-h-[52px] flex-wrap gap-3">
               <div className="flex items-center gap-2.5">
@@ -4911,7 +4760,7 @@ export default function CharacterSheet() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-              
+
               {/* Note creation column */}
               <div className="lg:col-span-1">
                 <Card className="bg-card border-border/50 rounded-none">
@@ -5011,7 +4860,7 @@ export default function CharacterSheet() {
                   </div>
                 </div>
 
-                <div className="space-y-3 overflow-y-auto flex-1 pr-1 max-h-[460px]">
+                <div className="space-y-3 flex-1 pr-1">
                   {filteredNotes && filteredNotes.length > 0 ? (
                     filteredNotes.map(note => (
                       <Card key={note.id} className="bg-card/50 border-border/40 hover:border-primary/20 transition-all relative group rounded-md">
@@ -5065,11 +4914,11 @@ export default function CharacterSheet() {
 
             </div>
           </div>
-        )}
+        </DockableTool>
         {/* TAB 7: COMPANION FAMILIAR */}
-        {activeTab === "familiar" && (
+        <DockableTool id="familiar">
           <div className="space-y-4">
-            
+
             {/* If no familiar exists or user clicked 'Add', render binding creation card */}
             {isAddingFamiliar || !character.familiars || character.familiars.length === 0 ? (
               <Card className="bg-card border-border/50 rounded-md max-w-3xl mx-auto shadow-md">
@@ -5085,7 +4934,7 @@ export default function CharacterSheet() {
                   </div>
 
                   <form onSubmit={handleBindFamiliar} className="space-y-4 text-xs">
-                    
+
                     {/* Basic specs */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div>
@@ -5177,10 +5026,10 @@ export default function CharacterSheet() {
                 </CardContent>
               </Card>
             ) : (
-              
+
               // Familiar display sheets
               <div className="space-y-6">
-                
+
                 {/* Toolbar */}
                 <div className="flex justify-between items-center border-b border-border/20 pb-3">
                   <h3 className="font-serif text-2xl text-primary font-bold">Familiars ({character.familiars.length})</h3>
@@ -5193,21 +5042,16 @@ export default function CharacterSheet() {
                 <div className="grid grid-cols-1 gap-6">
                   {character.familiars.map(fam => {
                     const fMax = getFamiliarMaxValues(fam);
+                    const adjustedFamStats = getFamiliarAdjusted(fam).stats;
                     const isExpanded = expandedFamiliars[fam.id] ?? false;
                     const flash = famDtFlashes[fam.id] ?? null;
-                    const dmgRes = famDamageResults[fam.id] ?? null;
                     const inputs = famInputs[fam.id] || {};
 
-                    const latestFamHpLog = rolls?.filter(r => r.diceType === "hp-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
-                    const latestFamManaLog = rolls?.filter(r => r.diceType === "mana-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
-                    const latestFamDtLog = rolls?.filter(r => r.diceType === "dt-log" && r.familiarId === fam.id).sort((a,b) => b.id - a.id)[0];
-
                     return (
-                      <Card id={`familiar-card-${fam.id}`} key={fam.id} className="bg-card border border-border/40 shadow-md rounded-none p-3.5 space-y-3">
-                        
-                        {/* Title Banner */}
-                        <div className="flex justify-between items-start flex-wrap gap-3 border-b border-border/20 pb-2">
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <Card id={`familiar-card-${fam.id}`} key={fam.id} data-dt-flash={flash ?? undefined} className="familiar-sheet bg-card border border-border/40 shadow-md rounded-none p-3.5">
+                        <div className="familiar-sheet-layout">
+                          <div className="familiar-summary">
+                            <div className="familiar-identity flex items-center gap-3 min-w-0">
                             {/* Avatar Portrait Upload */}
                             <div className="relative group w-11 h-11 rounded-full overflow-hidden border border-border/60 bg-background flex-shrink-0 flex items-center justify-center cursor-pointer">
                               {fam.avatar ? (
@@ -5237,8 +5081,8 @@ export default function CharacterSheet() {
                               </label>
                             </div>
                             <div className="min-w-0">
-                              <h4 className="font-serif text-base text-primary font-bold truncate">{fam.name}</h4>
-                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5 truncate">
+                              <h4 className="font-serif text-base text-primary font-bold">{fam.name}</h4>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
                                 {fam.race} · {fam.className} · {fMax.speed ?? fam.speed} ft
                               </p>
                               {(fam.resistances || fam.immunities) && (
@@ -5257,11 +5101,14 @@ export default function CharacterSheet() {
                               )}
                             </div>
                           </div>
-                          
-                          {/* Controls in identical order as Player HUD: Hit box -> Roll Initiative -> Long Rest -> Edit/Release */}
-                          <div className="flex items-center gap-2 flex-wrap">
+                            <CompactResources stacked resources={[
+                              { name: "DT", current: fam.currentDt, max: fMax.baseMaxDt, barMax: fMax.maxDt, color: "#eab308", temporary: fam.tempDt, bonus: fMax.maxDt - fMax.baseMaxDt, add: value => handleFamDtAdd(fam, value), remove: value => handleFamDtRemoveDirect(fam, value), temp: value => handleFamDtBuff(fam, value) },
+                              { name: "HP", current: fam.currentHp, max: fMax.baseMaxHp, barMax: fMax.maxHp, color: "hsl(var(--destructive))", temporary: fam.tempHp, bonus: fMax.maxHp - fMax.baseMaxHp, add: value => handleFamHpAdd(fam, value), remove: value => handleFamHpRemove(fam, value), temp: value => handleFamHpBuff(fam, value) },
+                              { name: "MP", current: fam.currentMana, max: fMax.baseMaxMana, barMax: fMax.maxMana, color: "#3b82f6", temporary: fam.tempMana, bonus: fMax.maxMana - fMax.baseMaxMana, add: value => handleFamManaAdd(fam, value), remove: value => handleFamManaRemove(fam, value), temp: value => handleFamManaBuff(fam, value) },
+                            ]} />
+                            <div className="familiar-actions flex items-center gap-2">
                             {/* Pulsing Red Damage Input Area */}
-                            <div className="flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10 overflow-hidden h-7">
+                            <div className="familiar-damage-action flex items-center border border-red-500/40 bg-red-950/20 rounded-md shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-border-red-pulse z-10 overflow-hidden h-7">
                               <Input
                                 type="number"
                                 min="0"
@@ -5286,11 +5133,12 @@ export default function CharacterSheet() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleFamiliarStatRoll(fam.id, "agility", "Initiative", fam.agility)}
-                              className="h-7 px-2.5 border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 font-bold font-serif text-[10px] rounded-md cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.3)] transition-all"
+                              className="familiar-init-action h-7 px-2.5 border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 font-bold font-serif text-[10px] rounded-md cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.3)] transition-all"
                               title="Roll Initiative (Agility Check)"
+                              aria-label={`Roll ${fam.name} initiative`}
                             >
                               <Dice5 className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                              <span>Roll Initiative</span>
+                              <span>Roll Init</span>
                             </Button>
 
                             {/* Long Rest Button */}
@@ -5298,222 +5146,69 @@ export default function CharacterSheet() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleFamFullRest(fam)}
-                              className="h-7 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-[10px] px-2.5"
+                              className="familiar-rest-action h-7 border-amber-500/50 text-amber-400 hover:bg-amber-500/10 font-bold font-serif rounded-md cursor-pointer text-[10px] px-2.5"
                               title="Take Long Rest"
                             >
                               Long Rest
                             </Button>
-
-                            <EditFamiliarDialog characterId={id} familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
+                          </div>
+                          </div>
+                          <Tabs value={isExpanded ? "abilities" : "stats"} onValueChange={value => setExpandedFamiliars(previous => ({ ...previous, [fam.id]: value === "abilities" }))} className="familiar-panels">
+                            <div className="familiar-panel-heading">
+                            <TabsList className="familiar-panel-tabs" aria-label={`${fam.name} details`}>
+                              <TabsTrigger value="stats">Stats</TabsTrigger>
+                              <TabsTrigger value="abilities">Abilities ({fam.abilities.length})</TabsTrigger>
+                            </TabsList>
+                            <div className="familiar-management flex flex-wrap items-center gap-2">
+                              <EditFamiliarDialog characterId={id} familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
                             <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer h-7 text-[10px] font-bold px-2" 
                               onClick={() => handleReleaseFamiliarClick(fam.id)}>
                               Release
                             </Button>
-                          </div>
-                        </div>
-
-                        {/* Resource HUD Columns in identical order as Player HUD: 1. DT -> 2. HP -> 3. Mana */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          
-                          {/* 1. DT (Damage Threshold) */}
-                          <div className={`rounded-none border p-2 flex flex-col justify-between gap-2 transition-colors duration-200 bg-background/20 ${
-                            flash === "hit" ? "border-destructive/70 bg-destructive/10"
-                            : flash === "restore" ? "border-primary/70 bg-primary/10"
-                            : "border-border/40"
-                          }`}>
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Shield className="w-3.5 h-3.5 text-yellow-500" /> Damage Threshold
                             </div>
-                            <div className="text-center py-0.5">
-                              <span className={`text-2xl font-mono font-bold ${flash === "hit" ? "text-destructive" : "text-foreground"}`}>
-                                {!!fam.tempDt && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempDt}</span>}{fam.currentDt}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxDt}</span>
                             </div>
-                            <ResourceBar current={fam.currentDt} max={fMax.maxDt} color="#eab308" />
-                            
-                            <div className="space-y-1.5 mt-0.5">
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.dtAdd || ""} placeholder="Add val"
-                                  onChange={e => updateFamInput(fam.id, "dtAdd", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamDtAdd(fam)}>
-                                  Add
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.dtRemove || ""} placeholder="Dmg val"
-                                  onChange={e => { updateFamInput(fam.id, "dtRemove", e.target.value); setFamDamageResults(prev => ({ ...prev, [fam.id]: null })); }}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamDtRemoveDirect(fam)}>
-                                  Dmg
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.dtBuff || ""} placeholder="Temp val"
-                                  onChange={e => updateFamInput(fam.id, "dtBuff", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamDtBuff(fam)}>
-                                  Temp
-                                </Button>
-                              </div>
-
-                            </div>
-                          </div>
-
-                          {/* 2. HP (Health) */}
-                          <div className="rounded-none border border-border/40 p-2 flex flex-col justify-between gap-2 bg-background/20">
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Heart className="w-3.5 h-3.5 text-destructive" /> Health (HP)
-                            </div>
-                            <div className="text-center py-0.5">
-                              <span className="text-2xl font-mono font-bold text-foreground">
-                                {!!fam.tempHp && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempHp}</span>}{fam.currentHp}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxHp}</span>
-                            </div>
-                            <ResourceBar current={fam.currentHp} max={fMax.maxHp} color="hsl(var(--destructive))" />
-                            
-                            <div className="space-y-1.5 mt-0.5">
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.hpAdd || ""} placeholder="Heal val"
-                                  onChange={e => updateFamInput(fam.id, "hpAdd", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamHpAdd(fam)}>
-                                  Heal
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.hpRemove || ""} placeholder="Dmg val"
-                                  onChange={e => updateFamInput(fam.id, "hpRemove", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamHpRemove(fam)}>
-                                  Dmg
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.hpBuff || ""} placeholder="Temp val"
-                                  onChange={e => updateFamInput(fam.id, "hpBuff", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamHpBuff(fam)}>
-                                  Temp
-                                </Button>
-                              </div>
-
-                            </div>
-                          </div>
-
-                          {/* 3. Mana (MP) */}
-                          <div className="rounded-none border border-border/40 p-2 flex flex-col justify-between gap-2 bg-background/20">
-                            <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                              <Sparkles className="w-3.5 h-3.5 text-blue-400" /> Mana (MP)
-                            </div>
-                            <div className="text-center py-0.5">
-                              <span className="text-2xl font-mono font-bold text-foreground">
-                                {!!fam.tempMana && <span className="text-cyan-400 mr-2" title="Temporary pool">{fam.tempMana}</span>}{fam.currentMana}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono"> /{fMax.maxMana}</span>
-                            </div>
-                            <ResourceBar current={fam.currentMana} max={fMax.maxMana} color="#3b82f6" />
-                            
-                            <div className="space-y-1.5 mt-0.5">
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.manaAdd || ""} placeholder="Add val"
-                                  onChange={e => updateFamInput(fam.id, "manaAdd", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-green-600/40 text-green-500 hover:bg-green-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-add"
-                                  onClick={() => handleFamManaAdd(fam)}>
-                                  Add
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.manaRemove || ""} placeholder="Use val"
-                                  onChange={e => updateFamInput(fam.id, "manaRemove", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="destructive" size="sm" className="h-6 text-[10px] px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-dmg"
-                                  onClick={() => handleFamManaRemove(fam)}>
-                                  Use
-                                </Button>
-                              </div>
-                              <div className="flex gap-1">
-                                <Input
-                                  type="number" min="0" value={inputs.manaBuff || ""} placeholder="Temp val"
-                                  onChange={e => updateFamInput(fam.id, "manaBuff", e.target.value)}
-                                  className="h-6 text-[10px] text-center font-mono flex-1 bg-background/50 border-border/50 px-1 rounded-none"
-                                />
-                                <Button variant="outline" size="sm" className="h-6 text-[10px] border-amber-500/30 text-amber-500 hover:bg-amber-500/10 px-2 w-12 rounded-none cursor-pointer font-bold btn-resource-buff"
-                                  onClick={() => handleFamManaBuff(fam)}>
-                                  Temp
-                                </Button>
-                              </div>
-
-                            </div>
-                          </div>
-
-                        </div>
-
-                        {/* Familiar Attributes Grid with compact Stat Training (- X/Base +) Header */}
-                        <div className="space-y-1.5 pt-1.5 border-t border-border/20">
-                          <h5 className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Attributes (Click to Roll)</h5>
-                          <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
+                            <TabsContent value="stats" className="familiar-stats-panel">
+                              <div className="familiar-stat-section space-y-1.5">
+                          <div className="familiar-stat-grid">
                             {STATS.map(stat => {
                               const val = (fam as any)[stat.key] as number;
-                              const mod = Math.floor((Number(val) || 0) / 3);
+                              const effectiveVal = adjustedFamStats[stat.key] ?? val;
+                              const mod = getModifierForStat(effectiveVal, fam.className);
                               const trainingKey = `${stat.key}Training`;
                               const trainVal = ((fam as any)[trainingKey] as number) || 0;
                               return (
-                                <div key={stat.key} className="bg-card/60 border border-border/30 p-1.5 rounded-none flex flex-col justify-between space-y-1">
+                                <div key={stat.key} className="familiar-stat-card bg-card/60 border border-border/30 p-1.5 rounded-none flex flex-col justify-between space-y-1">
                                   {/* Stat Roll Button */}
                                   <button
                                     type="button"
-                                    onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, val)}
+                                    onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, effectiveVal)}
                                     className="hover:border-primary transition-all cursor-pointer text-center w-full"
+                                    aria-label={`Roll ${fam.name} ${stat.label}`}
                                   >
-                                    <div className="text-[8px] font-bold uppercase text-muted-foreground tracking-wider">{stat.label}</div>
-                                    <div className="text-base font-bold font-serif text-primary leading-tight">{val}</div>
+                                    <div className="stat-input-label font-bold uppercase text-muted-foreground tracking-wider">{stat.label}</div>
+                                    <div className="text-base font-bold font-serif text-primary leading-tight">{effectiveVal}</div>
                                     <div className="text-[8px] font-mono text-muted-foreground">({mod >= 0 ? `+${mod}` : mod})</div>
                                   </button>
 
                                   {/* Stat Training Bar matching Character Sheet styling */}
-                                  <div className="border-t border-border/20 pt-1 flex flex-col gap-0.5 select-none">
-                                    <div className="flex justify-between items-center text-[7.5px] font-mono">
-                                      <span className="text-muted-foreground/80 uppercase text-[7px]">Train</span>
-                                      <span className="text-primary font-bold">{trainVal}/{val}</span>
+                                  <div className="stat-training border-t border-border/20 pt-1 flex flex-col gap-0.5 select-none">
+                                    <div className="stat-training-heading font-mono">
+                                      <span className="stat-training-label text-muted-foreground/80 uppercase">Train</span>
+                                      <span className="stat-training-count text-primary font-bold">{trainVal}/{val}</span>
                                     </div>
-                                    <div className="flex gap-1 items-center">
-                                      <div className="flex-1 bg-accent/40 h-1 rounded-none overflow-hidden">
+                                    <div className="stat-training-controls">
+                                      <div className="stat-training-progress bg-accent/40 h-1 rounded-none overflow-hidden">
                                         <div
                                           className="bg-primary h-full rounded-none transition-all"
-                                          style={{ width: `${Math.min(100, (trainVal / val) * 100)}%` }}
+                                          style={{ width: `${val > 0 ? Math.min(100, (trainVal / val) * 100) : 0}%` }}
                                         />
                                       </div>
-                                      
+
                                       {/* +/- Grouped enclosed border buttons */}
-                                      <div className="flex border border-border/50">
+                                      <div className="stat-training-buttons flex border border-border/50">
                                         <button
                                           type="button"
+                                          aria-label={`Decrease ${fam.name} ${stat.label} training`}
                                           className="h-3.5 w-3.5 text-[9px] font-bold bg-background/50 hover:bg-accent text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center"
                                           onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "down"); }}
                                           disabled={val <= 0 && trainVal === 0}
@@ -5523,6 +5218,7 @@ export default function CharacterSheet() {
                                         <div className="h-3.5 w-[1px] bg-border/50" />
                                         <button
                                           type="button"
+                                          aria-label={`Increase ${fam.name} ${stat.label} training`}
                                           className="h-3.5 w-3.5 text-[9px] font-bold bg-background/50 hover:bg-accent text-primary hover:text-primary-foreground cursor-pointer flex items-center justify-center"
                                           onClick={(e) => { e.stopPropagation(); handleFamStatTrain(fam, stat.key, "up"); }}
                                         >
@@ -5536,21 +5232,10 @@ export default function CharacterSheet() {
                             })}
                           </div>
                         </div>
-
-                        {/* Collapsible Abilities Drawer */}
-                        {fam.abilities && fam.abilities.length > 0 && (
-                          <div className="pt-1.5 border-t border-border/20 space-y-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedFamiliars(prev => ({ ...prev, [fam.id]: !isExpanded }))}
-                              className="w-full flex items-center justify-between text-[10px] font-bold text-primary uppercase tracking-wider py-1 cursor-pointer"
-                            >
-                              <span>Abilities & Actions ({fam.abilities.length})</span>
-                              <span>{isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-stone-500" /> : <ChevronRight className="w-3.5 h-3.5 text-stone-500" />}</span>
-                            </button>
-
-                            {isExpanded && (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1.5 animate-in slide-in-from-top-1 duration-150">
+                            </TabsContent>
+                            <TabsContent value="abilities" className="familiar-abilities-panel">
+                              {fam.abilities.length > 0 ? (
+                                <div className="familiar-ability-list grid grid-cols-1 gap-3">
                                 {fam.abilities.map((ab) => (
                                   <Card id={`fam-ability-card-${fam.id}-${ab.id}`} key={ab.id} className="bg-background border border-border/30 rounded-none relative">
                                     <CardContent className="p-2.5 space-y-1.5">
@@ -5607,10 +5292,12 @@ export default function CharacterSheet() {
                                   </Card>
                                 ))}
                               </div>
-                            )}
-                          </div>
-                        )}
-
+                              ) : (
+                                <p className="text-xs text-muted-foreground italic py-3">No abilities assigned.</p>
+                              )}
+                            </TabsContent>
+                          </Tabs>
+                        </div>
                       </Card>
                     );
                   })}
@@ -5620,7 +5307,7 @@ export default function CharacterSheet() {
             )}
 
           </div>
-        )}
+        </DockableTool>
 
 
       </div>
@@ -5746,6 +5433,8 @@ export default function CharacterSheet() {
         </DialogContent>
       </Dialog>
 
+      </div>
     </div>
+    </WorkspaceProvider>
   );
 }

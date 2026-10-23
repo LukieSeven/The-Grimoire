@@ -10,13 +10,14 @@ export const showsTriggerInput = (durationType: string): boolean => ["When Trigg
 export const RANGE_TYPES = ["Self", "Touch", "Ranged", "Aura", "Sight", "Unlimited"];
 export const RANGED_TARGETING = ["Single Target", "Multiple Targets", "Chain / Bounce", "Target-Centered AoE", "Point-Placed AoE", "Cone", "Line / Beam", "Wall / Barrier"];
 export const AREA_SHAPES = ["Circle / Sphere", "Cube / Box", "Cylinder / Column", "Ring / Hollow Area"];
-export type CustomChoiceCategory = "durationTypes" | "rangeTypes" | "targets" | "rangedTargeting" | "areaShapes" | "triggers" | "effects";
+export type CustomChoiceCategory = "durationTypes" | "rangeTypes" | "targets" | "rangedTargeting" | "areaShapes" | "triggers" | "effects" | "effectTypes";
 export const ROLL_PURPOSES = ["Damage", "Healing", "Shielding"];
 export const COMMON_EFFECTS = ["Stunned", "Prone", "Restrained", "Grappled", "Incapacitated", "Blinded", "Deafened", "Silenced", "Invisible", "Fear", "Bleeding", "Burning", "Poisoned", "Paralyzed", "Petrified", "Unconscious", "Charmed", "Slowed", "Exhausted"];
 export const STACKING_RULES = ["Stack", "Highest Only", "Replace Existing", "Refresh Duration"] as const;
-export interface EffectTemplate { id: string; name: string; kind: "Buff" | "Debuff"; rules: string; value?: string; definition?: AbilityInput }
+export const EFFECT_TYPES = ["Buff", "Debuff", "Heal", "Heal over Time", "Damage", "Damage over Time"] as const;
+export interface EffectTemplate { id: string; name: string; kind: string; rules: string; value?: string; definition?: AbilityInput }
 export interface AbilityOptions {
-  rangedTargeting?: string[]; areaShapes?: string[];
+  rangedTargeting?: string[]; areaShapes?: string[]; effectTypes?: string[];
   durationTypes: string[]; rangeTypes: string[]; targets: string[]; rollPurposes: string[];
   triggers: { id: string; name: string; conditions: TriggerCondition[]; match: "all" | "any" }[];
   effects: EffectTemplate[];
@@ -142,7 +143,7 @@ export function mergeOptions(...sets: (AbilityOptions | undefined)[]): AbilityOp
   const result = emptyOptions();
   for (const set of sets) {
     if (!set) continue;
-    for (const key of ["durationTypes", "rangeTypes", "targets", "rollPurposes", "rangedTargeting", "areaShapes"] as const) result[key] = [...new Set([...(result[key] ?? []), ...(set[key] ?? []).map(value => key === "durationTypes" ? normalizeDurationType(value) : value)])];
+    for (const key of ["durationTypes", "rangeTypes", "targets", "rollPurposes", "rangedTargeting", "areaShapes", "effectTypes"] as const) result[key] = [...new Set([...(result[key] ?? []), ...(set[key] ?? []).map(value => key === "durationTypes" ? normalizeDurationType(value) : value)])];
     for (const key of ["triggers", "effects"] as const) {
       // Retain imported definitions even when another file reused its ID.
       for (const entry of set[key]) if (!result[key].some(existing => JSON.stringify(existing) === JSON.stringify(entry))) {

@@ -1,11 +1,11 @@
 import { AbilityInputFields } from "./ability-input-fields";
 import { useRef, useState } from "react";
 import type { AbilityInput, CustomChoiceCategory, AbilityOptions, EffectTemplate } from "../../lib/ability-input";
-import { blankAbilityInput, validateAbilityInput } from "../../lib/ability-input";
+import { blankAbilityInput, validateAbilityInput, EFFECT_TYPES } from "../../lib/ability-input";
 import { ConditionEditor } from "./condition-editor";
 import { Button } from "../ui/button";
 const field = "block w-full border border-border/50 bg-background p-2 text-sm mt-1";
-const categories: [CustomChoiceCategory, string][] = [["durationTypes", "Duration type"], ["rangeTypes", "Range type"], ["targets", "Target"], ["rangedTargeting", "Ranged targeting"], ["areaShapes", "Area shape"], ["triggers", "Triggers"], ["effects", "Effects"]];
+const categories: [CustomChoiceCategory, string][] = [["durationTypes", "Duration type"], ["rangeTypes", "Range type"], ["targets", "Target"], ["rangedTargeting", "Ranged targeting"], ["areaShapes", "Area shape"], ["triggers", "Triggers"], ["effects", "Effects"], ["effectTypes", "Effect type"]];
 
 export function AbilityOptionsFields({ options, onChange, initialCategory, skillNames, onSave }: { options: AbilityOptions; onChange: (options: AbilityOptions) => void; initialCategory?: CustomChoiceCategory; skillNames?: string[]; onSave?: (options: AbilityOptions) => void }) {
   const [category, setCategory] = useState<CustomChoiceCategory>(initialCategory ?? "durationTypes");
@@ -48,7 +48,7 @@ export function AbilityOptionsFields({ options, onChange, initialCategory, skill
       <label className="text-sm">Choice name<input autoFocus={!!initialCategory} className={field} value={name} onChange={event => { setName(event.target.value); setDraft(previous => ({ ...previous, name: event.target.value })); }}/></label>
     </div>
     {category === "effects" && <div className="border border-border/40 p-3 space-y-4">
-      <label className="text-sm">Effect type<select className={field} value={kind} onChange={event => setKind(event.target.value as EffectTemplate["kind"])}><option>Buff</option><option>Debuff</option></select></label>
+      <label className="text-sm">Effect type<select className={field} value={kind} onChange={event => event.target.value === "__custom__" ? chooseCategory("effectTypes") : setKind(event.target.value)}>{[...new Set([...EFFECT_TYPES, ...(options.effectTypes ?? []), kind])].map(value => <option key={value}>{value}</option>)}<option value="__custom__">Custom…</option></select></label>
       <AbilityInputFields skillNames={skillNames} hideName effectMode input={draft} options={{ ...options, effects: options.effects.filter(effect => effect.id !== editingId) }} sources={[]} familiars={[]} onChange={setDraft} onCustom={chooseCategory}/>
     </div>}
     {trigger && !!trigger.conditions.length && <ConditionEditor conditions={triggerDraft?.conditions ?? trigger.conditions} match={triggerDraft?.match ?? trigger.match} mode="manual" onChange={(conditions, match) => setTriggerDraft({ conditions, match })}/>}

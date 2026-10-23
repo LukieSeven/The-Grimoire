@@ -403,7 +403,7 @@ export default function Bookshelf() {
       <div className="w-full max-w-4xl mx-auto z-10 my-4 space-y-1">
         
         {/* Books Stand Area (Optimized grid for mobile and split screen) */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1 max-w-md sm:max-w-none mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-6 px-4 items-end justify-center min-h-[320px] pb-1 max-w-md sm:max-w-none mx-auto">
           {books.map((book) => {
             if (book.id === "codex") {
               if (triggerCodexUnlockAnim) {
@@ -585,18 +585,6 @@ export default function Bookshelf() {
             );
           })}
 
-          {/* 3 Empty Outlined placeholders representing future expansions */}
-          {Array(3).fill(null).map((_, idx) => (
-            <div 
-              key={`empty-${idx}`}
-              className="col-span-1 hidden sm:flex justify-center h-[300px] items-end pb-7 pointer-events-none"
-            >
-              <div className="w-[110px] h-[230px] border border-dashed border-stone-800/40 rounded-sm flex flex-col items-center justify-center text-center gap-1.5 opacity-40 bg-stone-950/10">
-                <Lock className="w-4.5 h-4.5 text-stone-700" />
-                <span className="text-[8px] font-mono tracking-widest text-stone-700 uppercase">Locked</span>
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* The Wooden Shelf Ledge */}
