@@ -761,12 +761,12 @@ html[data-card-frame]:not([data-card-frame="OG Theme"]) .attribute-stat-card > .
 .workspace-tool:has(.workspace-tool-content:not([data-tool="resources"]):not([data-tool="favorites"])) { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: var(--radius); }
 .workspace-group { display: flex; flex-direction: column; gap: .75rem; min-width: 0; min-height: 0; }
 .workspace-group > [role="tabpanel"] { flex: 1; min-height: 0; overflow: visible; }
-.workspace-group[data-dock="belt"] > [data-belt-scroll], .history-scroll { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior-y: auto; scrollbar-width: thin; scrollbar-color: hsl(var(--primary) / .65) hsl(var(--background) / .6); }
-.workspace-group[data-dock="belt"] > [data-belt-scroll]:focus-visible, .history-scroll:focus-visible { outline: 1px solid hsl(var(--primary) / .65); outline-offset: 2px; }
-.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar, .history-scroll::-webkit-scrollbar { width: 9px; }
-.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-track, .history-scroll::-webkit-scrollbar-track { background: hsl(var(--background) / .6); border-radius: var(--radius); }
-.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-thumb, .history-scroll::-webkit-scrollbar-thumb { background: hsl(var(--primary) / .65); border: 2px solid hsl(var(--card)); border-radius: var(--radius); }
-.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-thumb:hover, .history-scroll::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }
+.workspace-group[data-dock="belt"] > [data-belt-scroll], .history-scroll, .tracker-combat-list { overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior-y: auto; scrollbar-width: thin; scrollbar-color: hsl(var(--primary) / .65) hsl(var(--background) / .6); }
+.workspace-group[data-dock="belt"] > [data-belt-scroll]:focus-visible, .history-scroll:focus-visible, .tracker-combat-list:focus-visible { outline: 1px solid hsl(var(--primary) / .65); outline-offset: 2px; }
+.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar, .history-scroll::-webkit-scrollbar, .tracker-combat-list::-webkit-scrollbar { width: 9px; }
+.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-track, .history-scroll::-webkit-scrollbar-track, .tracker-combat-list::-webkit-scrollbar-track { background: hsl(var(--background) / .6); border-radius: var(--radius); }
+.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-thumb, .history-scroll::-webkit-scrollbar-thumb, .tracker-combat-list::-webkit-scrollbar-thumb { background: hsl(var(--primary) / .65); border: 2px solid hsl(var(--card)); border-radius: var(--radius); }
+.workspace-group[data-dock="belt"] > [data-belt-scroll]::-webkit-scrollbar-thumb:hover, .history-scroll::-webkit-scrollbar-thumb:hover, .tracker-combat-list::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary)); }
 .workspace-group-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: .25rem; flex-shrink: 0; }
 .workspace-group-tabs button { padding: .4rem .6rem; font-size: .8rem; border-radius: var(--radius); color: hsl(var(--muted-foreground)); }
 .workspace-group-tabs button[aria-selected="true"] { color: hsl(var(--primary-foreground)); background: hsl(var(--primary)); }
@@ -871,6 +871,12 @@ html[data-card-frame]:not([data-card-frame="OG Theme"]) .attribute-stat-card > .
 .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-management .space-y-1 { margin-top: 0; }
 .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-management button { min-height: 1.5rem; }
 .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-actions { padding-top: .5rem; }
+/* The edit handle consumes part of the same fixed two-row card. Recover only
+   interior spacing, leaving readable gauges, controls and gameplay sizing intact. */
+.workspace-grid-editing .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-zone,
+.workspace-grid-editing .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-zone > .space-y-3 { gap: .25rem; }
+.workspace-grid-editing .workspace-grid-cell[data-height="2"] [data-tool="resources"] .resource-profile > :not(:last-child),
+.workspace-grid-editing .workspace-grid-cell[data-height="2"] [data-tool="resources"] .compact-resources > :not(:last-child) { margin-block-end: .25rem; }
 /* The stat readouts remain a compact 4×2 bank instead of spilling into four tall rows. */
 .workspace-tool-content:is([data-tool="stats"], [data-tool="dice"]) { height: 100%; min-height: 0; }
 .workspace-slot:has(> .workspace-tool-content:is([data-tool="stats"], [data-tool="dice"])) { height: 100%; }
@@ -939,11 +945,12 @@ html[data-card-frame]:not([data-card-frame="OG Theme"]) .attribute-stat-card > .
 .workspace-grid-cell[data-width="2"][data-height="4"] .resource-management .resource-meter { height: 1.5rem; border-radius: var(--radius); box-shadow: inset 0 1px 3px rgb(0 0 0 / .65); }
 .workspace-grid-cell[data-width="2"][data-height="4"] .resource-management .resource-meter > div { border-radius: inherit; opacity: .85; box-shadow: inset 0 1px 1px rgb(255 255 255 / .45), inset 0 -8px 10px rgb(0 0 0 / .3); }
 .workspace-tool-content :is(input, select, textarea) { max-width: 100%; }
-/* Explicit exceptions: bound only the reading area, never the whole tracker. */
+/* Bound only designated tracker content, keeping the fixed card and footer intact. */
 .workspace-tool-content[data-tool="combat"], .workspace-slot:has(> .workspace-tool-content[data-tool="combat"]) { height: 100%; min-height: 0; }
 .tracker-combat { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .workspace-grid-cell .tracker-combat > footer { margin-top: auto; }
 .workspace-tool-content [data-tracker-scroll] { overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.workspace-tool-content [data-tracker-scroll="combat"] { flex: 1 1 0; min-height: 0; overscroll-behavior-y: auto; }
 .workspace-tool-content:is([data-tool="passive"], [data-tool="triggers"]) { height: 100%; min-height: 0; }
 .workspace-group [role="tabpanel"]:has([data-tool="passive"], [data-tool="triggers"]) > .workspace-slot { height: 100%; }
 .tracker-passive, .tracker-triggers { display: flex; flex-direction: column; gap: .75rem; height: 100%; min-height: 0; }

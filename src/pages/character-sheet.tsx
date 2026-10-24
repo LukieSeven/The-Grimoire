@@ -4,7 +4,7 @@ import { HistoryList } from "@/components/history-list";
 import { DieButton } from "@/components/die-button";
 import { DiceToolLayout } from "@/components/dice-tool-layout";
 import { customRollTitle } from "@/lib/custom-roll-title";
-import { getChainDie } from "@/lib/critical-continuation";
+import { advanceCriticalQueue, type CriticalDie } from "@/lib/critical-continuation";
 import { FavoritesGrid } from "@/components/favorites-grid";
 import { WorkspaceProvider, WorkspaceCanvas, DockableTool, revealWorkspaceTool } from "@/components/dockable-workspace";
 import React, { useState, useEffect, useRef } from "react";
@@ -539,6 +539,9 @@ export default function CharacterSheet() {
 
   const [critChain, setCritChain] = useState<{
     chainCount: number;
+    criticalDice: CriticalDie[];
+    criticalIndex: number;
+    maxChainCount: number;
     chainDie: string;
     runningDiceTotal: number;
     modifier: number;
@@ -1145,15 +1148,17 @@ export default function CharacterSheet() {
           setTimeout(() => {
             const rolled = data.result ?? 0;
             const wasCrit = (data as any).isCrit ?? false;
-            const chainDie = getChainDie(diceType);
+            const criticalDice = data.criticalDice ?? [];
+            const chainDie = criticalDice.length ? `d${criticalDice[0].sides}` : diceType;
             const lbl = label || diceType;
 
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
 
-            if (wasCrit) {
+            if (wasCrit && criticalDice.length) {
               setCritChain({
                 chainCount: 0,
+                criticalDice, criticalIndex: 0, maxChainCount: 0,
                 onRollTotal,
                 chainDie,
                 runningDiceTotal: rolled,
@@ -1195,12 +1200,15 @@ export default function CharacterSheet() {
 
 
   const handleChainRoll = () => {
-    if (!critChain) return;
-    const { chainDie, runningDiceTotal, modifier, label, chainCount, statValue, familiarId, rolls: prevRolls, onRollTotal } = critChain;
+    if (!critChain || rollingDice) return;
+    const { criticalDice, criticalIndex, runningDiceTotal, modifier, label, chainCount, familiarId, rolls: prevRolls, onRollTotal } = critChain;
+    const die = criticalDice[criticalIndex];
+    if (!die) return;
+    const chainDie = `d${die.sides}`;
     setRollingDice("chain");
 
     createRoll.mutate(
-      { id, data: { diceType: chainDie, modifier: 0, criticalContinuation: true, label, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
+      { id, data: { diceType: chainDie, modifier: 0, criticalContinuation: true, criticalDie: die, label, ...(familiarId !== undefined ? { familiarId } : {}) } },
       {
         onSuccess: (data) => {
           setTimeout(() => {
@@ -1211,13 +1219,14 @@ export default function CharacterSheet() {
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
             const rollTotal = rolled;
-            const newRolls = [...prevRolls, { label: `Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
+            const newRolls = [...prevRolls, { label: `Crit ${criticalIndex + 1}/${criticalDice.length} · Roll ${chainCount + 2}`, breakdown: breakdownStr, total: rollTotal }];
+            const progress = advanceCriticalQueue(critChain, criticalDice.length, wasCrit);
 
-            if (wasCrit) {
-              setCritChain({ chainCount: chainCount + 1, chainDie, runningDiceTotal: newTotal, modifier, label, lastRolledValue: rolled, statValue, familiarId, rolls: newRolls, onRollTotal });
+            if (!progress.complete) {
+              setCritChain({ ...critChain, ...progress, chainDie: `d${criticalDice[progress.criticalIndex].sides}`, runningDiceTotal: newTotal, lastRolledValue: rolled, rolls: newRolls });
             } else {
               onRollTotal?.(newTotal + modifier);
-              setLastRoll({ rawRoll: newTotal, modifier, total: newTotal + modifier, hadCrit: true, maxChainCount: chainCount, diceType: chainDie, label, rolls: newRolls });
+              setLastRoll({ rawRoll: newTotal, modifier, total: newTotal + modifier, hadCrit: true, maxChainCount: progress.maxChainCount, diceType: chainDie, label, rolls: newRolls });
               setCritChain(null);
             }
             setRollingDice(null);
@@ -1602,8 +1611,8 @@ export default function CharacterSheet() {
             const wasCrit = (data as any).isCrit ?? false;
             const rawDiceStr = String(data.diceType || "");
             const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
-            if (wasCrit) {
-              setCritChain({ chainCount: 0, chainDie: dice, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+            if (wasCrit && data.criticalDice?.length) {
+              setCritChain({ chainCount: 0, criticalDice: data.criticalDice, criticalIndex: 0, maxChainCount: 0, chainDie: `d${data.criticalDice[0].sides}`, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             } else {
               setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
             }
@@ -1740,11 +1749,12 @@ export default function CharacterSheet() {
             setTimeout(() => {
               const rolled = data.result ?? 0;
               const wasCrit = (data as any).isCrit ?? false;
-              const chainDie = getChainDie(ability.rollFormula);
+              const criticalDice = data.criticalDice ?? [];
+              const chainDie = criticalDice.length ? `d${criticalDice[0].sides}` : ability.rollFormula;
               const rawDiceStr = String(data.diceType || "");
               const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
-              if (wasCrit) {
-                setCritChain({ chainCount: 0, chainDie, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
+              if (wasCrit && criticalDice.length) {
+                setCritChain({ chainCount: 0, criticalDice, criticalIndex: 0, maxChainCount: 0, chainDie, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               } else {
                 setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
               }
@@ -2472,7 +2482,7 @@ export default function CharacterSheet() {
                 ) : critChain ? (
                   <div className="dice-screen-content animate-in zoom-in duration-200 w-full font-mono text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.4)] space-y-3">
                     <p className="text-[11px] uppercase tracking-[0.25em] mb-2 font-bold animate-pulse text-center" style={{ color: tier!.color }}>
-                      ✦ {tier!.name} — Crit! ✦
+                      ✦ {tier!.name} Crit {critChain.criticalIndex + 1}/{critChain.criticalDice.length} ✦
                     </p>
 
                     <div className="text-sm font-semibold text-emerald-300/80 font-mono tracking-wide text-center">

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatRollBreakdown } from "../lib/roll-display";
 import { resolveDiceExpression } from "../lib/dice-expression";
+import { rollCriticalDie, type CriticalDie } from "../lib/critical-continuation";
 import { formulaActorRank, requireStatValue, resolveStatExpression } from "../lib/stat-expression";
 import { getFamiliarAdjusted } from "../lib/familiar-values";
 import { activeEffectModifier } from "../lib/active-effect-modifiers";
@@ -547,6 +548,7 @@ export function useCreateRoll() {
         rollPurpose?: RollPurpose;
         rollScope?: string;
         criticalContinuation?: boolean;
+        criticalDie?: CriticalDie;
       };
     }) => {
       const charId = data.id;
@@ -595,12 +597,13 @@ export function useCreateRoll() {
         return { result: rolled, isCrit: rolled === sides };
       }
 
-      const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean } => {
+      const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean; criticalDice: CriticalDie[] } => {
         requireStatValue(statVal, "selected");
         const diceSides = getStatDiceSides(statVal);
         let sum = 0;
         const rollDetails: string[] = [];
         let crit = false;
+        const criticalDice: CriticalDie[] = [];
         let remainingStat = statVal;
         for (const sides of diceSides) {
           const rolled = Math.floor(Math.random() * sides) + 1;
@@ -608,6 +611,7 @@ export function useCreateRoll() {
 
           if (rolled === dieTarget) {
             crit = true;
+            criticalDice.push({ sides, target: dieTarget });
           }
 
           const cappedResult = Math.min(rolled, dieTarget);
@@ -622,7 +626,7 @@ export function useCreateRoll() {
           remainingStat -= sides;
         }
         const desc = rollDetails.join("+");
-        return { total: sum, desc, isCrit: crit };
+        return { total: sum, desc, isCrit: crit, criticalDice };
       };
 
       if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log" || diceType === "action-log") {
@@ -643,9 +647,17 @@ export function useCreateRoll() {
       let result = 0;
       let total = 0;
       let isCrit = false;
+      let criticalDice: CriticalDie[] = [];
       let diceTypeStr = diceType;
 
-      if (statValue === undefined) {
+      if (data.data.criticalDie) {
+        const continuation = rollCriticalDie(data.data.criticalDie, sides => rollOnce(sides).result);
+        result = continuation.result;
+        total = result + modifier;
+        isCrit = continuation.isCrit;
+        criticalDice = continuation.criticalDice;
+        diceTypeStr = continuation.breakdown;
+      } else if (statValue === undefined) {
         // Advanced Math/Stat-Based formula parser
         let expression = diceType.replace(/\s+/g, "").toLowerCase();
         let breakdown = diceType;
@@ -667,23 +679,27 @@ export function useCreateRoll() {
             total: rolled.total + statMod,
             breakdown: statMod !== 0 ? `${rolled.desc}+${statMod}` : rolled.desc,
             isCrit: rolled.isCrit,
+            criticalDice: rolled.criticalDice,
           };
         });
         expression = statExpression.expression;
         breakdown = statExpression.breakdown;
         if (statExpression.isCrit) isCrit = true;
+        criticalDice.push(...statExpression.criticalDice);
 
         // C. Resolve every complete dice term, including its count, and evaluate.
         const resolved = resolveDiceExpression(expression, breakdown, rollOnce);
         if (resolved.isCrit) isCrit = true;
+        criticalDice.push(...resolved.criticalDice);
         result = resolved.result;
         total = result + modifier;
         diceTypeStr = resolved.breakdown;
       } else {
-        const { total: rolledSum, desc, isCrit: crit } = rollStatDice(statValue);
+        const { total: rolledSum, desc, isCrit: crit, criticalDice: statCriticals } = rollStatDice(statValue);
         result = rolledSum;
         total = rolledSum + modifier;
         isCrit = crit;
+        criticalDice = statCriticals;
         diceTypeStr = desc;
       }
 
@@ -691,6 +707,7 @@ export function useCreateRoll() {
         characterId: charId,
         ...(familiarId !== undefined ? { familiarId } : {}),
         diceType: formatRollBreakdown(diceTypeStr),
+        criticalDice,
         result,
         modifier,
         total,

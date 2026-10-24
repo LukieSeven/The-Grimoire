@@ -13,13 +13,23 @@ test("unfinished detached forms stay unavailable at every size", () => {
 test("compact designs require sufficient fixed space without changing dimensions", () => {
   assert.equal(unavailableLayout("resources", shape, metrics), undefined);
   assert.ok(unavailableLayout("resources", { ...shape, height: 1 }, metrics));
-  assert.ok(unavailableLayout("resources", shape, { ...metrics, row: 160 }));
+  assert.equal(unavailableLayout("resources", shape, { ...metrics, row: 160 }), undefined, "A shorter page must not hide a supported Resources shape");
   assert.ok(unavailableLayout("combat", { ...shape, height: 1 }, metrics));
   assert.equal(unavailableLayout("dice", shape, metrics), undefined);
   assert.equal(unavailableLayout("history", shape, metrics), undefined);
   assert.ok(unavailableLayout("dice", { ...shape, height: 1 }, metrics));
   assert.equal(unavailableLayout("dice", { ...shape, height: 4 }, metrics), undefined);
   assert.deepEqual(shape, { width: 1, height: 2, column: 1, row: 1 });
+});
+
+test("short stacked previews keep saved Resources sizes available", () => {
+  const short = { ...metrics, width: 598, row: 184, rowGap: 13.6, grid: false };
+  for (const width of [1, 2]) {
+    const saved = { ...shape, width };
+    assert.equal(unavailableLayout("resources", saved, short), undefined);
+    assert.deepEqual(saved, { ...shape, width });
+  }
+  assert.ok(unavailableLayout("resources", { ...shape, height: 1 }, short));
 });
 test("audited compact readers and favorites remain available", () => {
   for (const id of ["passive", "triggers", "stats", "favorites"] as ToolId[]) {

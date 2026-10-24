@@ -15,6 +15,17 @@ test("20D6 rolls twenty independent six-sided dice, not one D20", () => {
   const high = resolveDiceExpression("20d6", "20d6", sides => ({ result: sides, isCrit: true }));
   assert.equal(high.result, 120);
   assert.equal(high.isCrit, true);
+  assert.equal(high.criticalDice.length, 20);
+  assert.ok(high.criticalDice.every(die => die.sides === 6));
+});
+
+test("every critical is retained with its actual die size", () => {
+  const values = [6, 2, 6, 8, 1];
+  const roll = resolveDiceExpression("3d6+2d8", "3d6+2d8", sides => {
+    const result = values.shift()!;
+    return { result, isCrit: result === sides };
+  });
+  assert.deepEqual(roll.criticalDice, [{ sides: 6 }, { sides: 6 }, { sides: 8 }]);
 });
 
 test("multiple mixed-case dice terms retain counts and arithmetic precedence", () => {

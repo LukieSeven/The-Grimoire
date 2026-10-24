@@ -620,6 +620,7 @@ export interface Roll {
   critBonus: number | null;
   rolledAt: string;
   familiarId?: string | number;
+  criticalDice?: import("./critical-continuation").CriticalDie[];
 }
 
 export interface Note {

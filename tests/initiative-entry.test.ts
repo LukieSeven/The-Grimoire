@@ -1,6 +1,38 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { upsertCharacterInitiative } from "../src/lib/initiative-entry.ts";
+import { upsertCharacterInitiative, moveInitiativeWithinTie } from "../src/lib/initiative-entry.ts";
+
+test("manual tie movement swaps only adjacent equal initiatives without changing data", () => {
+  const entries = [
+    { id: "enemy", name: "Enemy", initiative: 20, statuses: [] },
+    { id: "lucas", name: "Lucas", initiative: 17, statuses: ["Prone"] },
+    { id: "pete", name: "Pete", initiative: 17, statuses: [] },
+    { id: "lyth", name: "Lyth", initiative: 17, statuses: [] },
+    { id: "last", name: "Last", initiative: 5, statuses: [] },
+  ];
+  const moved = moveInitiativeWithinTie(entries, "lyth", "up");
+  assert.deepEqual(moved.map(entry => entry.id), ["enemy", "lucas", "lyth", "pete", "last"]);
+  assert.deepEqual(entries.map(entry => entry.id), ["enemy", "lucas", "pete", "lyth", "last"]);
+  assert.equal(moved[1], entries[1]);
+  assert.deepEqual(moveInitiativeWithinTie(moved, "lyth", "down"), entries);
+  assert.equal(moveInitiativeWithinTie(entries, "lucas", "up"), entries);
+  assert.equal(moveInitiativeWithinTie(entries, "lyth", "down"), entries);
+  assert.equal(moveInitiativeWithinTie(entries, "enemy", "up"), entries);
+  assert.equal(moveInitiativeWithinTie(entries, "last", "down"), entries);
+  assert.equal(moveInitiativeWithinTie(entries, "missing", "up"), entries);
+});
+
+test("same-score initiative updates preserve manually chosen tie order and current turn", () => {
+  const entries = [
+    { id: "lyth", name: "Lyth", initiative: 17, statuses: [] },
+    { id: "character:2", name: "Lucas", initiative: 17, statuses: ["Prone"] },
+    { id: "pete", name: "Pete", initiative: 17, statuses: [] },
+  ];
+  const result = upsertCharacterInitiative(entries, 2, 2, "Luke", 17);
+  assert.deepEqual(result.combatants.map(entry => entry.id), entries.map(entry => entry.id));
+  assert.equal(result.turn, 2);
+  assert.deepEqual(result.combatants[1].statuses, ["Prone"]);
+});
 test("initiative adds one character and preserves the current turn after sorting", () => {
   const result = upsertCharacterInitiative([{ id: "enemy", name: "Enemy", initiative: 10, statuses: [] }], 0, 2, "Lucas", 15);
   assert.equal(result.combatants[0].id, "character:2"); assert.equal(result.turn, 1);

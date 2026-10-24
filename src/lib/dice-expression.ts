@@ -1,3 +1,5 @@
+import type { CriticalDie } from "./critical-continuation.ts";
+
 interface DieRoll {
   result: number;
   isCrit: boolean;
@@ -13,7 +15,7 @@ export function resolveDiceExpression(
   expression: string,
   breakdown: string,
   rollDie: (sides: number) => DieRoll,
-): { result: number; breakdown: string; isCrit: boolean } {
+): { result: number; breakdown: string; isCrit: boolean; criticalDice: CriticalDie[] } {
   const terms: DiceTerm[] = [];
   const syntax = expression.replace(/(\d*)d(\d+)/gi, (notation: string, countText: string, sidesText: string, offset: number) => {
     const before = expression[offset - 1] ?? "";
@@ -41,6 +43,7 @@ export function resolveDiceExpression(
   }
 
   let isCrit = false;
+  const criticalDice: CriticalDie[] = [];
   let termIndex = 0;
   const rolledTerms: string[] = [];
   const resolved = expression.replace(/(\d*)d(\d+)/gi, () => {
@@ -51,7 +54,7 @@ export function resolveDiceExpression(
       const rolled = rollDie(sides);
       total += rolled.result;
       rolls.push(rolled.result);
-      if (rolled.isCrit) isCrit = true;
+      if (rolled.isCrit) { isCrit = true; criticalDice.push({ sides }); }
     }
     rolledTerms.push(rolls.length === 1 ? String(total) : `(${rolls.join("+")})`);
     return String(total);
@@ -69,5 +72,5 @@ export function resolveDiceExpression(
 
   let breakdownIndex = 0;
   const resolvedBreakdown = breakdown.replace(/(\d*)\s*d\s*(\d+)/gi, () => rolledTerms[breakdownIndex++]);
-  return { result: Math.floor(result), breakdown: resolvedBreakdown, isCrit };
+  return { result: Math.floor(result), breakdown: resolvedBreakdown, isCrit, criticalDice };
 }

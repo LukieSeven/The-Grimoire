@@ -25,6 +25,14 @@ test("stat-like substrings in unknown identifiers are never replaced", () => {
   assert.equal(resolved.expression, "willpowerful+power2+empower+wilr2");
 });
 
+test("rolled-stat critical dice survive substitution without duplicating cached rolls", () => {
+  const resolved = resolveStatExpression("powr+powr+wilr", "POWr+POWr+WILr", { power: 25, willpower: 8 }, (value, key) => ({
+    total: value, breakdown: String(value), isCrit: true,
+    criticalDice: key === "power" ? [{ sides: 20, target: 20 }, { sides: 6, target: 5 }] : [{ sides: 8, target: 8 }],
+  }));
+  assert.deepEqual(resolved.criticalDice, [{ sides: 20, target: 20 }, { sides: 6, target: 5 }, { sides: 8, target: 8 }]);
+});
+
 test("formula modifiers use the familiar's actual class/rank", () => {
   assert.equal(formulaActorRank({ className: "Bronze" }), "Bronze");
   assert.equal(formulaActorRank({ className: "Silver", rank: "Iron" }), "Silver");

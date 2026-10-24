@@ -1,7 +1,10 @@
+import type { CriticalDie } from "./critical-continuation.ts";
+
 interface StatRoll {
   total: number;
   breakdown: string;
   isCrit: boolean;
+  criticalDice?: CriticalDie[];
 }
 
 const STAT_ALIASES = [
@@ -32,9 +35,10 @@ export function resolveStatExpression(
   breakdown: string,
   stats: Record<string, number>,
   rollStat: (value: number, key: string) => StatRoll,
-): { expression: string; breakdown: string; isCrit: boolean } {
+): { expression: string; breakdown: string; isCrit: boolean; criticalDice: CriticalDie[] } {
   const rolledStats = new Map<string, StatRoll>();
   let isCrit = false;
+  const criticalDice: CriticalDie[] = [];
   const readToken = (token: string): { value: number; rolled?: StatRoll } => {
     const alias = token.toLowerCase();
     const key = STAT_KEYS.get(alias) ?? STAT_KEYS.get(alias.slice(0, -1))!;
@@ -44,6 +48,7 @@ export function resolveStatExpression(
     if (!rolled) {
       rolled = rollStat(value, key);
       rolledStats.set(key, rolled);
+      criticalDice.push(...(rolled.criticalDice ?? []));
       if (rolled.isCrit) isCrit = true;
     }
     return { value: rolled.total, rolled };
@@ -53,5 +58,5 @@ export function resolveStatExpression(
     const { value, rolled } = readToken(token);
     return rolled ? rolled.breakdown : String(value);
   });
-  return { expression: resolved, breakdown: resolvedBreakdown, isCrit };
+  return { expression: resolved, breakdown: resolvedBreakdown, isCrit, criticalDice };
 }
