@@ -2,6 +2,7 @@ import type { Ability, SubAbility, AbilityEffect, Familiar } from "./storage.ts"
 import type { TriggerCondition } from "./ability-components.ts";
 import { bonusesFromSummary, readAbilityBonuses, normalizeBonuses } from "./ability-bonuses.ts";
 import type { AbilityBonuses } from "./ability-bonuses.ts";
+import { legacyModifierNote, linkedRollStats, needsSelectedStat, validateRollFormulaSyntax } from "./roll-rules.ts";
 
 export const DURATION_TYPES = ["Always On", "While Active", "Instant", "Time", "Until Dispelled", "When Triggered", "Until Triggered", "Until Next Turn", "Until Used", "Until Combat Ends", "Until Rest"];
 export const TARGET_TYPES = ["Self", "Ally", "Enemy", "Summon", "Object", "Location"];
@@ -12,6 +13,16 @@ export const RANGED_TARGETING = ["Single Target", "Multiple Targets", "Chain / B
 export const AREA_SHAPES = ["Circle / Sphere", "Cube / Box", "Cylinder / Column", "Ring / Hollow Area"];
 export type CustomChoiceCategory = "durationTypes" | "rangeTypes" | "targets" | "rangedTargeting" | "areaShapes" | "triggers" | "effects" | "effectTypes";
 export const ROLL_PURPOSES = ["Damage", "Healing", "Shielding"];
+export const CHECK_ROLL_PURPOSES = ["Attack", "Check", "Resistance"];
+export const EFFECT_ACTIONS = ["Damage", "Healing", "Temporary resource", "Shielding", "Modifier", "Immunity", "Status"] as const;
+export type RollBonusKind = "attack" | "check" | "resistance";
+export function rollBonusKind(value?: string): RollBonusKind | undefined {
+  const kind = value?.trim().toLowerCase();
+  return kind === "attack" || kind === "check" || kind === "resistance" ? kind : undefined;
+}
+export function resultRollBonusKind(result?: Pick<TargetResult, "rollBonusKind" | "purpose">): RollBonusKind | undefined {
+  return rollBonusKind(result?.rollBonusKind ?? result?.purpose);
+}
 export const COMMON_EFFECTS = ["Stunned", "Prone", "Restrained", "Grappled", "Incapacitated", "Blinded", "Deafened", "Silenced", "Invisible", "Fear", "Bleeding", "Burning", "Poisoned", "Paralyzed", "Petrified", "Unconscious", "Charmed", "Slowed", "Exhausted"];
 export const STACKING_RULES = ["Stack", "Highest Only", "Replace Existing", "Refresh Duration"] as const;
 export const EFFECT_TYPES = ["Buff", "Debuff", "Heal", "Heal over Time", "Damage", "Damage over Time"] as const;
@@ -25,6 +36,10 @@ export interface AbilityOptions {
 export interface RequirementGroup {
   conditions: TriggerCondition[]; match: "all" | "any"; mode: "reference" | "manual" | "automatic";
 }
+type TimingFields = {
+  durationType: string; trigger: RequirementGroup; ending: RequirementGroup; durationTrigger?: RequirementGroup;
+  retainedTiming?: Partial<Record<"activation" | "ending" | "unassigned", RequirementGroup>>;
+};
 export interface TargetResult {
   effects?: { templateId: string; outcome: "always" | "success" | "failed-save" }[];
   effectOutcome?: "always" | "success" | "failed-save";
@@ -34,17 +49,25 @@ export interface TargetResult {
   stacking?: typeof STACKING_RULES[number]; maxStacks?: number;
   bonuses?: AbilityBonuses;
   durationTrigger?: RequirementGroup;
+  retainedTiming?: TimingFields["retainedTiming"];
+  rollBonusKind?: RollBonusKind | "none";
+  rollOnly?: boolean;
+  effectAction?: typeof EFFECT_ACTIONS[number];
   id: string; target: string; name: string; purpose: string; formula: string;
   rules: string; value: string; templateId?: string;
   effectKind?: "Buff" | "Debuff";
   durationType: string; duration: string; lifetime: "source" | "independent";
   trigger: RequirementGroup; ending: RequirementGroup;
 }
+export type AbilityRuleValue = string | number | boolean | null | AbilityRuleValue[] | { [key: string]: AbilityRuleValue };
 export interface AbilityInput {
+  /** Table-reference mechanics; does not automate combat or roll outcomes. */
+  advancedRules?: { [key: string]: AbilityRuleValue };
   rangedTargeting?: string; areaShape?: string;
   areaDimensions?: Partial<Record<"radius" | "innerRadius" | "length" | "width" | "height" | "targetCount" | "jumpRange", string>>;
   areaBehavior?: { persistent?: boolean; movable?: boolean; followsTarget?: boolean };
   durationTrigger?: RequirementGroup;
+  retainedTiming?: TimingFields["retainedTiming"];
   id: string; name: string; source: string; targets: string[];
   manaCost?: number; manaPerTurn?: number; timeCost?: number; reaction: boolean;
   durationType: string; duration: string; rangeType: string; range: string;
@@ -83,6 +106,22 @@ export const emptyRequirements = (): RequirementGroup => ({ conditions: [], matc
 export function durationTriggerGroups(value: Pick<AbilityInput, "durationType" | "durationTrigger" | "trigger" | "ending">, effectiveType = value.durationType): { activation: RequirementGroup; ending: RequirementGroup } {
   if (!value.durationTrigger) return { activation: value.trigger, ending: value.ending };
   return { activation: effectiveType === "When Triggered" ? value.durationTrigger : emptyRequirements(), ending: effectiveType === "Until Triggered" ? value.durationTrigger : emptyRequirements() };
+}
+/** Project legacy timing for editing without activating previously ignored conditions. */
+export function timingForEditor(value: TimingFields, effectiveType = value.durationType) {
+  const active = durationTriggerGroups(value, effectiveType);
+  const retained = { ...value.retainedTiming };
+  if (value.durationTrigger) {
+    for (const side of ["activation", "ending"] as const) {
+      const old = side === "activation" ? value.trigger : value.ending;
+      if (old.conditions.length && JSON.stringify(old) !== JSON.stringify(active[side])) retained[side] = old;
+    }
+    if (!showsTriggerInput(effectiveType) && value.durationTrigger.conditions.length) retained.unassigned = value.durationTrigger;
+  }
+  return { ...active, retained };
+}
+export function editableTiming(activation: RequirementGroup, ending: RequirementGroup, retainedTiming: TimingFields["retainedTiming"]) {
+  return { trigger: activation, ending, durationTrigger: undefined, retainedTiming: Object.values(retainedTiming ?? {}).some(group => group?.conditions.length) ? retainedTiming : undefined };
 }
 export function blankAbilityInput(): AbilityInput {
   return { id: crypto.randomUUID(), name: "", source: "", targets: [], reaction: false,
@@ -133,7 +172,10 @@ export function durationLabel(type: string, value: string): string {
 }
 function existingRange(value: string): Pick<AbilityInput, "rangeType" | "range"> {
   const distance = value.match(/^(\d+(?:\.\d+)?)\s*(?:ft|feet)\s*(.*)$/i);
-  if (distance) return { rangeType: distance[2].trim() || "Ranged", range: distance[1] };
+  if (distance) {
+    const type = distance[2].trim();
+    return { rangeType: /^(aura|radius)$/i.test(type) ? "Aura" : type || "Ranged", range: distance[1] };
+  }
   return { rangeType: value.trim() || "Self", range: "" };
 }
 function existingBonuses(value: Partial<Ability | SubAbility | AbilityEffect>): string {
@@ -157,9 +199,13 @@ export function mergeOptions(...sets: (AbilityOptions | undefined)[]): AbilityOp
 export function duplicateInput(input: AbilityInput): AbilityInput {
   const copy = structuredClone(input);
   const fresh = (group: RequirementGroup) => ({ ...group, conditions: group.conditions.map(condition => ({ ...condition, id: crypto.randomUUID() })) });
+  const freshRetained = (timing: TimingFields["retainedTiming"]) => timing && {
+    activation: timing.activation && fresh(timing.activation), ending: timing.ending && fresh(timing.ending), unassigned: timing.unassigned && fresh(timing.unassigned),
+  };
   copy.id = crypto.randomUUID(); copy.trigger = fresh(copy.trigger); copy.ending = fresh(copy.ending);
   if (copy.durationTrigger) copy.durationTrigger = fresh(copy.durationTrigger);
-  copy.results = copy.results.map(result => ({ ...result, id: crypto.randomUUID(), trigger: fresh(result.trigger), ending: fresh(result.ending), durationTrigger: result.durationTrigger ? fresh(result.durationTrigger) : undefined }));
+  if (copy.retainedTiming) copy.retainedTiming = freshRetained(copy.retainedTiming);
+  copy.results = copy.results.map(result => ({ ...result, id: crypto.randomUUID(), trigger: fresh(result.trigger), ending: fresh(result.ending), durationTrigger: result.durationTrigger ? fresh(result.durationTrigger) : undefined, retainedTiming: freshRetained(result.retainedTiming) }));
   copy.upgrades = copy.upgrades.map(upgrade => ({ ...upgrade, id: crypto.randomUUID() }));
   copy.subAbilities = copy.subAbilities.map(duplicateInput);
   if (copy.summon) copy.summon.abilities = copy.summon.abilities.map(duplicateInput);
@@ -168,9 +214,15 @@ export function duplicateInput(input: AbilityInput): AbilityInput {
 /** Explicit editor conversion only. Never rewrites an imported record until Save. */
 export function inputFromAbility(ability: Ability, source: string): AbilityInput {
   if (ability.definition) return normalizeAbilityInput(ability.definition);
+  const legacyRoll = (target: string, formula: string, type?: string): TargetResult => {
+    const purpose = ROLL_PURPOSES.find(value => value.toLowerCase() === type?.trim().toLowerCase()) ?? "";
+    const bonusKind = rollBonusKind(type);
+    return { ...blankResult(target), formula, purpose, ...(bonusKind ? { rollBonusKind: bonusKind, rollOnly: true } : {}) };
+  };
+  const linkedStats = linkedRollStats([...(ability.linkedStats ?? []), ...(ability.linkedStat ? [ability.linkedStat] : []), ...(ability.primaryStat ? [ability.primaryStat] : [])]);
   const root = { ...blankAbilityInput(), id: `ability:${ability.id}`, name: ability.name, source,
-    description: ability.description, linkedStats: ability.linkedStats ?? [], manaCost: ability.cost || undefined,
-    cooldown: ability.cooldown || undefined, ...existingRange(ability.range ?? ""), durationType: ability.isInnatePassive ? "Always On" : "Instant",
+    description: ability.description ?? "", linkedStats, manaCost: ability.cost || undefined,
+    cooldown: ability.cooldown || undefined, ...existingRange(ability.range ?? ""), durationType: ability.isInnatePassive || /^passive(?:\s+aura)?$/i.test(ability.speed?.trim() ?? "") ? "Always On" : "Instant",
     uses: ability.maxCharges == null ? "" : String(ability.maxCharges), recharge: ability.usageType ?? "" };
   const time = ability.speed?.match(/^(\d+(?:\.\d+)?)\s*(?:s|seconds?)$/i);
   if (time) root.timeCost = Number(time[1]);
@@ -196,7 +248,7 @@ export function inputFromAbility(ability: Ability, source: string): AbilityInput
   };
   if (ability.components?.length) {
     const nodes = ability.components.map(fromComponent);
-    Object.assign(root, nodes[0], { name: ability.name, description: ability.description });
+    Object.assign(root, nodes[0], { name: ability.name, description: ability.description ?? "" });
     root.subAbilities = nodes.slice(1);
   } else {
     for (const effect of ability.abilityEffects ?? []) for (const target of effect.tracking?.targets ?? ["self"]) {
@@ -205,11 +257,15 @@ export function inputFromAbility(ability: Ability, source: string): AbilityInput
       root.results.push({ ...blankResult(label), id: `${effect.id}:${label}`, name: effect.name, rules: effect.description ?? "", bonuses: readAbilityBonuses(effect), formula: effect.rollFormula ?? "", duration: effect.duration ?? "", lifetime: effect.tracking?.permanent ? "source" : "independent" });
       if (effect.tracking?.radius !== undefined) { root.rangeType = "Aura"; root.range = String(effect.tracking.radius); }
     }
-    if (ability.rollFormula) { if (!root.targets.length) root.targets.push("Enemy"); root.results.push({ ...blankResult(root.targets[0]), formula: ability.rollFormula }); }
+    const scoped = legacyModifierNote(ability.rollFormula);
+    if (scoped) {
+      if (!root.targets.includes("Self")) root.targets.push("Self");
+      root.results.push({ ...blankResult("Self"), name: scoped.scope, bonuses: { bonusSkillCheck: scoped.amount, checkSkills: [scoped.scope] } });
+    } else if (ability.rollFormula) { if (!root.targets.length) root.targets.push("Enemy"); root.results.push(legacyRoll(root.targets[0], ability.rollFormula, ability.type)); }
   }
     root.subAbilities.push(...(ability.subAbilities ?? []).filter(sub => !root.subAbilities.some(node => node.id === sub.id)).map(sub => {
       const node = { ...blankAbilityInput(), id: sub.id, name: sub.name, source, description: sub.description ?? "", manaCost: sub.cost || undefined, cooldown: sub.cooldown || undefined, ...existingRange(sub.range ?? ""), linkedStats: sub.linkedStats ?? [], targets: [] as string[], results: [] as TargetResult[] };
-      if (sub.rollFormula) { node.targets.push("Enemy"); node.results.push({ ...blankResult("Enemy"), formula: sub.rollFormula }); }
+      if (sub.rollFormula) { node.targets.push("Enemy"); node.results.push(legacyRoll("Enemy", sub.rollFormula, sub.type)); }
       const bonuses = existingBonuses(sub);
       if (bonuses) { node.targets.push("Self"); node.results.push({ ...blankResult("Self"), rules: "", bonuses: readAbilityBonuses(sub) }); }
       const subTime = sub.speed?.match(/^(\d+(?:\.\d+)?)\s*(?:s|seconds?)$/i);
@@ -232,6 +288,28 @@ export function inputFromAbility(ability: Ability, source: string): AbilityInput
   }
   return root;
 }
+export function validateAbilityRolls(input: AbilityInput, previous?: AbilityInput): string | undefined {
+  const saved = new Map(previous ? flattenInputs(previous).map(node => [node.id, node]) : []);
+  for (const node of flattenInputs(input)) for (const result of node.results) {
+    if (!node.targets.includes(result.target)) continue;
+    const savedNode = saved.get(node.id);
+    const savedResult = savedNode?.results.find(entry => entry.id === result.id);
+    if (savedResult && savedNode?.targets.includes(result.target) && savedResult.target === result.target &&
+        savedResult.formula === result.formula && savedResult.rollOnly === result.rollOnly &&
+        JSON.stringify(savedNode.linkedStats) === JSON.stringify(node.linkedStats)) continue;
+    if (result.rollOnly && !result.formula.trim()) return `${node.name || "Ability"} · ${result.target}: enter a roll formula or remove the standalone roll.`;
+    try {
+      if (!result.formula.trim()) continue;
+      validateRollFormulaSyntax(result.formula);
+      if (needsSelectedStat(result.formula) && !linkedRollStats(node.linkedStats).length) {
+        return `${node.name || "Ability"}: link an attribute before using STAT, STATr, or STATm.`;
+      }
+    } catch (error) {
+      return `${node.name || "Ability"} · ${result.target}: ${error instanceof Error ? error.message : "Invalid roll formula."}`;
+    }
+  }
+}
+
 export function validateAbilityInput(input: AbilityInput): string | undefined {
   for (const node of flattenInputs(input)) {
     if (!node.name.trim()) return "Name the ability and each Sub-Ability.";

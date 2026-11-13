@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Redirect, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as ActionToaster } from "@/components/ui/sonner";
@@ -66,6 +66,7 @@ function Router() {
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/grimoire" component={Dashboard} />
+          {import.meta.env.DEV && <Route path="/characters/:id/ability-editor-preview">{({ id }) => <Redirect to={`/characters/${encodeURIComponent(id)}?ability-editor=preview`} replace />}</Route>}
           <Route path="/characters/:id" component={CharacterSheet} />
           <Route component={NotFound} />
         </Switch>

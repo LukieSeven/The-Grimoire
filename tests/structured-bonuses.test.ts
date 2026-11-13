@@ -129,3 +129,31 @@ test("the actual character export and import retain structured fields and activa
     if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument); else Reflect.deleteProperty(globalThis, "document");
   }
 });
+
+test("character export preserves blank strikes while legacy files keep their default", async () => {
+  const owner = storage.createCharacter({ ...character, name: "Test-only weapon roundtrip" });
+  const gear = { characterId: owner.id, description: "", equipped: false, assignedToQuickRolls: false, dtBonus: 0, statModifiers: {} };
+  storage.addEquipment({ ...gear, name: "Already blank", diceType: "", modifier: "" });
+  storage.addEquipment({ ...gear, name: "Older blank", modifier: "" });
+  storage.addEquipment({ ...gear, name: "Saved formula", diceType: "2d6 + POWm", modifier: 0 });
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  const createURL = URL.createObjectURL; const revokeURL = URL.revokeObjectURL;
+  let blob: Blob | undefined;
+  try {
+    Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => ({ click() {} }), body: { appendChild() {}, removeChild() {} } } });
+    URL.createObjectURL = value => { blob = value as Blob; return "blob:weapon-roundtrip"; };
+    URL.revokeObjectURL = () => {};
+    exportCharacterJSON(owner.id);
+    assert.ok(blob);
+    const imported = importCharacterJSON(await blob.text());
+    assert.deepEqual(storage.getEquipment(imported.id).map(item => [item.name, item.diceType, item.modifier]), [
+      ["Already blank", "", ""], ["Older blank", "", ""], ["Saved formula", "2d6 + POWm", 0],
+    ]);
+    assert.equal(storage.getEquipment(owner.id)[1].diceType, undefined, "export never changes local records");
+    const legacy = importCharacterJSON(JSON.stringify({ character: { name: "Test-only legacy weapon" }, equipment: [{ name: "Legacy sword" }] }));
+    assert.equal(storage.getEquipment(legacy.id)[0].diceType, "d8", "legacy omissions still get the established default");
+  } finally {
+    URL.createObjectURL = createURL; URL.revokeObjectURL = revokeURL;
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument); else Reflect.deleteProperty(globalThis, "document");
+  }
+});

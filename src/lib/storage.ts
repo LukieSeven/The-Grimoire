@@ -19,7 +19,12 @@ import type { AbilityInput, AbilityOptions } from "./ability-input.ts";
 import { resolveTrackerEffects, isEffectApplied } from "./tracker.ts";
 import { BONUS_FIELDS, bonusesFromSummary } from "./ability-bonuses.ts";
 import { getFamiliarAdjusted } from "./familiar-values.ts";
+import { getDiceLabel, getModifierForStat } from "./roll-rules.ts";
+import { mapDiceTerms } from "./dice-expression.ts";
+import { canonicalStatKey } from "./stat-expression.ts";
 import type { EffectTracking, EffectApplication, EffectChange, TrackerEncounter } from "./tracker-types.ts";
+
+export { getDiceLabel, getModifierForStat } from "./roll-rules.ts";
 
 export interface FavoriteSlot {
   type: "weapon" | "item" | "ability" | "ability-result" | "sub-ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
@@ -351,66 +356,45 @@ export function isAbilityTriggerActive(
   }
 }
 
-export function buildFormulaVars(vars: Record<string, any> = {}): Record<string, number> {
-  const getVal = (fullKey: string, shortKey: string) => {
-    if (typeof vars[fullKey] === "number") return vars[fullKey] as number;
-    if (typeof vars[shortKey] === "number") return vars[shortKey] as number;
-    if (typeof vars[fullKey] === "string" && !isNaN(Number(vars[fullKey]))) return Number(vars[fullKey]);
-    if (typeof vars[shortKey] === "string" && !isNaN(Number(vars[shortKey]))) return Number(vars[shortKey]);
-    return 0;
-  };
+const STAT_FORMULA_ALIASES = [
+  ["power", "pow", "bonusPower"], ["vitality", "vit", "bonusVitality"],
+  ["spirit", "spi", "bonusSpirit"], ["agility", "agi", "bonusAgility"],
+  ["endurance", "end", "bonusEndurance"], ["precision", "pre", "bonusPrecision"],
+  ["willpower", "wil", "bonusWillpower"], ["charisma", "cha", "bonusCharisma"],
+] as const;
+const STATIC_STAT_TOKENS = new Set(STAT_FORMULA_ALIASES.flatMap(([full, short]) =>
+  [full, short, `${full}r`, `${short}r`, `${full}m`, `${short}m`]));
 
-  const power = getVal("power", "pow");
-  const vitality = getVal("vitality", "vit");
-  const spirit = getVal("spirit", "spi");
-  const agility = getVal("agility", "agi");
-  const endurance = getVal("endurance", "end");
-  const precision = getVal("precision", "pre");
-  const willpower = getVal("willpower", "wil");
-  const charisma = getVal("charisma", "cha");
+const finiteNumber = (value: unknown): number | undefined => {
+  const number = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) ? number : undefined;
+};
 
-  const rankStr = typeof vars.rank === "string" ? vars.rank : "Iron";
-
-  const numVars: Record<string, number> = {};
-  for (const [k, v] of Object.entries(vars)) {
-    if (typeof v === "number") numVars[k] = v;
+export function buildFormulaVars(vars: Record<string, unknown> = {}): Record<string, number> {
+  const input = Object.fromEntries(Object.entries(vars).map(([key, value]) => [key.toLowerCase(), value]));
+  const rank = typeof input.rank === "string" ? input.rank : undefined;
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === "number" && Number.isFinite(value)) result[key] = value;
   }
-
-  return {
-    ...numVars,
-    power,
-    pow: power,
-    vitality,
-    vit: vitality,
-    spirit,
-    spi: spirit,
-    agility,
-    agi: agility,
-    endurance,
-    end: endurance,
-    precision,
-    pre: precision,
-    willpower,
-    wil: willpower,
-    charisma,
-    cha: charisma,
-    powr: getModifierForStat(power, rankStr),
-    vitr: getModifierForStat(vitality, rankStr),
-    spir: getModifierForStat(spirit, rankStr),
-    agir: getModifierForStat(agility, rankStr),
-    endr: getModifierForStat(endurance, rankStr),
-    prer: getModifierForStat(precision, rankStr),
-    wilr: getModifierForStat(willpower, rankStr),
-    char: getModifierForStat(charisma, rankStr),
-  };
+  for (const [full, short] of STAT_FORMULA_ALIASES) {
+    const score = finiteNumber(input[full]) ?? finiteNumber(input[short]) ?? 0;
+    result[full] = result[short] = result[`${full}r`] = result[`${short}r`] = score;
+    const fullModifier = finiteNumber(input[`${full}m`]);
+    const shortModifier = finiteNumber(input[`${short}m`]);
+    const modifier = getModifierForStat(score, rank);
+    result[`${full}m`] = fullModifier ?? shortModifier ?? modifier;
+    result[`${short}m`] = shortModifier ?? fullModifier ?? modifier;
+  }
+  return result;
 }
 
 export function parseFormulaOrNum(val: number | string | undefined | null, vars: Record<string, any> = {}): number {
   if (val === undefined || val === null || val === "") return 0;
-  if (typeof val === "number") return val;
+  if (typeof val === "number") return Number.isFinite(val) ? val : 0;
   const str = String(val).trim();
   if (!str) return 0;
-  if (/^-?\d+$/.test(str)) return parseInt(str, 10);
+  if (/^-?\d+$/.test(str)) return finiteNumber(str) ?? 0;
   return evaluateFormula(str, buildFormulaVars(vars));
 }
 
@@ -451,7 +435,7 @@ export interface ActiveModifierBadge {
 
 export function getAbilityActiveModifierBadges(
   ab: Partial<Ability> | Partial<SubAbility> | Partial<FamiliarAbility>,
-  vars: Record<string, number> = {}
+  vars: Record<string, unknown> = {}
 ): ActiveModifierBadge[] {
   const badges: ActiveModifierBadge[] = [];
 
@@ -663,62 +647,62 @@ export interface SessionRecap {
 
 // ── Math Formula Parser ───────────────────────────────────
 
-export function evaluateFormula(formula: string, variables: Record<string, number>): number {
+/** Report invalid static formulas separately from a legitimate result of zero. */
+export function tryEvaluateFormula(formula: string, variables: Record<string, number>, allowLegacyDashLabel = false): number | undefined {
   try {
     let expression = formula.toLowerCase();
 
-    // 1. Strip leading label assignment if present (e.g. "Health - ...", "Health = ...", "Mana - ...", "HP = ...")
-    expression = expression.replace(/^[a-z_][a-z0-9_\s]*[=-]\s*/i, "");
+    const allVars = new Map<string, number>([["base", 1], ...Object.entries(variables).map(([key, value]) => [key.toLowerCase(), value] as const)]);
+    // Legacy labels still work, but a known token followed by '-' is subtraction.
+    const label = expression.match(/^\s*([a-z_][a-z0-9_\s]*?)([=-])\s*/);
+    if (label) {
+      const name = label[1].trim();
+      if (label[2] === "=" || allowLegacyDashLabel && !STATIC_STAT_TOKENS.has(name) && !allVars.has(name) && !(name.endsWith("r") && allVars.has(name.slice(0, -1))) && !/^d\d+$/.test(name)) {
+        expression = expression.slice(label[0].length);
+      }
+    }
 
     // 2. Replace embedded (base = X) or base = X with X
     expression = expression.replace(/\(\s*base\s*=\s*([0-9.]+)\s*\)/gi, "$1");
     expression = expression.replace(/\bbase\s*=\s*([0-9.]+)/gi, "$1");
 
-    // 3. Replace multiplication symbols '×'
-    expression = expression.replace(/×/g, "*");
+    // Handle unspaced shorthand such as WILx2 without changing an x inside a variable name.
+    expression = expression.replace(/×/g, "*").replace(
+      /\b([a-z_][a-z0-9_]*?)x(?=\d|\()/g,
+      (whole, left: string) => STATIC_STAT_TOKENS.has(left) || allVars.has(left) ? `${left}*` : whole,
+    );
 
-    // Default variables include base: 1
-    const allVars: Record<string, number> = { base: 1, ...variables };
-
-    // Substitute variables, sorting descending by length to prevent partial matches
-    const sortedKeys = Object.keys(allVars).sort((a, b) => b.length - a.length);
-
-    // First substitute rolled suffix versions (e.g. wilr -> 12) with base stat value using word boundary RegExp to avoid partial matches
-    for (const key of sortedKeys) {
-      const val = allVars[key];
-      const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const regex = new RegExp('\\b' + escapedKey + 'r\\b', 'g');
-      expression = expression.replace(regex, String(val));
-    }
-
-    // Then substitute standard base stat keys (e.g. wil -> 12) using word boundary RegExp
-    for (const key of sortedKeys) {
-      const val = allVars[key];
-      const escapedKey = key.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      const regex = new RegExp('\\b' + escapedKey + '\\b', 'g');
-      expression = expression.replace(regex, String(val));
-    }
+    // Static r aliases retain their historical score meaning; m is a modifier.
+    // Substitute one complete token at a time so explicit modifiers stay intact.
+    expression = expression.replace(/\b[a-z_][a-z0-9_]*\b/g, token => {
+      const score = token.endsWith("r") ? allVars.get(token.slice(0, -1)) : undefined;
+      const value = score ?? allVars.get(token);
+      return value !== undefined && Number.isFinite(value) ? `(${value})` : token;
+    });
 
     // Replace residual standalone 'x' (case-insensitive) used as multiplication operator (e.g. "10 x 5")
-    expression = expression.replace(/([0-9\)])\s*x\s*([0-9\(])/gi, "$1*$2");
+    expression = expression.replace(/([0-9)])\s*x\s*(?=[0-9(]|d\d)/gi, "$1*");
 
     // Strip spaces now that variables replacement is done
     expression = expression.replace(/\s+/g, "");
 
-    // 4. For static pool/recalculation formulas, replace standard dice (e.g. d6, d8) with their maximum value
-    expression = expression.replace(/d(\d+)/g, "$1");
+    // Static formulas use the maximum of the entire term: 2d6 is 2 × 6.
+    expression = mapDiceTerms(expression, ({ count, sides }) => `(${count}*${sides})`);
 
     // Security: Only allow mathematical operators, parentheses, digits, and decimals
     if (!/^[0-9+\-*/().]+$/.test(expression)) {
-      return 0;
+      return undefined;
     }
 
     const result = new Function(`return (${expression})`)();
-    return typeof result === "number" && !isNaN(result) ? Math.floor(result) : 0;
-  } catch (err) {
-    console.error("Formula parsing error:", formula, err);
-    return 0;
+    return typeof result === "number" && Number.isFinite(result) ? Math.floor(result) : undefined;
+  } catch {
+    return undefined;
   }
+}
+
+export function evaluateFormula(formula: string, variables: Record<string, number>): number {
+  return tryEvaluateFormula(formula, variables, true) ?? 0;
 }
 
 // ── Safe Storage Wrapper ───────────────────────────────────
@@ -787,16 +771,6 @@ const KEYS = {
 
 // ── Computed Character Helper ─────────────────────────────
 
-export function getModifierForStat(val: number, rank: string = "Iron"): number {
-  const r = (rank || "Iron").trim().toLowerCase();
-  if (r === "bronze") return Math.floor(val / 2);
-  if (r === "silver") return val;
-  if (r === "gold") return val * 2;
-  if (r === "diamond") return val * 3;
-  // Default to Iron (3:1 ratio)
-  return Math.floor(val / 3);
-}
-
 export function getAdjustedStats(char: Character, equipment: Equipment[], abilities: Ability[] = []): ReturnType<typeof calculateAdjustedStats> {
   let result = calculateAdjustedStats(char, equipment, abilities);
   const seen = new Set<string>();
@@ -851,49 +825,27 @@ function calculateAdjustedStats(char: Character, equipment: Equipment[], abiliti
     charisma: char.charisma,
   };
 
-  // Add equipment modifiers
+  // Equipment formulas read the unmodified scores, independent of equip order.
+  const baseVars = buildFormulaVars({ ...stats, rank: char.rank });
   for (const item of equippedList) {
     if (item.statModifiers) {
       for (const [stat, bonus] of Object.entries(item.statModifiers)) {
         const lowerStat = stat.toLowerCase();
         if (lowerStat in stats) {
-          stats[lowerStat] += parseFormulaOrNum(bonus, {});
+          stats[lowerStat] += parseFormulaOrNum(bonus, baseVars);
         }
       }
     }
   }
 
   // Calculate equipped armor DT bonus
-  const armorDtBonus = equippedList.reduce((sum, item) => sum + parseFormulaOrNum(item.dtBonus, {}), 0);
+  const armorDtBonus = equippedList.reduce((sum, item) => sum + parseFormulaOrNum(item.dtBonus, baseVars), 0);
 
   // Helper to build formula evaluation variables map
   const buildVars = (sMap: Record<string, number>) => ({
-    power: sMap.power || 0,
-    pow: sMap.power || 0,
-    vitality: sMap.vitality || 0,
-    vit: sMap.vitality || 0,
-    spirit: sMap.spirit || 0,
-    spi: sMap.spirit || 0,
-    agility: sMap.agility || 0,
-    agi: sMap.agility || 0,
-    endurance: sMap.endurance || 0,
-    end: sMap.endurance || 0,
-    precision: sMap.precision || 0,
-    pre: sMap.precision || 0,
-    willpower: sMap.willpower || 0,
-    wil: sMap.willpower || 0,
-    charisma: sMap.charisma || 0,
-    cha: sMap.charisma || 0,
-    powr: getModifierForStat(sMap.power || 0, char.rank),
-    vitr: getModifierForStat(sMap.vitality || 0, char.rank),
-    spir: getModifierForStat(sMap.spirit || 0, char.rank),
-    agir: getModifierForStat(sMap.agility || 0, char.rank),
-    endr: getModifierForStat(sMap.endurance || 0, char.rank),
-    prer: getModifierForStat(sMap.precision || 0, char.rank),
-    wilr: getModifierForStat(sMap.willpower || 0, char.rank),
-    char: getModifierForStat(sMap.charisma || 0, char.rank),
+    ...buildFormulaVars({ ...sMap, rank: char.rank }),
     base: 1,
-    dtbonus: parseFormulaOrNum(char.dtBonus, sMap) + armorDtBonus,
+    dtbonus: parseFormulaOrNum(char.dtBonus, { ...sMap, rank: char.rank }) + armorDtBonus,
   });
 
   // Add active ability, sub-ability, and active trigger stat bonuses
@@ -901,13 +853,25 @@ function calculateAdjustedStats(char: Character, equipment: Equipment[], abiliti
     maxHp: triggerMaximums?.maxHp ?? (char.hpFormula ? evaluateFormula(char.hpFormula, buildVars(stats)) : Number.NaN),
     maxMana: triggerMaximums?.maxMana ?? (char.manaFormula ? evaluateFormula(char.manaFormula, buildVars(stats)) : Number.NaN),
     maxDt: triggerMaximums?.maxDt ?? (char.dtFormula ? evaluateFormula(char.dtFormula, buildVars(stats)) : Number.NaN) };
+  const legacyAttributeVars = buildVars(stats);
+  for (const ability of abilities) {
+    if (ability.definition || ability.active !== true) continue;
+    const triggers = (ability.triggers ?? []).filter(trigger => isAbilityTriggerActive(trigger, structuredContext));
+    for (const [stat, , key] of STAT_FORMULA_ALIASES) {
+      let bonus = parseFormulaOrNum(ability[key], legacyAttributeVars);
+      for (const sub of ability.subAbilities ?? []) bonus += parseFormulaOrNum(sub[key], legacyAttributeVars);
+      for (const trigger of triggers) {
+        const value = trigger[key];
+        if (value === undefined || value === "") continue;
+        const amount = parseFormulaOrNum(value, legacyAttributeVars);
+        bonus = trigger.triggerAction === "update_attached" ? amount : bonus + amount;
+      }
+      stats[stat] += bonus;
+    }
+  }
   const selectedStructured = selectStackedEffects(resolveTrackerEffects(abilities.filter(ability => ability.definition), char.rank, stats, structuredContext, char.triggerConfirmations ?? {}, char.familiars).filter(entry => !entry.familiar && entry.result?.target === "Self"), char.effectApplications ?? [], value => parseFormulaOrNum(value, buildVars(stats)));
   const activeAbilities = abilities.flatMap(ability => {
     if (!ability.definition) return ability.active === true ? [ability] : [];
-    const context = { hp: char.currentHp, mana: char.currentMana, dt: char.currentDt,
-      maxHp: triggerMaximums?.maxHp ?? (char.hpFormula ? evaluateFormula(char.hpFormula, buildVars(stats)) : Number.NaN),
-      maxMana: triggerMaximums?.maxMana ?? (char.manaFormula ? evaluateFormula(char.manaFormula, buildVars(stats)) : Number.NaN),
-      maxDt: triggerMaximums?.maxDt ?? (char.dtFormula ? evaluateFormula(char.dtFormula, buildVars(stats)) : Number.NaN) };
     return selectedStructured.filter(entry => entry.ability.id === ability.id)
       .filter(entry => !entry.familiar && entry.result?.target === "Self" && isEffectApplied(entry, "self", char.effectApplications ?? []))
       .flatMap(entry => {
@@ -925,9 +889,8 @@ function calculateAdjustedStats(char: Character, equipment: Equipment[], abiliti
   // New structured Self modifiers use the same activation records as the trackers.
   const attributeVars = buildVars(stats);
   for (const ability of activeAbilities.filter(ability => abilities.some(original => original.id === ability.id && original.definition))) {
-    for (const stat of Object.keys(stats)) {
-      const key = `bonus${stat[0].toUpperCase()}${stat.slice(1)}` as keyof Ability;
-      stats[stat] += parseFormulaOrNum(ability[key] as number | string | undefined, attributeVars);
+    for (const [stat, , key] of STAT_FORMULA_ALIASES) {
+      stats[stat] += parseFormulaOrNum(ability[key], attributeVars);
     }
   }
 
@@ -1107,24 +1070,6 @@ function calculateAdjustedStats(char: Character, equipment: Equipment[], abiliti
     abilityDtBonus: dtAddBonus + dtBuffBonus,
     abilityInitiativeBonus: abilityInitiativeBonus + equipmentInitiativeBonus,
   };
-}
-
-function dieForValue(v: number): number {
-  if (v <= 4) return 4;
-  if (v <= 6) return 6;
-  if (v <= 8) return 8;
-  if (v <= 10) return 10;
-  if (v <= 12) return 12;
-  return 20;
-}
-
-function getStatDiceSizes(stat: number): number[] {
-  if (stat <= 20) return [dieForValue(stat)];
-  return [20, ...getStatDiceSizes(stat - 20)];
-}
-
-export function getDiceLabel(stat: number): string {
-  return getStatDiceSizes(stat).map(d => `d${d}`).join("+");
 }
 
 // ── CRUD Methods ──────────────────────────────────────────
@@ -1942,7 +1887,9 @@ export function exportCharacterJSON(charId: number): void {
 
   const data = {
     character: characterForExport(char),
-    equipment: storage.getEquipment(charId),
+    // Older editors stored a deliberately blank strike as an omitted field in local storage.
+    // Preserve its current behavior in new exports without changing defaults for legacy imports.
+    equipment: storage.getEquipment(charId).map(item => item.diceType === undefined ? { ...item, diceType: "" } : item),
     currencies: storage.getCurrencies(charId),
     inventory: storage.getInventory(charId),
     essences: storage.getEssences(charId),
@@ -2426,47 +2373,15 @@ export function getRankForStatValue(val: number): { rank: string; subLevel: numb
 }
 
 export function getAbilityHighestRank(ability: Ability, finalStats: Record<string, number>): { rank: string; subLevel: number; label: string; index: number } {
+  return getRankForStatValue(getHighestStatValueForAbility(ability, finalStats).statVal);
+}
+
+export function getHighestStatValueForAbility(ability: Ability, finalStats: Record<string, number>): { statKey: string; statVal: number } {
   const statsToCheck: string[] = [];
   if (ability.primaryStat && ability.primaryStat.trim()) {
     statsToCheck.push(ability.primaryStat.trim());
   }
   if (ability.linkedStats && Array.isArray(ability.linkedStats)) {
-    statsToCheck.push(...ability.linkedStats);
-  } else if (ability.linkedStat) {
-    statsToCheck.push(ability.linkedStat);
-  }
-
-  if (statsToCheck.length === 0) {
-    return { rank: "Iron", subLevel: 1, label: "Iron 1", index: 0 };
-  }
-
-  let highest = { rank: "Iron", subLevel: 1, label: "Iron 1", index: 0 };
-
-  for (const s of statsToCheck) {
-    const normKey = s.toLowerCase();
-    let fullKey = normKey;
-    if (normKey === "pow") fullKey = "power";
-    if (normKey === "vit") fullKey = "vitality";
-    if (normKey === "spi") fullKey = "spirit";
-    if (normKey === "agi") fullKey = "agility";
-    if (normKey === "end") fullKey = "endurance";
-    if (normKey === "pre") fullKey = "precision";
-    if (normKey === "wil") fullKey = "willpower";
-    if (normKey === "cha") fullKey = "charisma";
-
-    const statVal = finalStats[fullKey] ?? finalStats[normKey] ?? 0;
-    const currentRankObj = getRankForStatValue(statVal);
-    if (currentRankObj.index > highest.index) {
-      highest = currentRankObj;
-    }
-  }
-
-  return highest;
-}
-
-export function getHighestStatValueForAbility(ability: Ability, finalStats: Record<string, number>): { statKey: string; statVal: number } {
-  const statsToCheck: string[] = [];
-  if (ability.linkedStats && Array.isArray(ability.linkedStats) && ability.linkedStats.length > 0) {
     statsToCheck.push(...ability.linkedStats);
   } else if (ability.linkedStat) {
     statsToCheck.push(ability.linkedStat);
@@ -2480,16 +2395,8 @@ export function getHighestStatValueForAbility(ability: Ability, finalStats: Reco
   let maxVal = -1;
 
   for (const s of statsToCheck) {
-    const normKey = s.toLowerCase();
-    let fullKey = normKey;
-    if (normKey === "pow") fullKey = "power";
-    if (normKey === "vit") fullKey = "vitality";
-    if (normKey === "spi") fullKey = "spirit";
-    if (normKey === "agi") fullKey = "agility";
-    if (normKey === "end") fullKey = "endurance";
-    if (normKey === "pre") fullKey = "precision";
-    if (normKey === "wil") fullKey = "willpower";
-    if (normKey === "cha") fullKey = "charisma";
+    const normKey = s.trim().toLowerCase();
+    const fullKey = canonicalStatKey(normKey) ?? normKey;
 
     const v = finalStats[fullKey] ?? finalStats[normKey] ?? 0;
     if (v > maxVal) {

@@ -236,6 +236,7 @@ export function EditCharacterDialog({ character }: Props) {
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Initiative Formula</label>
                 <Input value={initiativeFormula} onChange={e => setInitiativeFormula(e.target.value)} required placeholder="e.g. Agility" className="bg-background font-mono text-xs" />
+                <p className="mt-1 text-[10px] text-muted-foreground">Agility uses the standard AGI check. A custom formula such as AGIr + 2 replaces that roll; initiative bonuses are still added.</p>
               </div>
               <div>
                 <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Speed Formula</label>

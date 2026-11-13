@@ -1,4 +1,5 @@
 import { EffectChip } from "./effect-chip";
+import { AbilityRuleReference } from "./ability-rule-reference";
 import { effectDetails, outcomeLabel, saveReference } from "../lib/effect-details";
 import { applyTrackedEffect } from "../lib/effect-stacking";
 import { rangedAreaSummary } from "../lib/ability-input";
@@ -39,10 +40,11 @@ export function AbilityResultList(props: Props) {
       {rangedAreaSummary(node) && <p className="text-xs">{rangedAreaSummary(node)}</p>}
       <p className="text-xs">{node.rangeType}{node.range ? ` · ${node.range}${["Aura", "Ranged"].includes(node.rangeType) ? " ft" : ""}` : ""} · {parent.effect.duration}</p>
       {parent.effect.description && <p className="text-sm whitespace-pre-wrap">{parent.effect.description}</p>}
+      <AbilityRuleReference rules={node.advancedRules} />
       {!["Always On", "When Triggered"].includes(node.durationType) && (node.reaction || node.timeCost !== undefined) && <p className="text-xs">Time cost: {node.reaction ? "Reaction" : `${node.timeCost} seconds`}</p>}
       {!["Always On", "When Triggered"].includes(node.durationType) && !node.reaction && node.timeCost !== undefined && node.timeCost > 6 && <label className="block text-xs">Activation progress (seconds, manual)<input className="border border-border/40 bg-background p-1 ml-2 w-20" type="number" min="0" step="any" value={elapsed[node.id] ?? ""} onBlur={event => props.onTimingChange?.(node.id, { elapsed: event.target.value })} onChange={event => setElapsed(previous => ({ ...previous, [node.id]: event.target.value }))}/><span className="block mt-1">{elapsedValue} seconds completed · {Math.max(0, node.timeCost - elapsedValue)} seconds remaining</span></label>}
-      {node.cooldown !== undefined && <p className="text-xs">Cooldown: {node.cooldown} {node.cooldownUnit.toLowerCase()} · starts {node.cooldownStarts === "activation" ? "on activation" : "when ability ends"}</p>}
-      {(node.uses || node.recharge) && <p className="text-xs">{node.uses} {node.recharge}</p>}
+      {node.cooldown !== undefined && <p className="text-xs">Cooldown (reference): {node.cooldown} {node.cooldownUnit.toLowerCase()} · starts {node.cooldownStarts === "activation" ? "on activation" : "when ability ends"}</p>}
+      {(node.uses || node.recharge) && <p className="text-xs">Use limits (reference): {[node.uses, node.recharge].filter(Boolean).join(" · ")}</p>}
       <div className="flex flex-wrap gap-2">
         {node.durationType !== "When Triggered" && node.id !== props.ability.definition?.id && !parent.permanent && node.trigger.mode !== "reference" && <Button size="sm" variant="outline" disabled={!record(node.id) && parent.applicability !== "available"} onClick={() => record(node.id) ? toggle(node.id, parent.effect.duration) : props.onUse(node.id)}>{record(node.id) ? "End Ability" : "Use Ability"}</Button>}
         {!["Always On", "When Triggered"].includes(node.durationType) && props.onPayMana && node.manaPerTurn !== undefined && <Button size="sm" variant="outline" onClick={() => props.onPayMana!(node.manaPerTurn!, `${node.name}: per turn`, parent.familiar)}>Pay {node.manaPerTurn} mana / turn</Button>}

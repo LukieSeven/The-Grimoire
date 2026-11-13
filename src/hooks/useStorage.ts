@@ -1,8 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatRollBreakdown } from "../lib/roll-display";
-import { resolveDiceExpression } from "../lib/dice-expression";
+import { rollFormula, rollStatDice } from "../lib/roll-rules";
 import { rollCriticalDie, type CriticalDie } from "../lib/critical-continuation";
-import { formulaActorRank, requireStatValue, resolveStatExpression } from "../lib/stat-expression";
 import { getFamiliarAdjusted } from "../lib/familiar-values";
 import { activeEffectModifier } from "../lib/active-effect-modifiers";
 import type { RollPurpose } from "../lib/active-effect-modifiers";
@@ -19,7 +18,6 @@ import {
   Roll,
   Note,
   getAdjustedStats,
-  getModifierForStat,
   SessionRecap,
   CodexNote,
 } from "../lib/storage";
@@ -578,57 +576,6 @@ export function useCreateRoll() {
         const key = data.data.rollPurpose === "attack" ? "bonusAttackRoll" : data.data.rollPurpose === "resistance" ? "bonusResistanceRoll" : "bonusSkillCheck";
         modifier += activeEffectModifier(rollingEntity, storage.getAbilities(charId), familiarId === undefined ? storage.getEquipment(charId) : [], key, data.data.rollScope);
       }
-      function dieForValue(v: number): number {
-        if (v <= 4) return 4;
-        if (v <= 6) return 6;
-        if (v <= 8) return 8;
-        if (v <= 10) return 10;
-        if (v <= 12) return 12;
-        return 20;
-      }
-
-      function getStatDiceSides(s: number): number[] {
-        if (s <= 20) return [dieForValue(s)];
-        return [20, ...getStatDiceSides(s - 20)];
-      }
-
-      function rollOnce(sides: number): { result: number; isCrit: boolean } {
-        const rolled = Math.floor(Math.random() * sides) + 1;
-        return { result: rolled, isCrit: rolled === sides };
-      }
-
-      const rollStatDice = (statVal: number): { total: number; desc: string; isCrit: boolean; criticalDice: CriticalDie[] } => {
-        requireStatValue(statVal, "selected");
-        const diceSides = getStatDiceSides(statVal);
-        let sum = 0;
-        const rollDetails: string[] = [];
-        let crit = false;
-        const criticalDice: CriticalDie[] = [];
-        let remainingStat = statVal;
-        for (const sides of diceSides) {
-          const rolled = Math.floor(Math.random() * sides) + 1;
-          const dieTarget = Math.min(sides, remainingStat);
-
-          if (rolled === dieTarget) {
-            crit = true;
-            criticalDice.push({ sides, target: dieTarget });
-          }
-
-          const cappedResult = Math.min(rolled, dieTarget);
-          sum += cappedResult;
-
-          if (rolled > dieTarget) {
-            rollDetails.push(`${rolled}(${dieTarget})`);
-          } else {
-            rollDetails.push(`${rolled}`);
-          }
-
-          remainingStat -= sides;
-        }
-        const desc = rollDetails.join("+");
-        return { total: sum, desc, isCrit: crit, criticalDice };
-      };
-
       if (diceType === "hp-log" || diceType === "dt-log" || diceType === "mana-log" || diceType === "action-log") {
         const roll = storage.addRoll({
           characterId: charId,
@@ -651,56 +598,27 @@ export function useCreateRoll() {
       let diceTypeStr = diceType;
 
       if (data.data.criticalDie) {
-        const continuation = rollCriticalDie(data.data.criticalDie, sides => rollOnce(sides).result);
+        const continuation = rollCriticalDie(data.data.criticalDie, sides => Math.floor(Math.random() * sides) + 1);
         result = continuation.result;
         total = result + modifier;
         isCrit = continuation.isCrit;
         criticalDice = continuation.criticalDice;
         diceTypeStr = continuation.breakdown;
       } else if (statValue === undefined) {
-        // Advanced Math/Stat-Based formula parser
-        let expression = diceType.replace(/\s+/g, "").toLowerCase();
-        let breakdown = diceType;
-
-        // 1. If formula contains '=', strip any description on the left-hand side
-        if (expression.includes("=")) {
-          expression = expression.split("=").pop() || expression;
-          breakdown = breakdown.split("=").pop() || breakdown;
-        }
-
-        // 2. Replace multiplication symbols '×' and 'x' with standard asterisk '*'
-        expression = expression.replace(/×/g, "*").replace(/x/g, "*");
-
-        // A/B. Resolve complete base/rolled stat aliases using this actor's data.
-        const statExpression = resolveStatExpression(expression, breakdown, finalStats, statVal => {
-          const statMod = data.data.criticalContinuation ? 0 : getModifierForStat(statVal, formulaActorRank(rollingEntity));
-          const rolled = rollStatDice(statVal);
-          return {
-            total: rolled.total + statMod,
-            breakdown: statMod !== 0 ? `${rolled.desc}+${statMod}` : rolled.desc,
-            isCrit: rolled.isCrit,
-            criticalDice: rolled.criticalDice,
-          };
-        });
-        expression = statExpression.expression;
-        breakdown = statExpression.breakdown;
-        if (statExpression.isCrit) isCrit = true;
-        criticalDice.push(...statExpression.criticalDice);
-
-        // C. Resolve every complete dice term, including its count, and evaluate.
-        const resolved = resolveDiceExpression(expression, breakdown, rollOnce);
-        if (resolved.isCrit) isCrit = true;
-        criticalDice.push(...resolved.criticalDice);
-        result = resolved.result;
+        const rank = "className" in rollingEntity ? rollingEntity.className : rollingEntity.rank;
+        const rolled = rollFormula(diceType, { stats: finalStats, rank });
+        result = rolled.result;
         total = result + modifier;
-        diceTypeStr = resolved.breakdown;
+        isCrit = rolled.isCrit;
+        criticalDice = rolled.criticalDice;
+        diceTypeStr = rolled.breakdown;
       } else {
-        const { total: rolledSum, desc, isCrit: crit, criticalDice: statCriticals } = rollStatDice(statValue);
-        result = rolledSum;
-        total = rolledSum + modifier;
-        isCrit = crit;
-        criticalDice = statCriticals;
-        diceTypeStr = desc;
+        const rolled = rollStatDice(statValue);
+        result = rolled.result;
+        total = result + modifier;
+        isCrit = rolled.isCrit;
+        criticalDice = rolled.criticalDice;
+        diceTypeStr = rolled.breakdown;
       }
 
       const roll = storage.addRoll({

@@ -12,7 +12,19 @@ const STAT_ALIASES = [
   ["endurance", "end"], ["precision", "pre"], ["willpower", "wil"], ["charisma", "cha"],
 ] as const;
 const STAT_KEYS = new Map<string, string>(STAT_ALIASES.flatMap(([key, prefix]) => [[key, key] as const, [prefix, key] as const]));
-const STAT_PATTERN = new RegExp(`\\b(?:${[...STAT_KEYS.keys()].sort((a, b) => b.length - a.length).join("|")})(?:r)?\\b`, "gi");
+const STAT_PATTERN = new RegExp(`\\b(?:${[...STAT_KEYS.keys()].sort((a, b) => b.length - a.length).join("|")})(?:[rm])?\\b`, "gi");
+
+export function canonicalStatKey(value: string): string | undefined {
+  return STAT_KEYS.get(value.trim().toLowerCase());
+}
+
+export function mapStatTokens(expression: string, replace: (key: string, mode: "score" | "roll" | "modifier") => string): string {
+  return expression.replace(STAT_PATTERN, token => {
+    const alias = token.toLowerCase();
+    const scoreKey = STAT_KEYS.get(alias);
+    return scoreKey ? replace(scoreKey, "score") : replace(STAT_KEYS.get(alias.slice(0, -1))!, alias.endsWith("m") ? "modifier" : "roll");
+  });
+}
 
 export function requireStatValue(value: number | undefined, name: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -35,15 +47,18 @@ export function resolveStatExpression(
   breakdown: string,
   stats: Record<string, number>,
   rollStat: (value: number, key: string) => StatRoll,
+  modifierFor?: (value: number) => number,
 ): { expression: string; breakdown: string; isCrit: boolean; criticalDice: CriticalDie[] } {
   const rolledStats = new Map<string, StatRoll>();
   let isCrit = false;
   const criticalDice: CriticalDie[] = [];
-  const readToken = (token: string): { value: number; rolled?: StatRoll } => {
-    const alias = token.toLowerCase();
-    const key = STAT_KEYS.get(alias) ?? STAT_KEYS.get(alias.slice(0, -1))!;
+  const readToken = (key: string, mode: "score" | "roll" | "modifier"): { value: number; rolled?: StatRoll } => {
     const value = requireStatValue(stats[key], key);
-    if (STAT_KEYS.has(alias)) return { value };
+    if (mode === "score") return { value };
+    if (mode === "modifier") {
+      if (!modifierFor) throw new Error("A rank is required to evaluate a stat modifier.");
+      return { value: modifierFor(value) };
+    }
     let rolled = rolledStats.get(key);
     if (!rolled) {
       rolled = rollStat(value, key);
@@ -53,10 +68,11 @@ export function resolveStatExpression(
     }
     return { value: rolled.total, rolled };
   };
-  const resolved = expression.replace(STAT_PATTERN, token => String(readToken(token).value));
-  const resolvedBreakdown = breakdown.replace(STAT_PATTERN, token => {
-    const { value, rolled } = readToken(token);
-    return rolled ? rolled.breakdown : String(value);
+  const asTerm = (value: number) => value < 0 ? `(${value})` : String(value);
+  const resolved = mapStatTokens(expression, (key, mode) => asTerm(readToken(key, mode).value));
+  const resolvedBreakdown = mapStatTokens(breakdown, (key, mode) => {
+    const { value, rolled } = readToken(key, mode);
+    return rolled ? rolled.breakdown : asTerm(value);
   });
   return { expression: resolved, breakdown: resolvedBreakdown, isCrit, criticalDice };
 }

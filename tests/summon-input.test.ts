@@ -65,6 +65,19 @@ test("imported minion requirements use its live resources rather than the caster
   const current = resolveTrackerEffects([ability], "Iron", { power: 99 }, caster, {}, [live]).find(entry => entry.effect.id === attack.id)!;
   assert.equal(current.requirements, "met"); assert.equal(current.familiar!.power, 8);
 });
+test("summoned ability progression and modifiers use its familiar's adjusted score and rank", () => {
+  const source = minion("one"), input = summoningAbility(source);
+  const attack = input.summon!.abilities[0];
+  attack.unlockRank = "Bronze 1";
+  attack.targets = ["Self"];
+  attack.results = [{ ...blankResult("Self"), bonuses: { bonusAttackRoll: "POWm" } }];
+  const ability = { id: 100, name: input.name, definition: input, linkedStats: [] } as Ability;
+  const live = { ...source, className: "Bronze", abilities: [{ ...source.abilities[0], active: true, bonusPower: 8 }] };
+  const result = resolveTrackerEffects([ability], "Iron", { power: 99 }, undefined, {}, [live]).find(entry => entry.effect.id === attack.results[0].id)!;
+  assert.equal(result.progression, "unlocked");
+  assert.match(result.effect.description ?? "", /Attack Roll: 7/);
+  assert.equal(live.power, 6);
+});
 test("duration migration updates ability, effect and nested summon inputs without mutating saved data", () => {
   const input = summoningAbility(); input.durationType = "Concentration"; input.results[0].durationType = "Concentration";
   input.summon!.abilities[0].durationType = "Concentration"; input.options.durationTypes = ["Concentration", "Custom duration"];

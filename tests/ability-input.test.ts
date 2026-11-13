@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DURATION_TYPES, blankAbilityInput, blankResult, duplicateInput, inputFromAbility, validateAbilityInput } from "../src/lib/ability-input.ts";
+import { DURATION_TYPES, blankAbilityInput, blankResult, duplicateInput, durationTriggerGroups, editableTiming, emptyRequirements, inputFromAbility, resultRollBonusKind, timingForEditor, validateAbilityInput, validateAbilityRolls } from "../src/lib/ability-input.ts";
 import { resolveTrackerEffects, isEffectApplied } from "../src/lib/tracker.ts";
 import { storage, importCharacterJSON } from "../src/lib/storage.ts";
 import type { Ability } from "../src/lib/storage.ts";
@@ -53,6 +53,44 @@ function fixture() {
   const ability = { id: 101, name: definition.name, definition, linkedStats: [], primaryStat: "", description: "Long reference must not enter tracker rules" } as unknown as Ability;
   return { ability, definition };
 }
+test("an effect's outcome is independent of roll bonuses, with legacy fallback", () => {
+  const { ability, definition } = fixture();
+  definition.targets = ["Enemy"];
+  definition.results = [{ ...blankResult("Enemy"), effectAction: "Damage", purpose: "Damage", rollBonusKind: "attack", formula: "WILr + 1D6" }];
+  const result = resolveTrackerEffects([ability], "Iron", {})[1].result;
+  assert.equal(result?.purpose, "Damage");
+  assert.equal(resultRollBonusKind(result), "attack");
+  assert.equal(resultRollBonusKind({ purpose: "Check" }), "check");
+  assert.equal(resultRollBonusKind({ purpose: "Check", rollBonusKind: "none" }), undefined);
+  const legacy = inputFromAbility({ ...ability, definition: undefined, type: "Attack", rollFormula: "WILr" }, "");
+  assert.equal(legacy.results[0].rollOnly, true);
+  assert.equal(resultRollBonusKind(legacy.results[0]), "attack");
+  assert.equal(duplicateInput(definition).results[0].effectAction, "Damage");
+  assert.equal(validateAbilityRolls(definition), undefined);
+});
+test("editing legacy timing preserves effective groups and archives previously ignored groups", () => {
+  const { definition } = fixture();
+  const group = (id: string) => ({ ...emptyRequirements(), conditions: [{ id, kind: "situation" as const, label: id }] });
+  const legacy = { ...definition, durationType: "When Triggered", durationTrigger: group("active start"), trigger: group("old start"), ending: group("old end") };
+  const timing = timingForEditor(legacy);
+  assert.equal(timing.activation.conditions[0].id, "active start");
+  assert.equal(timing.ending.conditions.length, 0);
+  const updated = { ...legacy, ...editableTiming(timing.activation, group("new end"), timing.retained) };
+  const active = durationTriggerGroups(updated);
+  assert.equal(active.activation.conditions[0].id, "active start");
+  assert.equal(active.ending.conditions[0].id, "new end");
+  assert.equal(updated.retainedTiming?.activation?.conditions[0].id, "old start");
+  assert.equal(updated.retainedTiming?.ending?.conditions[0].id, "old end");
+});
+test("new standalone rolls require a formula but legacy resistance notes remain text", () => {
+  const { definition } = fixture();
+  definition.targets = ["Self"];
+  definition.results = [{ ...blankResult("Self"), rollOnly: true }];
+  assert.match(validateAbilityRolls(definition)!, /enter a roll formula/);
+  definition.results[0].formula = "WILr + 1D6";
+  definition.results[0].saveFormula = "Compare with caster's original total";
+  assert.equal(validateAbilityRolls(definition), undefined);
+});
 test("When Triggered activates and Until Triggered ends; activation checks work for every duration type", () => {
   assert.ok(DURATION_TYPES.includes("When Triggered"));
   assert.ok(DURATION_TYPES.includes("Until Triggered"));
@@ -142,6 +180,14 @@ test("component conversion retains all targets and independently created effects
   assert.equal(converted.durationType, "Always On"); assert.equal(converted.range, "15");
   assert.deepEqual(converted.targets, ["Ally", "Enemy"]);
   assert.ok(converted.results.some(result => result.name === "Mark" && result.lifetime === "independent"));
+});
+test("Lyth's legacy scoped Stealth bonus is an editable modifier, not a roll", () => {
+  const legacy = { id: 57, name: "Background Adaptation", description: "Applies within the aura.", range: "20ft radius", linkedStats: ["spirit"], rollFormula: "+3 to Stealth" } as Ability;
+  const converted = inputFromAbility(legacy, "Adapt");
+  assert.ok(converted.targets.includes("Self"));
+  assert.ok(converted.results.some(result => result.bonuses?.bonusSkillCheck === "+3" && result.bonuses.checkSkills?.includes("Stealth")));
+  assert.ok(converted.results.every(result => !result.formula));
+  assert.equal(legacy.rollFormula, "+3 to Stealth");
 });
 test("file import preserves custom definitions, target results and Sub-Abilities", () => {
   const { ability, definition } = fixture(); definition.targets = ["Custom target"]; definition.results = [blankResult("Custom target")];

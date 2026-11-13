@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { 
   calculateAbilityEvolutions, 
   getRankForStatValue, 
-  getAbilityHighestRank 
+  getAbilityHighestRank,
+  getHighestStatValueForAbility,
 } from "../src/lib/storage.ts";
 import type { Ability, EvolutionModifier } from "../src/lib/storage.ts";
 
@@ -182,6 +183,14 @@ test("Unassigned Stat Fallback: No stats selected -> defaults to Iron 1", () => 
   assert.equal(rankRes.label, "Iron 1");
   assert.equal(rankRes.rank, "Iron");
   assert.equal(rankRes.subLevel, 1);
+});
+
+test("Legacy primary-stat aliases drive both the rank badge and evolution gates", () => {
+  const ability = createTestAbility({ primaryStat: " POW ", linkedStats: [] });
+  const stats = { power: 12 };
+  assert.equal(getAbilityHighestRank(ability, stats).label, "Bronze 1");
+  assert.deepEqual(getHighestStatValueForAbility(ability, stats), { statKey: "power", statVal: 12 });
+  assert.equal(calculateAbilityEvolutions(ability, "Bronze", stats).activeModifiers.length, 5);
 });
 
 test("Dynamic Stat Changes: POW fluctuations automatically update active modifier count", () => {

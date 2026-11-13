@@ -1,13 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { 
-  useListUnlockedPasswords, 
-  useLockPassword 
-} from "@/hooks/useStorage";
-import { 
-  getDiceLabel, 
-  getModifierForStat 
-} from "@/lib/storage";
+import { getListCharacterRollsQueryKey, getListRecentRollsQueryKey, useListUnlockedPasswords } from "@/hooks/useStorage";
+import { getAdjustedStats, isAbilityTriggerActive, storage } from "@/lib/storage";
+import type { Ability, Character, Equipment, FavoriteSlot, InventoryItem, Roll, Skill } from "@/lib/storage";
+import { customInitiativeFormula, getDiceLabel, getModifierForStat, legacyModifierNote, linkedRollStats, needsSelectedStat, prepareRollFormula, rollAttributeScope, rollFormula, rollStatDice, weaponRollFormula, type RollResult } from "@/lib/roll-rules";
+import { advanceCriticalQueue, rollCriticalDie, type CriticalDie, type CriticalProgress } from "@/lib/critical-continuation";
+import { getFamiliarAdjusted, familiarAbilityAsAbility } from "@/lib/familiar-values";
+import { activeEffectModifier, type RollPurpose } from "@/lib/active-effect-modifiers";
+import { canonicalStatKey } from "@/lib/stat-expression";
+import { resultRollBonusKind, rollBonusKind } from "@/lib/ability-input";
+import { resolveFavoriteItem } from "@/lib/favorite-rolls";
+import { resolveTrackerEffects, isEffectApplied } from "@/lib/tracker";
+import { formatRollBreakdown } from "@/lib/roll-display";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,12 +25,37 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-interface FavoriteSlot {
-  type: "weapon" | "ability" | "skill" | "familiar-ability" | "attribute" | "familiar-attribute";
-  targetId: string | number;
-  label: string;
-  familiarId?: string | number;
+interface ChronicleBundle {
+  character: Character;
+  equipment?: Equipment[];
+  abilities?: Ability[];
+  skills?: Skill[];
+  inventory?: InventoryItem[];
 }
+
+function recordedActor(bundle: ChronicleBundle, familiarId?: string | number) {
+  const familiar = familiarId === undefined ? undefined : bundle.character.familiars?.find(entry => entry.id === familiarId);
+  if (familiarId !== undefined && !familiar) throw new Error("This familiar is not recorded in the Chronicle roster.");
+  const actor = familiar ?? bundle.character;
+  const rank = familiar ? familiar.className : bundle.character.rank;
+  if (typeof rank !== "string" || !rank.trim()) throw new Error(`${actor.name} has no recorded rank.`);
+  const equipment = familiar ? [] : bundle.equipment ?? [];
+  const abilities = familiar ? familiar.abilities.map(familiarAbilityAsAbility) : bundle.abilities ?? [];
+  const adjusted = familiar ? getFamiliarAdjusted(familiar) : getAdjustedStats(bundle.character, equipment, abilities);
+  const vitals = { hp: actor.currentHp, mana: actor.currentMana, dt: actor.currentDt, maxHp: adjusted.maxHp, maxMana: adjusted.maxMana, maxDt: adjusted.maxDt };
+  return { actor, familiar, characterId: bundle.character.id, rank, stats: adjusted.stats, equipment, abilities, vitals, initiativeBonus: adjusted.abilityInitiativeBonus };
+}
+
+type RecordedActor = ReturnType<typeof recordedActor>;
+function previewRecordedActor(bundle: ChronicleBundle): RecordedActor | undefined {
+  try { return recordedActor(bundle); } catch { return undefined; }
+}
+
+type ChronicleCritical = CriticalProgress & {
+  owner: RecordedActor; label: string; dice: CriticalDie[]; total: number; onComplete?: (total: number) => void;
+};
+type RollOption = { label: string; run: () => void };
+const withModifier = (breakdown: string, modifier: number) => `${breakdown}${modifier > 0 ? ` + ${modifier}` : modifier < 0 ? ` - ${Math.abs(modifier)}` : ""}`;
 
 // Rules Database for quick cheatsheet reference
 const RULES_CODEX = [
@@ -92,10 +121,15 @@ export default function Chronicle() {
   const [chronicleRoster, setChronicleRoster] = useState<any[]>([]);
   const [recentRolls, setRecentRolls] = useState<any[]>([]);
 
-  const refreshRecentRolls = () => {
+  const refreshRecentRolls = (roster = chronicleRoster) => {
     try {
       const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
-      setRecentRolls(rolls.slice(0, 6));
+      const characters: Character[] = JSON.parse(localStorage.getItem("aetherborne_characters") || "[]");
+      setRecentRolls(rolls.sort((a: Roll, b: Roll) => Date.parse(b.rolledAt) - Date.parse(a.rolledAt) || b.id - a.id).slice(0, 6).map((roll: Roll & { characterName?: string }) => {
+        const owner = roster.find(entry => entry.character?.id === roll.characterId)?.character ?? characters.find(entry => entry.id === roll.characterId);
+        const familiar = owner?.familiars?.find((entry: { id: string | number }) => entry.id === roll.familiarId);
+        return { ...roll, characterName: roll.characterName ?? familiar?.name ?? owner?.name ?? "Unknown Hero" };
+      }));
     } catch (e) {
       console.error(e);
     }
@@ -103,14 +137,16 @@ export default function Chronicle() {
 
   useEffect(() => {
     const raw = localStorage.getItem("aetherborne_chronicle_characters");
+    let roster: ChronicleBundle[] = [];
     if (raw) {
       try {
-        setChronicleRoster(JSON.parse(raw));
+        roster = JSON.parse(raw);
+        setChronicleRoster(roster);
       } catch (e) {
         console.error(e);
       }
     }
-    refreshRecentRolls();
+    refreshRecentRolls(roster);
   }, []);
 
   const saveChronicleRoster = (newRoster: any[]) => {
@@ -125,8 +161,11 @@ export default function Chronicle() {
   // 2. Initiative Tracker
   const [combatants, setCombatants] = useState<any[]>([]);
   const [initName, setInitName] = useState("");
+  const [manualInitiative, setManualInitiative] = useState("");
   const [currentTurnIdx, setCurrentTurnIdx] = useState(0);
   const [roundCount, setRoundCount] = useState(1);
+  const [pendingCritical, setPendingCritical] = useState<ChronicleCritical | null>(null);
+  const [rollOptions, setRollOptions] = useState<{ title: string; choices: RollOption[] } | null>(null);
 
   // 3. Soundscape simulation mixer
   const [soundscapeVolume, setSoundscapeVolume] = useState({
@@ -223,98 +262,37 @@ export default function Chronicle() {
     e.preventDefault();
     const query = initName.trim();
     if (!query) return;
-
-    // Search roster for matching character or familiar
-    let foundName = query;
-    let agility = 0;
-    let hp = 10;
-    let maxHp = 10;
-    let rank = "Iron";
-    let charId: any = null;
-
-    const lowerQuery = query.toLowerCase();
-    const matchedChar = chronicleRoster.find(c => c.name?.toLowerCase() === lowerQuery);
-
-    if (matchedChar) {
-      foundName = matchedChar.name;
-      agility = matchedChar.agility ?? 0;
-      rank = matchedChar.rank || "Iron";
-      hp = matchedChar.currentHp ?? 10;
-      maxHp = matchedChar.maxHp ?? 10;
-      charId = matchedChar.id;
-    } else {
-      // Check if it matches a familiar inside one of the characters
-      for (const c of chronicleRoster) {
-        if (c.familiars && Array.isArray(c.familiars)) {
-          const fam = c.familiars.find((f: any) => f.name?.toLowerCase() === lowerQuery);
-          if (fam) {
-            foundName = fam.name;
-            agility = fam.agility ?? 0;
-            rank = c.rank || "Iron";
-            hp = fam.currentHp ?? 10;
-            maxHp = fam.maxHp ?? 10;
-            break;
-          }
-        }
-      }
+    if (manualInitiative.trim()) {
+      const score = Number(manualInitiative);
+      if (!Number.isFinite(score)) { toast.error("Enter a valid initiative score."); return; }
+      setCombatants(prev => [...prev, { id: crypto.randomUUID(), name: query, score, hp: "", active: true }].sort((a, b) => b.score - a.score));
+      setInitName("");
+      setManualInitiative("");
+      return;
     }
-
-    // Agility Initiative Roll using AEtherborne stat die & rank modifier
-    const agiDie = getDiceLabel(agility);
-    const agiMod = getModifierForStat(agility, rank);
-    const sides = parseInt(agiDie.replace("d", ""), 10) || 4;
-    const rolled = Math.floor(Math.random() * sides) + 1;
-    const dieTarget = Math.min(sides, agility);
-    let breakdown: string;
-    let effectiveDie: number;
-    let isCrit = false;
-
-    if (rolled === dieTarget) {
-      breakdown = String(rolled);
-      effectiveDie = rolled;
-      isCrit = true;
-    } else if (rolled > dieTarget) {
-      breakdown = `${rolled}(${dieTarget})`;
-      effectiveDie = dieTarget;
-    } else {
-      breakdown = String(rolled);
-      effectiveDie = rolled;
-    }
-
-    const totalInit = effectiveDie + agiMod;
-
-    // Add to combatants array and auto-sort descending by initiative score
-    setCombatants(prev => [...prev, {
-      id: Date.now() + Math.random(),
-      characterId: charId,
-      name: foundName,
-      score: totalInit,
-      hp,
-      maxHp,
-      active: true
-    }].sort((a,b) => b.score - a.score));
-
-    setInitName("");
-
-    // Create roll history log & toast notification
-    const modStr = agiMod !== 0 ? (agiMod >= 0 ? `+${agiMod}` : `${agiMod}`) : "";
-    const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
-    rolls.unshift({
-      id: Date.now(),
-      characterId: charId ?? 0,
-      diceType: "agility-init",
-      result: effectiveDie,
-      modifier: agiMod,
-      total: totalInit,
-      label: `Agility Initiative: ${foundName} [${agiDie}:${breakdown}${modStr}=${totalInit}]`,
-      isCrit,
-      critBonus: null,
-      rolledAt: new Date().toISOString(),
+    runRollAction(() => {
+      const matches = (name: string) => name.trim().toLowerCase() === query.toLowerCase();
+      const roster: ChronicleBundle[] = chronicleRoster;
+      const actors = roster.flatMap(bundle => [
+        ...(matches(bundle.character.name) ? [{ bundle, familiarId: undefined as string | number | undefined, label: bundle.character.name }] : []),
+        ...(bundle.character.familiars ?? []).filter(familiar => matches(familiar.name)).map(familiar => ({ bundle, familiarId: familiar.id, label: `${familiar.name} (${bundle.character.name})` })),
+      ]);
+      if (!actors.length) throw new Error("Choose a recorded character or familiar to roll initiative, or enter an initiative score manually.");
+      chooseRollOption("Choose initiative actor", actors.map(({ bundle, familiarId, label }) => ({ label, run: () => {
+        const owner = recordedActor(bundle, familiarId);
+        if (!Number.isFinite(owner.vitals.hp)) throw new Error(`${owner.actor.name} has no recorded health.`);
+        const onComplete = (total: number) => {
+          setCombatants(prev => [...prev, {
+            id: crypto.randomUUID(), characterId: owner.characterId, name: owner.actor.name,
+            score: total, hp: owner.vitals.hp, maxHp: owner.vitals.maxHp, active: true,
+          }].sort((a, b) => b.score - a.score));
+        };
+        const formula = customInitiativeFormula(owner.familiar ? undefined : bundle.character.initiativeFormula);
+        if (formula) beginRoll(owner, "Initiative", rollFormula(formula, { stats: owner.stats, rank: owner.rank }), owner.initiativeBonus + effectModifier(owner, "check", "agility"), onComplete);
+        else rollRecordedStat(owner, "Agility Initiative", owner.stats.agility, "agility", owner.initiativeBonus, onComplete);
+        setInitName("");
+      } })));
     });
-    localStorage.setItem("aetherborne_rolls", JSON.stringify(rolls.slice(0, 100)));
-    refreshRecentRolls();
-
-    toast.success(`${foundName} rolled Agility Initiative: ${totalInit} (${agiDie}: ${breakdown}${modStr})`);
   };
 
   const stepTurn = (direction: number) => {
@@ -536,173 +514,171 @@ export default function Chronicle() {
   };
 
   // ───── DICE ROLL LOGS ENGINE ─────
-  const logRoll = (charName: string, label: string, formula: string, result: string, total: number, charId?: number, isCrit: boolean = false) => {
+  const runRollAction = (action: () => void) => {
+    if (pendingCritical) { toast.info("Finish the current roll's criticals first."); return; }
     try {
-      const rolls = JSON.parse(localStorage.getItem("aetherborne_rolls") || "[]");
-      const newRoll = {
-        id: Date.now() + Math.random(),
-        characterId: charId ?? 0,
-        characterName: charName,
-        rollType: "cit_check",
-        label,
-        formula,
-        result,
-        total,
-        isCrit,
-        rolledAt: new Date().toISOString()
-      };
-      rolls.unshift(newRoll);
-      localStorage.setItem("aetherborne_rolls", JSON.stringify(rolls.slice(0, 100)));
-      setRecentRolls(rolls.slice(0, 6));
-      toast.success(`${charName} rolled ${label}: [${result}] = ${total}`);
-    } catch (e) {
-      console.error(e);
+      action();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to resolve this roll.");
     }
   };
 
-  const evaluateFormulaRoll = (formula: string) => {
-    try {
-      const clean = formula.replace(/\s+/g, "").toLowerCase();
-      // Match general dice like 2d6+3, 1d8-1, d6+2
-      const diceMatch = clean.match(/(\d+)?d(\d+)([+-]\d+)?/);
-      if (diceMatch) {
-        const count = diceMatch[1] ? parseInt(diceMatch[1]) : 1;
-        const sides = parseInt(diceMatch[2]);
-        const mod = diceMatch[3] ? parseInt(diceMatch[3]) : 0;
-        let sum = 0;
-        const rolls = [];
-        for (let i = 0; i < count; i++) {
-          const r = Math.floor(Math.random() * sides) + 1;
-          rolls.push(r);
-          sum += r;
-        }
-        return { total: sum + mod, result: `${rolls.join("+")}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}` };
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return null;
+  const chooseRollOption = (title: string, choices: RollOption[]) => {
+    if (choices.length === 1) choices[0].run();
+    else setRollOptions({ title, choices });
   };
 
-  const rollStat = (charName: string, label: string, score: number, charId?: number, rank: string = "Iron") => {
-    const diceType = getDiceLabel(score);
-    const mod = getModifierForStat(score, rank);
-    const sides = parseInt(diceType.replace("d", ""), 10) || 4;
-    const rolled = Math.floor(Math.random() * sides) + 1;
-    const dieTarget = Math.min(sides, score);
-    let breakdown: string;
-    let effectiveDie: number;
-    let isCrit = false;
+  const recordRoll = (owner: RecordedActor, label: string, roll: RollResult, modifier: number) => {
+    const total = roll.result + modifier;
+    if (!Number.isFinite(total)) throw new Error("The roll did not produce a finite total.");
+    storage.addRoll({ characterId: owner.characterId, familiarId: owner.familiar?.id, diceType: formatRollBreakdown(roll.breakdown), result: roll.result,
+      modifier, total, label, isCrit: roll.isCrit, critBonus: null, criticalDice: roll.criticalDice });
+    refreshRecentRolls();
+    queryClient.invalidateQueries({ queryKey: getListCharacterRollsQueryKey(owner.characterId) });
+    queryClient.invalidateQueries({ queryKey: getListRecentRollsQueryKey() });
+    return total;
+  };
 
-    if (rolled === dieTarget) {
-      breakdown = String(rolled);
-      effectiveDie = rolled;
-      isCrit = true;
-    } else if (rolled > dieTarget) {
-      breakdown = `${rolled}(${dieTarget})`;
-      effectiveDie = dieTarget;
+  const beginRoll = (owner: RecordedActor, label: string, roll: RollResult, modifier: number, onComplete?: (total: number) => void) => {
+    const total = recordRoll(owner, label, roll, modifier);
+    if (roll.criticalDice.length) {
+      setPendingCritical({ owner, label, dice: roll.criticalDice, total, criticalIndex: 0, chainCount: 0, maxChainCount: 0, onComplete });
     } else {
-      breakdown = String(rolled);
-      effectiveDie = rolled;
+      onComplete?.(total);
+      toast.success(`${owner.actor.name} rolled ${label}: ${total}`);
     }
-
-    const total = effectiveDie + mod;
-    const formula = `${diceType}${mod >= 0 ? "+" : ""}${mod}`;
-    const result = `${breakdown}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}`;
-    
-    logRoll(charName, `${label} Check`, formula, result, total, charId, isCrit);
   };
 
-  const rollFavorite = (charName: string, slot: FavoriteSlot, itemBundle: any) => {
-    const charId = itemBundle.character.id;
-    const rank = itemBundle.character.rank || "Iron";
-    if (slot.type === "attribute") {
-      const score = itemBundle.character[slot.targetId] || 0;
-      rollStat(charName, slot.label, score, charId, rank);
+  const continueCritical = () => {
+    if (!pendingCritical) return;
+    try {
+      const { owner, label, dice, criticalIndex } = pendingCritical;
+      const roll = rollCriticalDie(dice[criticalIndex], sides => Math.floor(Math.random() * sides) + 1);
+      const total = pendingCritical.total + recordRoll(owner, label, roll, 0);
+      const progress = advanceCriticalQueue(pendingCritical, dice.length, roll.isCrit);
+      if (progress.complete) {
+        setPendingCritical(null);
+        pendingCritical.onComplete?.(total);
+        toast.success(`${owner.actor.name} rolled ${label}: ${total} (critical chain)`);
+      } else setPendingCritical({ ...pendingCritical, ...progress, total });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to continue the critical roll.");
+    }
+  };
+
+  const effectModifier = (owner: RecordedActor, purpose?: RollPurpose, scope?: string) => {
+    if (!purpose) return 0;
+    const key = purpose === "attack" ? "bonusAttackRoll" : purpose === "resistance" ? "bonusResistanceRoll" : "bonusSkillCheck";
+    return activeEffectModifier(owner.actor, owner.abilities, owner.equipment, key, scope);
+  };
+  const parsePurpose = rollBonusKind;
+  const rollRecordedStat = (owner: RecordedActor, label: string, score: number, scope: string, bonus = 0, onComplete?: (total: number) => void) => {
+    const modifier = getModifierForStat(score, owner.rank) + bonus + effectModifier(owner, "check", scope);
+    beginRoll(owner, label, rollStatDice(score), modifier, onComplete);
+  };
+  const rollStat = (bundle: ChronicleBundle, key: string, label: string) => runRollAction(() => {
+    const owner = recordedActor(bundle);
+    rollRecordedStat(owner, `${label} Check`, owner.stats[key], key);
+  });
+
+  const rollRecordedFormula = (owner: RecordedActor, label: string, formula: string | undefined, linkedStats: string[], purpose?: RollPurpose) => {
+    if (!formula?.trim()) throw new Error(`${label} has no recorded roll formula.`);
+    const stats = linkedRollStats(linkedStats);
+    const execute = (selectedStat?: string) => {
+      const context = { stats: owner.stats, rank: owner.rank, selectedStat };
+      const prepared = prepareRollFormula(formula, context);
+      beginRoll(owner, label, rollFormula(prepared, context), effectModifier(owner, purpose, rollAttributeScope(prepared, selectedStat ?? (stats.length === 1 ? stats[0] : undefined))));
+    };
+    if (needsSelectedStat(formula) && stats.length > 1) {
+      chooseRollOption(`Choose an attribute for ${label}`, stats.map(stat => ({ label: stat.toUpperCase(), run: () => execute(stat) })));
+    } else execute(stats.length === 1 ? stats[0] : undefined);
+  };
+
+  const rollAbilityFavorite = (bundle: ChronicleBundle, slot: FavoriteSlot, owner: RecordedActor, ability: Ability) => {
+    if (ability.definition) {
+      const entries = resolveTrackerEffects([ability], owner.rank, owner.stats, owner.vitals, owner.actor.triggerConfirmations ?? {}, owner.familiar ? [] : bundle.character.familiars);
+      const nodeId = slot.type === "sub-ability" ? slot.subId : ability.definition.id;
+      const candidates = entries.filter(entry => entry.result && entry.effect.rollFormula?.trim() && (slot.type === "ability-result" ? entry.effect.id === slot.subId : entry.input?.id === nodeId));
+      if (!candidates.length) throw new Error(`${slot.label} has no recorded roll formula.`);
+      chooseRollOption(`Choose a result for ${slot.label}`, candidates.map(entry => ({
+        label: `${entry.result?.name || entry.input?.name} · ${entry.targetLabels?.join(", ")} · ${entry.effect.rollFormula}`,
+        run: () => {
+          const actor = entry.familiar ? recordedActor(bundle, entry.familiar.id) : owner;
+          const applications = (entry.familiar ? owner.actor : actor.actor).effectApplications ?? [];
+          if ((entry.applicability !== "available" && !isEffectApplied(entry, "self", applications)) || (entry.triggerParent && !isEffectApplied(entry.triggerParent, "self", applications))) {
+            throw new Error("This result's recorded requirements are not met.");
+          }
+          rollRecordedFormula(actor, entry.input?.name || slot.label, entry.effect.rollFormula, entry.input?.linkedStats ?? [], resultRollBonusKind(entry.result));
+        },
+      })));
       return;
     }
+    if (slot.type === "ability-result") throw new Error("This favorite no longer points to a recorded result.");
+    const sub = slot.type === "sub-ability" ? ability.subAbilities?.find(entry => entry.id === slot.subId) : undefined;
+    if (slot.type === "sub-ability" && !sub) throw new Error("This sub-ability is not recorded in the Chronicle roster.");
+    let formula = sub?.rollFormula || ability.rollFormula;
+    for (const trigger of ability.triggers ?? []) {
+      if (trigger?.triggerAction === "update_attached" && trigger.updatedRollFormula && isAbilityTriggerActive(trigger, owner.vitals)) formula = trigger.updatedRollFormula;
+    }
+    rollRecordedFormula(owner, sub?.nickname || sub?.name || ability.nickname || slot.label, legacyModifierNote(formula) ? undefined : formula,
+      sub?.linkedStats ?? [...(ability.linkedStats ?? []), ...(ability.linkedStat ? [ability.linkedStat] : []), ...(ability.primaryStat ? [ability.primaryStat] : [])], parsePurpose(sub?.type || ability.type));
+  };
 
-    // Try matching weapon
-    if (slot.type === "weapon") {
-      const weapon = itemBundle.equipment?.find((e: any) => e.id === Number(slot.targetId));
-      if (weapon && weapon.diceType) {
-        const parsed = evaluateFormulaRoll(weapon.diceType);
-        if (parsed) {
-          logRoll(charName, slot.label, weapon.diceType, parsed.result, parsed.total, charId);
-          return;
-        }
-      }
-      const power = itemBundle.character.power || 0;
-      const mod = getModifierForStat(power, rank);
-      const dice = weapon?.diceType || "d8";
-      const sides = parseInt(dice.replace("d", ""), 10) || 8;
-      const rolled = Math.floor(Math.random() * sides) + 1;
-      const total = rolled + mod;
-      logRoll(charName, slot.label, `${dice}+pow`, `${rolled}${mod >= 0 ? `+${mod}` : mod}`, total, charId);
+  const rollFavorite = (slot: FavoriteSlot, bundle: ChronicleBundle) => runRollAction(() => {
+    const familiarSlot = slot.type === "familiar-attribute" || slot.type === "familiar-ability";
+    if (familiarSlot && slot.familiarId === undefined) throw new Error("This favorite does not identify a recorded familiar.");
+    const owner = recordedActor(bundle, familiarSlot ? slot.familiarId : undefined);
+    if (slot.type === "attribute" || slot.type === "familiar-attribute") {
+      const key = canonicalStatKey(String(slot.targetId));
+      if (!key) throw new Error("This favorite does not identify a recorded attribute.");
+      rollRecordedStat(owner, `${slot.label} Check`, owner.stats[key], key);
       return;
     }
-
-    // Try matching ability
-    if (slot.type === "ability") {
-      const ability = itemBundle.abilities?.find((a: any) => a.id === Number(slot.targetId));
-      if (ability && ability.rollFormula) {
-        const parsed = evaluateFormulaRoll(ability.rollFormula);
-        if (parsed) {
-          logRoll(charName, ability.nickname || slot.label, ability.rollFormula, parsed.result, parsed.total, charId);
-          return;
-        }
-      }
-      const spirit = itemBundle.character.spirit || 0;
-      const mod = getModifierForStat(spirit, rank);
-      const dice = getDiceLabel(spirit);
-      const sides = parseInt(dice.replace("d", ""), 10) || 4;
-      const rolled = Math.floor(Math.random() * sides) + 1;
-      const total = rolled + mod;
-      logRoll(charName, ability?.nickname || slot.label, `${dice}+spi`, `${rolled}${mod >= 0 ? `+${mod}` : mod}`, total, charId);
-      return;
-    }
-
-    // Try matching skill
     if (slot.type === "skill") {
-      const skill = itemBundle.skills?.find((s: any) => s.id === Number(slot.targetId));
-      if (skill) {
-        const val = Number(skill.value) || 0;
-        const train = Number(skill.training) || 0;
-        const mod = getModifierForStat(val, rank) + train;
-        const dice = getDiceLabel(val);
-        const sides = parseInt(dice.replace("d", ""), 10) || 4;
-        const rolled = Math.floor(Math.random() * sides) + 1;
-        const dieTarget = Math.min(sides, val);
-        let breakdown: string;
-        let effectiveDie: number;
-        let isCrit = false;
-        if (rolled === dieTarget) {
-          breakdown = String(rolled);
-          effectiveDie = rolled;
-          isCrit = true;
-        } else if (rolled > dieTarget) {
-          breakdown = `${rolled}(${dieTarget})`;
-          effectiveDie = dieTarget;
-        } else {
-          breakdown = String(rolled);
-          effectiveDie = rolled;
-        }
-        const total = effectiveDie + mod;
-        logRoll(charName, slot.label, `${dice}${mod >= 0 ? "+" : ""}${mod}`, `${breakdown}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ""}`, total, charId, isCrit);
+      const skill = bundle.skills?.find(entry => entry.id === Number(slot.targetId));
+      if (!skill) throw new Error("This skill is not recorded in the Chronicle roster.");
+      const training = Number(skill.training ?? 0);
+      if (!Number.isFinite(training)) throw new Error(`${skill.name} has invalid training.`);
+      rollRecordedStat(owner, slot.label, Number(skill.value), skill.name, training);
+      return;
+    }
+    if (slot.type === "weapon" || slot.type === "item") {
+      const favorite = resolveFavoriteItem(slot, owner.equipment, bundle.inventory ?? []);
+      if (favorite?.kind === "weapon") {
+        const weapon = favorite.item;
+        rollRecordedFormula(owner, `${weapon.name} Strike`, weaponRollFormula(weapon.diceType, weapon.modifier), [], "attack");
         return;
       }
+      if (!favorite) throw new Error("This favorite is missing or ambiguous. Reassign it in the character sheet, then refresh the Chronicle copy.");
+      const ability = owner.abilities.find(entry => entry.inventoryItemId === favorite.item.id);
+      if (!ability) throw new Error(`${slot.label} has no recorded strike or ability roll.`);
+      rollAbilityFavorite(bundle, slot, owner, ability);
+      return;
     }
+    const ability = owner.abilities.find(entry => entry.id === Number(slot.targetId));
+    if (!ability) throw new Error("This ability is not recorded in the Chronicle roster.");
+    rollAbilityFavorite(bundle, slot, owner, ability);
+  });
 
-    // Fallback standard stat check
-    rollStat(charName, slot.label, 0, charId, rank);
+  const getFavorites = (bundle: ChronicleBundle): (FavoriteSlot | null)[] => {
+    const { character, equipment = [], abilities = [] } = bundle;
+    if (Array.isArray(character.favorites) && [10, 20].includes(character.favorites.length)) return character.favorites;
+    return [
+      ...equipment.filter(entry => entry.equipped && entry.assignedToQuickRolls).map((entry): FavoriteSlot => ({ type: "weapon", targetId: entry.id, label: entry.name })),
+      ...abilities.filter(entry => entry.assignedToQuickRolls).map((entry): FavoriteSlot => ({ type: "ability", targetId: entry.id, label: entry.name })),
+    ].slice(0, 20);
   };
 
-  const getFavorites = (char: any): (FavoriteSlot | null)[] => {
-    if (char && char.favorites && Array.isArray(char.favorites)) {
-      return char.favorites;
-    }
-    return Array(20).fill(null);
-  };
+  const inspectorRollActor = inspectingChar ? previewRecordedActor(inspectingChar) : undefined;
+  const criticalReadout = pendingCritical && (
+    <section aria-label="Critical continuation" className="w-full max-w-7xl mx-auto mt-3 border border-sky-500/40 rounded-md bg-sky-950/45 p-3 flex flex-wrap items-center justify-between gap-3 text-xs z-20 relative">
+      <div aria-live="polite">
+        <strong>{pendingCritical.owner.actor.name} · {pendingCritical.label}</strong>
+        <p className="text-sky-300">Crit {pendingCritical.criticalIndex + 1}/{pendingCritical.dice.length} · Running total {pendingCritical.total}</p>
+      </div>
+      <Button size="sm" variant="outline" onClick={continueCritical}>One More! · D{pendingCritical.dice[pendingCritical.criticalIndex].sides}</Button>
+    </section>
+  );
 
   return (
     <div className="min-h-screen text-stone-100 py-6 px-4 sm:px-6 relative flex flex-col font-serif">
@@ -758,6 +734,14 @@ export default function Chronicle() {
           <CustomizeToolDialog />
         </div>
       </header>
+
+      {!inspectingChar && criticalReadout}
+      <Dialog open={rollOptions !== null} onOpenChange={open => { if (!open) setRollOptions(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>{rollOptions?.title}</DialogTitle></DialogHeader>
+          <div className="space-y-2">{rollOptions?.choices.map((choice, index) => <Button key={index} variant="outline" className="w-full justify-start h-auto whitespace-normal text-left" onClick={() => { setRollOptions(null); runRollAction(choice.run); }}>{choice.label}</Button>)}</div>
+        </DialogContent>
+      </Dialog>
 
       {/* View 1: DM Screen Dashboard */}
       {activeView === "dashboard" && (
@@ -838,13 +822,12 @@ export default function Chronicle() {
               <span className="text-xs font-mono bg-sky-950/40 border border-sky-900/25 px-2 py-0.5 text-sky-400 font-bold uppercase">Round {roundCount}</span>
             </h2>
 
-            {/* Add Combatant Form - Single Row + and Name input */}
-            <form onSubmit={handleAddCombatant} className="flex items-center gap-2">
+            <form onSubmit={handleAddCombatant} className="flex flex-wrap items-center gap-2">
               <Button 
                 type="submit" 
                 size="sm"
                 className="bg-sky-950 text-sky-400 border border-sky-600/40 hover:bg-sky-500/10 text-xs font-bold rounded-md h-8 px-3 cursor-pointer shrink-0"
-                title="Roll Agility Initiative & Add"
+                title="Roll Agility Initiative or add a manual score"
               >
                 +
               </Button>
@@ -855,6 +838,7 @@ export default function Chronicle() {
                 required
                 className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans flex-1"
               />
+              <Input type="number" step="any" value={manualInitiative} onChange={e => setManualInitiative(e.target.value)} aria-label="Manual initiative score" placeholder="Manual score" className="bg-stone-950/50 border-stone-850 h-8 text-xs font-sans w-28" />
             </form>
 
             {/* Combatants List */}
@@ -1071,18 +1055,21 @@ export default function Chronicle() {
                   {recentRolls.length === 0 ? (
                     <div className="text-center py-6 text-stone-600 italic">No rolls logged yet.</div>
                   ) : (
-                    recentRolls.map((roll) => (
+                    recentRolls.map((roll) => {
+                      const breakdown = typeof roll.diceType === "string" && /^[\d(\s-]/.test(roll.diceType) ? withModifier(roll.diceType, roll.modifier ?? 0) : String(roll.result);
+                      return (
                       <div key={roll.id} className="border border-sky-950/20 bg-stone-950/40 p-1.5 rounded space-y-0.5">
                         <div className="flex justify-between text-stone-400 text-[8px] font-sans">
                           <span className="font-bold text-stone-300 truncate w-24">{roll.characterName}</span>
                           <span className="text-[7px] text-sky-600/80">{roll.label}</span>
                         </div>
                         <div className="flex justify-between items-center text-foreground mt-0.5">
-                          <span className="text-stone-500">[{roll.result}]</span>
+                          <span className="text-stone-500 min-w-0 truncate" title={breakdown}>[{breakdown}]</span>
                           <span className="font-serif font-bold text-sky-400 text-[10px]">{roll.total}</span>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1134,6 +1121,7 @@ export default function Chronicle() {
                     // Check if placement exists at this cell
                     const placement = placements.find(p => p.boardId === activeBoardId && p.col === col && p.row === row);
                     const item = placement ? chronicleRoster.find(r => r.character.id === placement.characterId) : null;
+                    const actor = item ? previewRecordedActor(item) : undefined;
                     
                     return (
                       <div
@@ -1295,38 +1283,37 @@ export default function Chronicle() {
                             <div className="grid grid-cols-6 gap-1 bg-black/15 p-1 rounded-md mt-1.5 z-20 relative">
                               {/* Row 1 Stats & Favorites */}
                               {[
-                                { type: "stat", key: "power", label: "POW", val: item.character.power || 0 },
-                                { type: "stat", key: "vitality", label: "VIT", val: item.character.vitality || 0 },
-                                { type: "stat", key: "spirit", label: "SPI", val: item.character.spirit || 0 },
+                                { type: "stat", key: "power", label: "POW" },
+                                { type: "stat", key: "vitality", label: "VIT" },
+                                { type: "stat", key: "spirit", label: "SPI" },
                                 { type: "favorite", idx: 0 },
                                 { type: "favorite", idx: 1 },
                                 { type: "favorite", idx: 2 },
                                 // Row 2 Stats & Favorites
-                                { type: "stat", key: "agility", label: "AGI", val: item.character.agility || 0 },
-                                { type: "stat", key: "willpower", label: "WIL", val: item.character.willpower || 0 },
-                                { type: "stat", key: "charisma", label: "CHA", val: item.character.charisma || 0 },
+                                { type: "stat", key: "agility", label: "AGI" },
+                                { type: "stat", key: "willpower", label: "WIL" },
+                                { type: "stat", key: "charisma", label: "CHA" },
                                 { type: "favorite", idx: 3 },
                                 { type: "favorite", idx: 4 },
                                 { type: "favorite", idx: 5 }
                               ].map((cell, cIdx) => {
                                 if (cell.type === "stat") {
-                                  const rank = item.character.rank || "Iron";
-                                  const mod = getModifierForStat(cell.val!, rank);
-                                  const die = getDiceLabel(cell.val!);
+                                  const score = actor?.stats[cell.key!];
+                                  const mod = score === undefined || !Number.isFinite(score) ? undefined : getModifierForStat(score, actor!.rank);
                                   return (
                                     <button
                                       key={cIdx}
-                                      onClick={() => rollStat(item.character.name, cell.label!, cell.val!, item.character.id, rank)}
+                                      onClick={() => rollStat(item, cell.key!, cell.label!)}
                                       className="text-[8px] font-sans text-center border border-border/10 py-1 bg-stone-950/30 rounded hover:bg-sky-500/10 hover:border-sky-500/30 text-stone-400 font-bold transition-all h-9 cursor-pointer flex flex-col justify-between"
-                                      title={`${cell.label} check: ${die}+${mod}`}
+                                      title={score === undefined || mod === undefined ? `${cell.label} is unavailable` : `${cell.label} check: ${withModifier(getDiceLabel(score), mod)}`}
                                     >
                                       <span className="text-[7px] text-stone-500 leading-none">{cell.label}</span>
-                                      <span className="text-foreground leading-none font-bold">{mod >= 0 ? `+${mod}` : mod}</span>
+                                      <span className="text-foreground leading-none font-bold">{mod === undefined ? "—" : mod >= 0 ? `+${mod}` : mod}</span>
                                     </button>
                                   );
                                 } else {
                                   // Favorites cell
-                                  const activeFavs = getFavorites(item.character);
+                                  const activeFavs = getFavorites(item);
                                   const fav = activeFavs[cell.idx!];
                                   if (fav) {
                                     // Check nickname fallback
@@ -1343,7 +1330,7 @@ export default function Chronicle() {
                                     return (
                                       <button
                                         key={cIdx}
-                                        onClick={() => rollFavorite(item.character.name, fav, item)}
+                                        onClick={() => rollFavorite(fav, item)}
                                         className="text-[8px] font-sans text-center border border-sky-950/40 py-1 bg-sky-950/20 rounded hover:bg-sky-500/15 hover:border-sky-500/30 text-sky-400 font-bold transition-all h-9 cursor-pointer flex flex-col justify-between truncate"
                                         title={`Roll favorite: ${fav.label}`}
                                       >
@@ -1515,39 +1502,40 @@ export default function Chronicle() {
 
             {/* Inspector tab panels */}
             <div className="py-4 font-sans text-xs z-10 relative leading-relaxed">
+              {criticalReadout}
               {/* Tab 1: Stats & Vitals */}
               {inspectorTab === "stats" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                     {[
-                      { key: "power", label: "Power", val: inspectingChar.character.power || 0 },
-                      { key: "vitality", label: "Vitality", val: inspectingChar.character.vitality || 0 },
-                      { key: "spirit", label: "Spirit", val: inspectingChar.character.spirit || 0 },
-                      { key: "agility", label: "Agility", val: inspectingChar.character.agility || 0 },
-                      { key: "endurance", label: "Endurance", val: inspectingChar.character.endurance || 0 },
-                      { key: "precision", label: "Precision", val: inspectingChar.character.precision || 0 },
-                      { key: "willpower", label: "Willpower", val: inspectingChar.character.willpower || 0 },
-                      { key: "charisma", label: "Charisma", val: inspectingChar.character.charisma || 0 }
+                      { key: "power", label: "Power" },
+                      { key: "vitality", label: "Vitality" },
+                      { key: "spirit", label: "Spirit" },
+                      { key: "agility", label: "Agility" },
+                      { key: "endurance", label: "Endurance" },
+                      { key: "precision", label: "Precision" },
+                      { key: "willpower", label: "Willpower" },
+                      { key: "charisma", label: "Charisma" }
                     ].map(st => {
-                      const rank = inspectingChar.character.rank || "Iron";
-                      const mod = getModifierForStat(st.val, rank);
-                      const die = getDiceLabel(st.val);
+                      const score = inspectorRollActor?.stats[st.key];
+                      const mod = score === undefined || !Number.isFinite(score) ? undefined : getModifierForStat(score, inspectorRollActor!.rank);
+                      const die = score === undefined ? "—" : getDiceLabel(score);
                       return (
-                        <div 
+                        <button type="button"
                           key={st.label} 
-                          onClick={() => rollStat(inspectingChar.character.name, st.label, st.val, inspectingChar.character.id, rank)}
+                          onClick={() => rollStat(inspectingChar, st.key, st.label)}
                           className="border border-border/40 hover:border-primary/60 bg-background/30 p-2.5 rounded-md cursor-pointer transition-colors group"
-                          title={`Roll ${st.label}: ${die}+${mod}`}
+                          title={mod === undefined ? `${st.label} is unavailable` : `Roll ${st.label}: ${withModifier(die, mod)}`}
                         >
                           <div className="flex justify-between items-center text-[10px] font-bold text-stone-500 uppercase">
                             <span className="group-hover:text-primary transition-colors">{st.label}</span>
                             <span className="font-mono text-primary/80">{die}</span>
                           </div>
                           <div className="text-lg font-serif font-bold text-foreground mt-0.5 flex items-baseline justify-between">
-                            <span>{st.val}</span>
-                            <span className="text-[10px] font-mono text-primary font-bold">+{mod}</span>
+                            <span>{mod === undefined ? "—" : score}</span>
+                            <span className="text-[10px] font-mono text-primary font-bold">{mod === undefined ? "—" : mod >= 0 ? `+${mod}` : mod}</span>
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>

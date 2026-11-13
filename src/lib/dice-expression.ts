@@ -5,19 +5,13 @@ interface DieRoll {
   isCrit: boolean;
 }
 
-interface DiceTerm {
+export interface DiceTerm {
   count: number;
   sides: number;
 }
 
-/** Resolve complete dice terms after the caller has substituted character stats. */
-export function resolveDiceExpression(
-  expression: string,
-  breakdown: string,
-  rollDie: (sides: number) => DieRoll,
-): { result: number; breakdown: string; isCrit: boolean; criticalDice: CriticalDie[] } {
-  const terms: DiceTerm[] = [];
-  const syntax = expression.replace(/(\d*)d(\d+)/gi, (notation: string, countText: string, sidesText: string, offset: number) => {
+export function mapDiceTerms(expression: string, replace: (term: DiceTerm) => string): string {
+  return expression.replace(/(\d*)d(\d+)/gi, (notation: string, countText: string, sidesText: string, offset: number) => {
     const before = expression[offset - 1] ?? "";
     const after = expression[offset + notation.length] ?? "";
     if (/[a-z\d_.]/i.test(before) || /[a-z\d_.]/i.test(after)) {
@@ -28,19 +22,37 @@ export function resolveDiceExpression(
     if (!Number.isSafeInteger(count) || count <= 0 || !Number.isSafeInteger(sides) || sides <= 0) {
       throw new Error("Dice counts and sides must be positive whole numbers.");
     }
-    terms.push({ count, sides });
-    return "(1)";
+    return replace({ count, sides });
   });
+}
 
-  if (!syntax.trim() || !/^[0-9+\-*/().\s]+$/.test(syntax)) {
+function compileArithmetic(expression: string): () => unknown {
+  if (!expression.trim() || !/^[0-9+\-*/().\s]+$/.test(expression)) {
     throw new Error("Invalid roll formula. Use dice, character stats, and arithmetic operators.");
   }
-  // Validate the arithmetic syntax before consuming any random rolls.
+  if (/[\d.)]\s*\(/.test(expression)) throw new Error("Use * to multiply terms in a roll formula.");
   try {
-    new Function(`return (${syntax})`);
+    return new Function(`return (${expression})`) as () => unknown;
   } catch {
     throw new Error("Invalid arithmetic in roll formula.");
   }
+}
+
+export function validateDiceExpression(expression: string): void {
+  compileArithmetic(mapDiceTerms(expression, () => "(1)"));
+}
+
+/** Resolve complete dice terms after the caller has substituted character stats. */
+export function resolveDiceExpression(
+  expression: string,
+  breakdown: string,
+  rollDie: (sides: number) => DieRoll,
+): { result: number; breakdown: string; isCrit: boolean; criticalDice: CriticalDie[] } {
+  const terms: DiceTerm[] = [];
+  compileArithmetic(mapDiceTerms(expression, term => {
+    terms.push(term);
+    return "(1)";
+  }));
 
   let isCrit = false;
   const criticalDice: CriticalDie[] = [];
@@ -60,12 +72,7 @@ export function resolveDiceExpression(
     return String(total);
   });
 
-  let result: number;
-  try {
-    result = new Function(`return (${resolved})`)();
-  } catch {
-    throw new Error("Invalid arithmetic in roll formula.");
-  }
+  const result = compileArithmetic(resolved)();
   if (typeof result !== "number" || !Number.isFinite(result)) {
     throw new Error("Roll formula must produce a finite number.");
   }

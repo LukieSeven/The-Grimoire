@@ -5,6 +5,8 @@ import { DieButton } from "@/components/die-button";
 import { DiceToolLayout } from "@/components/dice-tool-layout";
 import { customRollTitle } from "@/lib/custom-roll-title";
 import { advanceCriticalQueue, type CriticalDie } from "@/lib/critical-continuation";
+import { customInitiativeFormula, legacyModifierNote, linkedRollStats, needsSelectedStat, prepareRollFormula, rollAttributeScope, weaponRollFormula } from "@/lib/roll-rules";
+import type { RollPurpose } from "@/lib/active-effect-modifiers";
 import { FavoritesGrid } from "@/components/favorites-grid";
 import { WorkspaceProvider, WorkspaceCanvas, DockableTool, revealWorkspaceTool } from "@/components/dockable-workspace";
 import React, { useState, useEffect, useRef } from "react";
@@ -43,7 +45,7 @@ import {
   getGetCharacterQueryKey, getListCharacterRollsQueryKey, getListNotesQueryKey
 } from "@/hooks/useStorage";
 import { 
-  getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat,
+  getAdjustedStats, getDiceLabel, exportCharacterJSON, importCharacterJSON, getModifierForStat, buildFormulaVars,
   Ability, Character, Equipment, Skill, FavoriteSlot, Familiar, FamiliarAbility, evaluateFormula,
   getAbilityHighestRank, calculateAbilityEvolutions, hasStatModifiers, parseFormulaOrNum,
   getAbilityActiveModifierBadges, ActiveModifierBadge, isAbilityTriggerActive
@@ -61,17 +63,17 @@ import { CustomizeToolDialog } from "@/components/dialogs/customize-tool-dialog"
 import { TrackerPanel } from "@/components/tracker-panel";
 import { AbilityResultList } from "@/components/ability-result-list";
 import { AbilityOptionsFields } from "@/components/dialogs/ability-options";
-import { mergeOptions, flattenInputs } from "@/lib/ability-input";
-import { restedFamiliar, getFamiliarMaxValues, getFamiliarAdjusted, familiarAsCharacter, familiarAbilityAsAbility } from "@/lib/familiar-values";
+import { mergeOptions, flattenInputs, resultRollBonusKind, rollBonusKind } from "@/lib/ability-input";
+import { restedFamiliar, getFamiliarMaxValues, getFamiliarAdjusted, familiarAsCharacter, familiarAbilityAsAbility, getFamiliarMovementSpeed, FAMILIAR_RANKS } from "@/lib/familiar-values";
 import { spendTemporary } from "@/lib/temporary-resources";
 import { activeEffectModifier } from "@/lib/active-effect-modifiers";
 import { expireEffectApplications } from "@/lib/effect-stacking";
 import { resolveTrackerEffects, isEffectApplied } from "@/lib/tracker";
-import { favoriteRollChoices } from "@/lib/favorite-rolls";
+import { favoriteRollChoices, resolveFavoriteItem } from "@/lib/favorite-rolls";
 import { removeResourceBonus } from "@/lib/resource-bonus-transition";
 import { shouldEndAbilityOnUse } from "@/lib/ability-use-action";
 import { AbilityComponentList } from "@/components/ability-component-list";
-import { EditItemAbilityDialog } from "@/components/dialogs/edit-item-ability-dialog";
+import { isAbilityEditorPreview } from "@/components/ability-editor-prototype/preview-mode";
 
 const STATS = [
   { key: "power",     label: "POW" },
@@ -83,6 +85,8 @@ const STATS = [
   { key: "willpower", label: "WIL" },
   { key: "charisma",  label: "CHA" },
 ];
+const signedModifier = (value: number) => value < 0 ? String(value) : `+${value}`;
+const skillBaseModifier = (skill: Skill, rank: string) => getModifierForStat(Number(skill.value), rank) + (Number(skill.training) || 0);
 
 const CRIT_TIERS = [
   { name: "Common",    color: "#e8e8e8" },
@@ -363,7 +367,7 @@ export default function CharacterSheet() {
           let noteContent = `Description: ${desc || "None"}`;
           if (itemType === "equipment" && extraFields) {
             noteContent += `\nDice: ${extraFields.diceType || "None"}`;
-            noteContent += `\nModifier: ${extraFields.modifier || "None"}`;
+            noteContent += `\nModifier: ${extraFields.modifier === "" ? "None" : extraFields.modifier ?? "None"}`;
             noteContent += `\nDT Bonus: ${extraFields.dtBonus || 0}`;
             noteContent += `\nStat Modifiers: ${JSON.stringify(extraFields.statModifiers || {})}`;
           }
@@ -432,7 +436,7 @@ export default function CharacterSheet() {
   const [famName, setFamName] = useState("");
   const [famClassName, setFamClassName] = useState("Iron"); // Used for Rank select dropdown!
   const [famRace, setFamRace] = useState("");
-  const [famSpeed, setFamSpeed] = useState(25);
+  const [famMovement, setFamMovement] = useState("Agility * 5");
   const [famPower, setFamPower] = useState(10);
   const [famVitality, setFamVitality] = useState(10);
   const [famSpirit, setFamSpirit] = useState(10);
@@ -500,6 +504,7 @@ export default function CharacterSheet() {
   // ── New Features State ──
   const [favoriteRollPicker, setFavoriteRollPicker] = useState<{ abilityId: number; inputId: string } | null>(null);
   const [familiarRollPicker, setFamiliarRollPicker] = useState<{ familiarId: string | number; abilityId: number; inputId: string } | null>(null);
+  const [rollAttributePicker, setRollAttributePicker] = useState<{ label: string; stats: string[]; choose: (stat: string) => void } | null>(null);
   const [discardItem, setDiscardItem] = useState<any | null>(null);
   const [discardCount, setDiscardCount] = useState<number>(1);
   const [isDiscardOpen, setIsDiscardOpen] = useState(false);
@@ -515,12 +520,10 @@ export default function CharacterSheet() {
   const [invMode, setInvMode] = useState<"add" | "edit">("add");
   const [invType, setInvType] = useState<"currency" | "equipment" | "item">("item");
   const [invInitialData, setInvInitialData] = useState<any>(null);
-
-  // ── Item Ability Dialog State ──
-  const [isItemAbOpen, setIsItemAbOpen] = useState(false);
-  const [itemAbEquipmentId, setItemAbEquipmentId] = useState<number | null>(null);
-  const [itemAbInventoryItemId, setItemAbInventoryItemId] = useState<number | null>(null);
-  const [itemAbInitialData, setItemAbInitialData] = useState<any>(null);
+  const [invAbilityPreview, setInvAbilityPreview] = useState<{ ability: Ability | null; requestId: number }>();
+  const invAbilityPreviewRequest = useRef(0);
+  const inventoryReturnFocus = useRef<HTMLButtonElement | null>(null);
+  const previewInventoryAbilities = isAbilityEditorPreview();
 
   // ── Essence input State ───────────────────────────────────
   const [essenceSlotInput, setEssenceSlotInput] = useState<number | null>(null);
@@ -627,8 +630,9 @@ export default function CharacterSheet() {
       name = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
       statStr = `${finalStats[slot.targetId as string] || 0} (${autoModifiers[slot.targetId as string] >= 0 ? "+" : ""}${autoModifiers[slot.targetId as string]})`;
     } else if (slot.type === "weapon" || slot.type === "item") {
-      const eq = equipment.find(e => e.id === Number(slot.targetId));
-      const invItem = inventory.find(i => i.id === Number(slot.targetId));
+      const reference = resolveFavoriteItem(slot, equipment, inventory);
+      const eq = reference?.kind === "weapon" ? reference.item : undefined;
+      const invItem = reference?.kind === "item" ? reference.item : undefined;
       if (eq) {
         name = eq.name;
         costStr = eq.equipped ? "Equipped" : "Gear";
@@ -681,14 +685,15 @@ export default function CharacterSheet() {
       if (skill) {
         name = skill.name;
         costStr = `Val: ${skill.value}`;
-        statStr = `+${Math.floor((Number(skill.value) || 0) / 3) + (Number(skill.training) || 0)}`;
+        statStr = signedModifier(skillBaseModifier(skill, character.rank));
       }
     } else if (slot.type === "familiar-attribute") {
       const fam = character.familiars?.find(f => f.id === slot.familiarId);
       if (fam) {
-        const val = (fam as any)[slot.targetId] as number;
+        const adjusted = getFamiliarAdjusted(fam);
+        const val = adjusted.stats[String(slot.targetId)];
         name = `${fam.name}: ${String(slot.targetId).toUpperCase().substring(0, 3)}`;
-        statStr = `${val} (+${Math.floor(val/3)})`;
+        statStr = Number.isFinite(val) ? `${val} (${signedModifier(adjusted.modifiers[String(slot.targetId)])})` : "—";
       }
     } else if (slot.type === "familiar-ability") {
       const fam = character.familiars?.find(f => f.id === slot.familiarId);
@@ -860,7 +865,7 @@ export default function CharacterSheet() {
   };
 
   // ── Multiple Familiars Adjustments Mutator Helper ───────────
-  const updateFamiliarData = (famId: string | number, updatedFam: Familiar | null) => {
+  const updateFamiliarData = (famId: string | number, updatedFam: Familiar | null, callbacks?: { onSuccess: () => void; onError: (error: Error) => void }) => {
     const list = character.familiars ? [...character.familiars] : [];
     if (updatedFam === null) {
       // Release familiar
@@ -872,7 +877,9 @@ export default function CharacterSheet() {
       const idx = list.findIndex(f => f.id === famId);
       if (idx !== -1) {
         list[idx] = updatedFam;
-        updateChar.mutate({ id, data: { familiars: list } });
+        updateChar.mutate({ id, data: { familiars: list } }, callbacks);
+      } else {
+        callbacks?.onError(new Error("This familiar is no longer in the roster."));
       }
     }
   };
@@ -1133,12 +1140,12 @@ export default function CharacterSheet() {
 
   // ── Dice rolling handlers ─────────────────────────────────
   const handleRoll = (diceType: string, label?: string, statValue?: number, autoModifier?: number, familiarId?: string | number, rollPurpose?: "attack" | "check" | "resistance", rollScope?: string, onResolved?: () => void, onRollTotal?: (total: number) => void) => {
+    if (rollingDice || critChain) { toast.info("Finish the current roll and its criticals first."); return; }
     if (familiarId !== undefined && !character.familiars?.some(familiar => familiar.id === familiarId)) { toast.error("Record this familiar in Familiars before rolling its imported abilities."); return; }
     const rollKey = label || diceType;
     const modifier = autoModifier ?? 0;
     setRollingDice(rollKey);
     setLastRoll(null);
-    setCritChain(null);
 
     createRoll.mutate(
       { id, data: { diceType, modifier, rollPurpose, rollScope, label: label || diceType, ...(statValue !== undefined ? { statValue } : {}), ...(familiarId !== undefined ? { familiarId } : {}) } },
@@ -1237,8 +1244,29 @@ export default function CharacterSheet() {
     );
   };
 
-  const handleAbilityResultRoll = (formula: string, label: string, familiar?: Familiar, onResolved?: () => void) => {
-    handleRoll(formula, label, undefined, familiar ? 0 : undefined, familiar?.id, undefined, undefined, onResolved);
+  const handleAbilityResultRoll = (formula: string, label: string, familiar?: Familiar, onResolved?: () => void, purpose?: RollPurpose, scope?: string) => {
+    handleRoll(formula, label, undefined, undefined, familiar?.id, purpose, scope, onResolved);
+  };
+  const resultRollPurpose = rollBonusKind;
+  /** Validate and resolve linked attributes before paying for an ability. */
+  const prepareAbilityRoll = (formula: string | undefined, label: string, linkedStats: string[], actor: Familiar | undefined, selectedStat: string | undefined, retry: (stat: string) => void) => {
+    if (!formula?.trim()) return { formula: "", stat: undefined };
+    const choices = linkedRollStats(linkedStats);
+    let stat = linkedRollStats(selectedStat ? [selectedStat] : [])[0];
+    if (needsSelectedStat(formula) && !stat) {
+      if (choices.length > 1) {
+        setRollAttributePicker({ label, stats: choices, choose: retry });
+        return null;
+      }
+      stat = choices[0];
+    }
+    try {
+      const prepared = prepareRollFormula(formula, { stats: actor ? getFamiliarAdjusted(actor).stats : finalStats, rank: actor?.className ?? character.rank, selectedStat: stat });
+      return { formula: prepared, stat: rollAttributeScope(prepared, stat || (choices.length === 1 ? choices[0] : undefined)) };
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Review the ability's roll formula.");
+      return null;
+    }
   };
   const handleAbilityManaPayment = (amount: number, label: string, familiar?: Familiar) => {
     if (familiar) {
@@ -1258,34 +1286,20 @@ export default function CharacterSheet() {
   const handleStatRoll = (statKey: string, statLabel: string) => {
     const statValue = finalStats[statKey];
     const modifier = autoModifiers[statKey];
+    if (!Number.isFinite(statValue) || !Number.isFinite(modifier)) { toast.error("Enter a valid attribute score before rolling."); return; }
     handleRoll(diceLabels[statKey], `${statLabel} Roll`, statValue, modifier, undefined, "check", statKey);
   };
 
   const handleSkillRoll = (skill: Skill) => {
-    const val = Number(skill.value) || 0;
-    const train = Number(skill.training) || 0;
-    const modifier = getModifierForStat(val, character?.rank) + train;
+    const val = Number(skill.value);
+    if (!Number.isFinite(val)) { toast.error("Enter a valid skill score before rolling."); return; }
+    const modifier = skillBaseModifier(skill, character.rank);
     handleRoll(getDiceLabel(val), `${skill.name} Skill Roll`, val, modifier, undefined, "check", skill.name);
   };
 
   const handleWeaponRoll = (item: Equipment) => {
-    const dice = item.diceType || "d8";
-    let formula = dice;
-    let flatMod = 0;
-
-    if (item.modifier !== undefined && String(item.modifier).trim() !== "") {
-      const modStr = String(item.modifier).trim();
-      const hasLetters = /[a-zA-Z]/.test(modStr);
-      if (hasLetters) {
-        formula = `${dice} + ${modStr}`;
-      } else {
-        flatMod = parseInt(modStr, 10) || 0;
-      }
-    } else {
-      formula = `${dice} + powr`;
-    }
-
-    handleRoll(formula, `${item.name} Strike`, undefined, flatMod, undefined, "attack");
+    try { handleRoll(weaponRollFormula(item.diceType, item.modifier), `${item.name} Strike`, undefined, undefined, undefined, "attack"); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Review the weapon's roll formula."); }
   };
 
   const changeAbilityApplications = (effectApplications: NonNullable<typeof character.effectApplications>) => {
@@ -1293,9 +1307,9 @@ export default function CharacterSheet() {
       setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt);
     }, onError: error => toast.error(error.message) });
   };
-  const executeFavoriteResult = (entry: ReturnType<typeof resolveTrackerEffects>[number], toggle = true) => {
+  const executeFavoriteResult = (entry: ReturnType<typeof resolveTrackerEffects>[number], toggle = true, selectedStat?: string) => {
     if (entry.applicability !== "available" && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability's resource requirements are not currently met."); return; }
-    if (!entry.input || rollingDice || updateChar.isPending) return;
+    if (!entry.input || rollingDice || critChain || updateChar.isPending) return;
     const node = entry.input;
     if (node.durationType === "When Triggered" && node.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability is activated only by its resource trigger while its parent is active."); return; }
     const parentRecorded = (character.effectApplications ?? []).some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self");
@@ -1305,6 +1319,8 @@ export default function CharacterSheet() {
     }
     const actor = entry.familiar ? character.familiars?.find(familiar => familiar.id === entry.familiar!.id) : undefined;
     if (entry.familiar && !actor) { toast.error("Record this familiar before using its ability."); return; }
+    const prepared = prepareAbilityRoll(entry.effect.rollFormula, node.name, node.linkedStats, actor, selectedStat, stat => executeFavoriteResult(entry, toggle, stat));
+    if (!prepared) return;
     const cost = node.manaCost ?? 0;
     if (cost > (actor ? actor.currentMana + (actor.tempMana ?? 0) : (mana ?? character.currentMana) + (character.tempMana ?? 0))) { toast.error("Not enough mana to use this ability."); return; }
     const effectApplications = [...(character.effectApplications ?? [])];
@@ -1315,11 +1331,12 @@ export default function CharacterSheet() {
     updateChar.mutate({ id, data, consumeAbilityId: actor ? undefined : entry.ability.id }, { onSuccess: updated => {
       setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt);
       if (cost > 0) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: node.name, ...(actor ? { familiarId: actor.id } : {}) } });
-      if (entry.effect.rollFormula) handleAbilityResultRoll(entry.effect.rollFormula, node.name, actor, entry.effect.duration?.startsWith("Until Used") ? () => changeAbilityApplications((updated.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.targetId === "self" && (application.effectId === entry.effect.id || application.effectId === node.id)))) : undefined);
+      if (prepared.formula) handleAbilityResultRoll(prepared.formula, node.name, actor, entry.effect.duration?.startsWith("Until Used") ? () => changeAbilityApplications((updated.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.targetId === "self" && (application.effectId === entry.effect.id || application.effectId === node.id)))) : undefined, resultRollBonusKind(entry.result), prepared.stat);
       else { createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `Activated ${node.name}`, ...(actor ? { familiarId: actor.id } : {}) } }); toast.success(`Used ${node.name}`); }
     }, onError: error => toast.error(error.message) });
   };
   const handleAbilityRoll = (ability: Ability, chosenStat?: string, inputId?: string) => {
+    if (rollingDice || critChain || updateChar.isPending) { toast.info("Finish the current roll and its criticals first."); return; }
     if (ability.definition) {
       const entries = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars);
       const selectedId = inputId ?? ability.definition.id;
@@ -1347,6 +1364,8 @@ export default function CharacterSheet() {
         if (trig.updatedRollFormula) effectiveRollFormula = trig.updatedRollFormula;
       }
     }
+    const prepared = prepareAbilityRoll(legacyModifierNote(effectiveRollFormula) ? undefined : effectiveRollFormula, ability.name, [...(ability.linkedStats ?? []), ...(ability.linkedStat ? [ability.linkedStat] : []), ...(ability.primaryStat ? [ability.primaryStat] : [])], undefined, chosenStat, stat => handleAbilityRoll(ability, stat, inputId));
+    if (!prepared) return;
     const availableMana = curMana + (character.tempMana ?? 0);
     if (availableMana < effectiveCost) {
       toast.error(`Not enough Mana! Requires ${effectiveCost} MP (Have ${availableMana} MP)`);
@@ -1415,68 +1434,8 @@ export default function CharacterSheet() {
       updateChar.mutate({ id, data: updates }, { onSuccess: syncResourceState });
     }
 
-    if (effectiveRollFormula) {
-      let rollFormulaToUse = effectiveRollFormula;
-      let statMod = 0;
-
-      if (chosenStat) {
-        // Substitute shorthand "STAT" and "STATr" with the selected stat (e.g., "pow" / "powr")
-        const prefix = chosenStat.substring(0, 3).toLowerCase();
-        rollFormulaToUse = rollFormulaToUse
-          .replace(/STATr/g, `${prefix}r`)
-          .replace(/statr/g, `${prefix}r`)
-          .replace(/STAT/g, prefix)
-          .replace(/stat/g, prefix);
-
-        statMod = autoModifiers[chosenStat] || 0;
-      }
-
-      // Sum all equipped equipment flat modifiers (e.g. +6 Mace)
-      const vars: Record<string, number> = {
-        power: finalStats.power,
-        vitality: finalStats.vitality,
-        spirit: finalStats.spirit,
-        agility: finalStats.agility,
-        endurance: finalStats.endurance,
-        precision: finalStats.precision,
-        willpower: finalStats.willpower,
-        charisma: finalStats.charisma,
-        pow: finalStats.power,
-        vit: finalStats.vitality,
-        spi: finalStats.spirit,
-        agi: finalStats.agility,
-        end: finalStats.endurance,
-        pre: finalStats.precision,
-        wil: finalStats.willpower,
-        cha: finalStats.charisma,
-        powr: autoModifiers.power,
-        vitr: autoModifiers.vitality,
-        spir: autoModifiers.spirit,
-        agir: autoModifiers.agility,
-        endr: autoModifiers.endurance,
-        prer: autoModifiers.precision,
-        wilr: autoModifiers.willpower,
-        char: autoModifiers.charisma,
-      };
-
-      const eqMod = equipment
-        .filter(e => e.equipped)
-        .reduce((sum, item) => {
-          let modVal = 0;
-          if (item.modifier !== undefined && String(item.modifier).trim() !== "") {
-            const modStr = String(item.modifier).trim();
-            const hasLetters = /[a-zA-Z]/.test(modStr);
-            if (hasLetters) {
-              modVal = evaluateFormula(modStr, vars);
-            } else {
-              modVal = parseInt(modStr, 10) || 0;
-            }
-          }
-          return sum + modVal;
-        }, 0);
-
-      const totalMod = statMod + eqMod;
-      handleRoll(rollFormulaToUse, `${ability.name} Cast`, undefined, totalMod);
+    if (prepared.formula) {
+      handleRoll(prepared.formula, `${ability.name} Cast`, undefined, undefined, undefined, resultRollPurpose(ability.type), prepared.stat);
     } else {
       toast.success(`${ability.name} activated! (-${effectiveCost} MP)`);
     }
@@ -1500,6 +1459,7 @@ export default function CharacterSheet() {
     const newStats = getAdjustedStats(character, equipment, updatedAbilities);
 
     const evalVars = {
+      rank: character.rank,
       power: newStats.stats.power, pow: newStats.stats.power,
       vitality: newStats.stats.vitality, vit: newStats.stats.vitality,
       spirit: newStats.stats.spirit, spi: newStats.stats.spirit,
@@ -1581,47 +1541,15 @@ export default function CharacterSheet() {
   };
 
   // ── Familiar Rolls ────────────────────────────────────────
-  const handleFamiliarStatRoll = (famId: string | number, statKey: string, statLabel: string, val: number) => {
+  const handleFamiliarStatRoll = (famId: string | number, statKey: string, statLabel: string, initiative = false) => {
     const actor = character.familiars?.find(familiar => familiar.id === famId);
     if (!actor) return;
-    const numericVal = getFamiliarAdjusted(actor).stats[statKey] ?? Number(val);
-    const mod = getModifierForStat(numericVal, actor.className);
+    const adjusted = getFamiliarAdjusted(actor);
+    const numericVal = adjusted.stats[statKey];
+    if (!Number.isFinite(numericVal)) { toast.error("This familiar has no valid score for the selected stat."); return; }
+    const mod = adjusted.modifiers[statKey] + (initiative ? adjusted.abilityInitiativeBonus : 0);
     const dice = getDiceLabel(numericVal);
-    setRollingDice(`fam-${famId}-${statLabel}`);
-    setLastRoll(null);
-    setCritChain(null);
-
-    createRoll.mutate(
-      { 
-        id, 
-        data: { 
-          diceType: dice, 
-          modifier: mod, 
-          label: `Fam: ${statLabel} Roll`, 
-          familiarId: famId,
-          rollPurpose: "check",
-          rollScope: statKey,
-          statValue: numericVal
-        } 
-      },
-      {
-        onSuccess: (data) => {
-          setTimeout(() => {
-            const rolled = data.result ?? 0;
-            const wasCrit = (data as any).isCrit ?? false;
-            const rawDiceStr = String(data.diceType || "");
-            const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
-            if (wasCrit && data.criticalDice?.length) {
-              setCritChain({ chainCount: 0, criticalDice: data.criticalDice, criticalIndex: 0, maxChainCount: 0, chainDie: `d${data.criticalDice[0].sides}`, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${statLabel} Roll`, lastRolledValue: rolled, statValue: numericVal, familiarId: famId, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
-            } else {
-              setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: dice, label: `Fam: ${statLabel} Roll`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
-            }
-            setRollingDice(null);
-          }, 600);
-        },
-        onError: () => setRollingDice(null)
-      }
-    );
+    handleRoll(dice, `Fam: ${statLabel} Roll`, numericVal, mod, famId, "check", statKey);
   };
 
   const ownedAbilityActive = (ability: Ability, familiar?: Familiar) => {
@@ -1646,7 +1574,8 @@ export default function CharacterSheet() {
       onPayMana={(amount, label) => handleAbilityManaPayment(amount, label, familiar)} movementSpeed={values.speed} familiars={familiar ? [] : character.familiars} timing={familiar?.abilityTiming ?? character.abilityTiming}
       onTimingChange={(nodeId, patch) => familiar ? updateFamiliarData(familiar.id, { ...familiar, abilityTiming: { ...familiar.abilityTiming, [nodeId]: { ...familiar.abilityTiming?.[nodeId], ...patch } } }) : updateChar.mutate({ id, data: { abilityTiming: { ...character.abilityTiming, [nodeId]: { ...character.abilityTiming?.[nodeId], ...patch } } } })}/>
   };
-  const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility, inputId?: string, resultId?: string) => {
+  const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility, inputId?: string, resultId?: string, selectedStat?: string) => {
+    if (rollingDice || critChain || updateChar.isPending) { toast.info("Finish the current roll and its criticals first."); return; }
     if (ability.definition) {
       const current = character.familiars?.find(entry => entry.id === fam.id);
       if (!current || updateChar.isPending || rollingDice) return;
@@ -1665,9 +1594,11 @@ export default function CharacterSheet() {
       const result = resultId ? entries.find(entry => entry.effect.id === resultId) : choices[0] ?? parent;
       if (!result) return;
       if (!ending && (result.applicability !== "available" || result.triggerParent && !isEffectApplied(result.triggerParent, "self", applications))) { toast.info("This result's resource requirements are not currently met."); return; }
+      const prepared = prepareAbilityRoll(ending ? undefined : result.effect.rollFormula, parent.input!.name, parent.input!.linkedStats, current, selectedStat, stat => handleFamiliarAbilityRoll(current, ability, nodeId, resultId, stat));
+      if (!prepared) return;
       const cost = ending ? 0 : parent.input!.manaCost ?? 0;
       if (current.currentMana + (current.tempMana ?? 0) < cost) { toast.error("Not enough familiar mana."); return; }
-      const nextApplications = ending ? applications.filter(application => !(application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self")) : recorded || parent.permanent || ["Instant", "When Triggered"].includes(parent.input!.durationType) ? applications : [...applications, { id: crypto.randomUUID(), abilityId: ability.id, effectId: nodeId, targetId: "self", startedAt: new Date().toISOString() }];
+      const nextApplications = ending ? applications.filter(application => !(application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self")) : recorded || parent.permanent || ["Instant", "When Triggered"].includes(parent.input!.durationType) ? applications : [...applications, { id: crypto.randomUUID(), abilityId: ability.id, effectId: nodeId, targetId: "self", startedAt: new Date().toISOString(), duration: parent.effect.duration }];
       const next = { ...current, ...spendTemporary(current, { effectApplications: nextApplications, currentMana: current.currentMana - cost }) };
       const after = getFamiliarAdjusted(next);
       next.currentHp = removeResourceBonus(current.currentHp, before.maxHp, after.maxHp);
@@ -1680,10 +1611,12 @@ export default function CharacterSheet() {
           if (delta) createRoll.mutate({ id, data: { diceType, modifier: delta, label: `${parent.input!.name}: bonus/debuff source changed`, familiarId: current.id } });
         }
         if (cost) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: parent.input!.name, familiarId: current.id } });
-        if (!ending && result.effect.rollFormula) handleAbilityResultRoll(result.effect.rollFormula, parent.input!.name, next, result.effect.duration?.startsWith("Until Used") ? () => updateChar.mutate({ id, data: { familiars: character.familiars!.map(familiar => familiar.id === next.id ? { ...next, effectApplications: (next.effectApplications ?? []).filter(application => !(application.abilityId === ability.id && (application.effectId === result.effect.id || application.effectId === nodeId))) } : familiar) } }) : undefined);
+        if (prepared.formula) handleAbilityResultRoll(prepared.formula, parent.input!.name, next, result.effect.duration?.startsWith("Until Used") ? () => updateChar.mutate({ id, data: { familiars: character.familiars!.map(familiar => familiar.id === next.id ? { ...next, effectApplications: (next.effectApplications ?? []).filter(application => !(application.abilityId === ability.id && (application.effectId === result.effect.id || application.effectId === nodeId))) } : familiar) } }) : undefined, resultRollBonusKind(result.result), prepared.stat);
       }, onError: error => toast.error(error.message) });
       return;
     }
+    const prepared = prepareAbilityRoll(legacyModifierNote(ability.rollFormula) ? undefined : ability.rollFormula, ability.name, [...(ability.linkedStats ?? []), ...(ability.linkedStat ? [ability.linkedStat] : [])], fam, selectedStat, stat => handleFamiliarAbilityRoll(fam, ability, inputId, resultId, stat));
+    if (!prepared) return;
     const curMana = fam.currentMana;
     if (curMana + (fam.tempMana ?? 0) < ability.cost) {
       toast.error(`${fam.name} not enough Mana! Requires ${ability.cost} MP`);
@@ -1691,7 +1624,8 @@ export default function CharacterSheet() {
     }
     const nextMana = curMana - ability.cost;
 
-    const fMax = getFamiliarMaxValues(fam);
+    const fMax = getFamiliarAdjusted(fam);
+    const formulaVars = { ...fMax.stats, rank: fam.className };
     const updates: Partial<Familiar> = { currentMana: nextMana };
     const changes: string[] = [];
 
@@ -1699,9 +1633,9 @@ export default function CharacterSheet() {
       createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -ability.cost, label: `Fam: ${ability.name} Cost`, familiarId: fam.id } });
     }
 
-    const valHpAdd = parseFormulaOrNum(ability.hpAdd, fMax);
-    const valManaAdd = parseFormulaOrNum(ability.manaAdd, fMax);
-    const valDtAdd = parseFormulaOrNum(ability.dtAdd, fMax);
+    const valHpAdd = parseFormulaOrNum(ability.hpAdd, formulaVars);
+    const valManaAdd = parseFormulaOrNum(ability.manaAdd, formulaVars);
+    const valDtAdd = parseFormulaOrNum(ability.dtAdd, formulaVars);
 
     if (valHpAdd > 0) {
       const nextHp = Math.min(fMax.maxHp, fam.currentHp + valHpAdd);
@@ -1729,41 +1663,8 @@ export default function CharacterSheet() {
       toast.success(`${fam.name} activated ${ability.name}!${vitalsMsg}`);
     }
 
-    if (ability.rollFormula) {
-      setRollingDice(`fam-ability-${ability.id}`);
-      setLastRoll(null);
-      setCritChain(null);
-
-      createRoll.mutate(
-        { 
-          id, 
-          data: { 
-            diceType: ability.rollFormula, 
-            modifier: 0, 
-            label: `Fam: ${ability.name} Cast`, 
-            familiarId: fam.id 
-          } 
-        },
-        {
-          onSuccess: (data) => {
-            setTimeout(() => {
-              const rolled = data.result ?? 0;
-              const wasCrit = (data as any).isCrit ?? false;
-              const criticalDice = data.criticalDice ?? [];
-              const chainDie = criticalDice.length ? `d${criticalDice[0].sides}` : ability.rollFormula;
-              const rawDiceStr = String(data.diceType || "");
-              const breakdownStr = (/^d\d+$/i.test(rawDiceStr) || !rawDiceStr) ? String(rolled) : rawDiceStr;
-              if (wasCrit && criticalDice.length) {
-                setCritChain({ chainCount: 0, criticalDice, criticalIndex: 0, maxChainCount: 0, chainDie, runningDiceTotal: rolled, modifier: data.modifier ?? data.total - rolled, label: `Fam: ${ability.name} Cast`, lastRolledValue: rolled, familiarId: fam.id, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
-              } else {
-                setLastRoll({ rawRoll: rolled, modifier: data.modifier ?? data.total - rolled, total: data.total, hadCrit: false, maxChainCount: -1, diceType: data.diceType, label: `Fam: ${ability.name} Cast`, rolls: [{ label: "Roll 1", breakdown: breakdownStr, total: rolled }] });
-              }
-              setRollingDice(null);
-            }, 600);
-          },
-          onError: () => setRollingDice(null)
-        }
-      );
+    if (prepared.formula) {
+      handleAbilityResultRoll(prepared.formula, `Fam: ${ability.name} Cast`, fam, undefined, resultRollPurpose(ability.type), prepared.stat);
     } else if (changes.length === 0) {
       toast.success(`${fam.name} used ${ability.name}!`);
     }
@@ -1771,6 +1672,7 @@ export default function CharacterSheet() {
 
   // ── Favorites Hotbar Executer ─────────────────────────────
   const handleExecuteFavorite = (slot: FavoriteSlot) => {
+    if (rollingDice || critChain) { toast.info("Finish the current roll and its criticals first."); return; }
     if (slot.type === "ability-result") {
       const ability = abilities.find(entry => entry.id === Number(slot.targetId));
       if (!ability) { toast.error("Ability no longer exists."); return; }
@@ -1788,8 +1690,9 @@ export default function CharacterSheet() {
       const statLabel = STATS.find(s => s.key === slot.targetId)?.label || String(slot.targetId).toUpperCase();
       handleStatRoll(slot.targetId as string, statLabel);
     } else if (slot.type === "weapon" || slot.type === "item") {
-      const eq = equipment.find(e => e.id === Number(slot.targetId));
-      const invItem = inventory.find(i => i.id === Number(slot.targetId));
+      const reference = resolveFavoriteItem(slot, equipment, inventory);
+      const eq = reference?.kind === "weapon" ? reference.item : undefined;
+      const invItem = reference?.kind === "item" ? reference.item : undefined;
 
       if (eq) {
         handleWeaponRoll(eq);
@@ -1813,7 +1716,7 @@ export default function CharacterSheet() {
           }
         }
       } else {
-        toast.error("Item no longer found in inventory");
+        toast.error("This shortcut is missing or ambiguous. Reassign it to the correct item.");
       }
     } else if (slot.type === "ability") {
       const ability = abilities.find(a => a.id === Number(slot.targetId));
@@ -1864,8 +1767,7 @@ export default function CharacterSheet() {
     } else if (slot.type === "familiar-attribute" && slot.familiarId !== undefined) {
       const fam = character.familiars?.find(f => f.id === slot.familiarId);
       if (fam) {
-        const statVal = (fam as any)[slot.targetId] as number;
-        handleFamiliarStatRoll(fam.id, slot.targetId as string, String(slot.targetId).toUpperCase(), statVal);
+        handleFamiliarStatRoll(fam.id, String(slot.targetId), String(slot.targetId).toUpperCase());
       } else toast.error("Familiar not found");
     } else if (slot.type === "familiar-ability" && slot.familiarId !== undefined) {
       const fam = character.familiars?.find(f => f.id === slot.familiarId);
@@ -1916,15 +1818,11 @@ export default function CharacterSheet() {
         scrollToElement(`fam-ability-card-${familiar.id}-${fav.targetId}`);
       }
     } else if (fav.type === "weapon" || fav.type === "item") {
+      const reference = resolveFavoriteItem(fav, equipment, inventory);
+      if (!reference) { toast.error("This shortcut is missing or ambiguous. Reassign it to the correct item."); return; }
       (setActiveTab("inventory"), revealWorkspaceTool("inventory"));
       toast.success(`Navigated to Inventory: ${fav.label}`);
-      const targetId = Number(fav.targetId);
-      const isEq = equipment.some(e => e.id === targetId);
-      if (isEq) {
-        scrollToElement(`equipment-card-${targetId}`);
-      } else {
-        scrollToElement(`inventory-card-${targetId}`);
-      }
+      scrollToElement(`${reference.kind === "weapon" ? "equipment" : "inventory"}-card-${reference.item.id}`);
     } else if (fav.type === "skill") {
       (setActiveTab("skills"), revealWorkspaceTool("skills"));
       const skillId = Number(fav.targetId);
@@ -1951,31 +1849,21 @@ export default function CharacterSheet() {
 
   // ── Inventory Dialog Trigger Helpers ──────────────────────
   const triggerAddInventory = (category: "currency" | "equipment" | "item") => {
+    inventoryReturnFocus.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    setInvAbilityPreview(undefined);
     setInvType(category);
     setInvMode("add");
     setInvInitialData(null);
     setIsInvOpen(true);
   };
 
-  const triggerEditInventory = (category: "currency" | "equipment" | "item", item: any) => {
+  const triggerEditInventory = (category: "currency" | "equipment" | "item", item: any, previewAbility?: Ability | null) => {
+    inventoryReturnFocus.current = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+    setInvAbilityPreview(previewAbility !== undefined ? { ability: previewAbility, requestId: ++invAbilityPreviewRequest.current } : undefined);
     setInvType(category);
     setInvMode("edit");
     setInvInitialData(item);
     setIsInvOpen(true);
-  };
-
-  const triggerAddItemAbility = (eqId: number | null, invItemId: number | null = null) => {
-    setItemAbEquipmentId(eqId);
-    setItemAbInventoryItemId(invItemId);
-    setItemAbInitialData(null);
-    setIsItemAbOpen(true);
-  };
-
-  const triggerEditItemAbility = (ability: Ability) => {
-    setItemAbEquipmentId(ability.equipmentId || null);
-    setItemAbInventoryItemId(ability.inventoryItemId || null);
-    setItemAbInitialData(ability);
-    setIsItemAbOpen(true);
   };
 
   const triggerDiscardItem = (item: any) => {
@@ -2143,21 +2031,17 @@ export default function CharacterSheet() {
   };
 
   // ── Familiar Binder (Multiple Companions) ─────────────────
+  const familiarDraftStats = {
+    rank: famClassName,
+    power: famPower, vitality: famVitality, spirit: famSpirit, agility: famAgility,
+    endurance: famEndurance, precision: famPrecision, willpower: famWillpower, charisma: famCharisma,
+    dtbonus: 0,
+  };
+  const familiarDraftSpeed = isAddingFamiliar ? getFamiliarMovementSpeed(famMovement, familiarDraftStats) : undefined;
   const handleBindFamiliar = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!famName.trim()) return;
-
-    const vars = {
-      power: famPower, pow: famPower,
-      vitality: famVitality, vit: famVitality,
-      spirit: famSpirit, spi: famSpirit,
-      agility: famAgility, agi: famAgility,
-      endurance: famEndurance, end: famEndurance,
-      precision: famPrecision, pre: famPrecision,
-      willpower: famWillpower, wil: famWillpower,
-      charisma: famCharisma, cha: famCharisma,
-      dtbonus: 0
-    };
+    if (!famName.trim() || familiarDraftSpeed === undefined) return;
+    const vars = buildFormulaVars(familiarDraftStats);
 
     const calculatedHp = Math.max(1, evaluateFormula(famHpFormula || "Vitality * 8", vars));
     const calculatedMana = Math.max(0, evaluateFormula(famManaFormula || "Spirit * 5", vars));
@@ -2169,7 +2053,8 @@ export default function CharacterSheet() {
       className: famClassName || "Companion",
       race: famRace || "Beast",
       level: 1,
-      speed: famSpeed,
+      speed: familiarDraftSpeed,
+      speedFormula: famMovement.trim(),
       power: famPower,
       vitality: famVitality,
       spirit: famSpirit,
@@ -2197,7 +2082,7 @@ export default function CharacterSheet() {
         setFamName("");
         setFamClassName("Iron");
         setFamRace("");
-        setFamSpeed(25);
+        setFamMovement("Agility * 5");
         setFamPower(10);
         setFamVitality(10);
         setFamSpirit(10);
@@ -2953,7 +2838,8 @@ export default function CharacterSheet() {
                       onClick={() => {
                         const existing = combatants.find(entry => entry.id === `character:${id}` || entry.name.trim().toLowerCase() === character.name.trim().toLowerCase());
                         if (existing && !window.confirm("Do you want to overwrite and re-roll your initiative?")) return;
-                        handleRoll(diceLabels.agility, "Initiative Roll", finalStats.agility, autoModifiers.agility, undefined, "check", "agility", undefined, total => {
+                        const formula = customInitiativeFormula(character.initiativeFormula);
+                        handleRoll(formula ?? diceLabels.agility, "Initiative Roll", formula ? undefined : finalStats.agility, (formula ? 0 : autoModifiers.agility) + adjustedStats.abilityInitiativeBonus, undefined, "check", "agility", undefined, total => {
                         setCombatants(current => {
                           const next = upsertCharacterInitiative(current, currentTurnIdx, id, character.name, total);
                           setCurrentTurnIdx(next.turn);
@@ -2962,7 +2848,7 @@ export default function CharacterSheet() {
                         });
                       }}
                       className="h-8 px-3 border-2 border-cyan-400 bg-cyan-950/90 text-cyan-200 hover:bg-cyan-900 hover:border-cyan-300 font-bold font-serif text-xs rounded-md cursor-pointer flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.45)] transition-all"
-                      title="Roll Initiative (Agility Check)"
+                      title={customInitiativeFormula(character.initiativeFormula) ? "Roll Initiative (custom formula)" : "Roll Initiative (Agility Check)"}
                       aria-label="Roll Initiative"
                     >
                       <Dice5 className="w-4 h-4 text-cyan-400 animate-pulse" />
@@ -3022,7 +2908,15 @@ export default function CharacterSheet() {
           onApplicationsChange={changeAbilityApplications}
           onManualEffectsChange={manualTrackedEffects => updateChar.mutate({ id, data: { manualTrackedEffects } }, { onError: error => toast.error(error.message) })}
           onConfirmationsChange={triggerConfirmations => updateChar.mutate({ id, data: { triggerConfirmations } }, { onError: error => toast.error(error.message) })}
-          onRoll={handleAbilityResultRoll}
+          onRoll={entry => {
+            const actor = entry.familiar ?? entry.ownerFamiliar;
+            const label = entry.result?.name || entry.input?.name || entry.ability.name;
+            const roll = (selectedStat?: string) => {
+              const prepared = prepareAbilityRoll(entry.effect.rollFormula, label, entry.input?.linkedStats ?? entry.ability.linkedStats ?? [], actor, selectedStat, roll);
+              if (prepared?.formula) handleAbilityResultRoll(prepared.formula, label, actor, undefined, entry.result ? resultRollBonusKind(entry.result) : undefined, prepared.stat);
+            };
+            roll();
+          }}
           onInspect={(abilityId, familiarId) => {
             if (familiarId !== undefined) {
               (setActiveTab("familiar"), revealWorkspaceTool("familiar"));
@@ -3064,7 +2958,7 @@ export default function CharacterSheet() {
                           <button
                             key={stat.key}
                             onClick={() => handleStatRoll(stat.key, stat.label)}
-                            disabled={!!rollingDice}
+                            disabled={!!rollingDice || !!critChain}
                             title={`${stat.key.charAt(0).toUpperCase() + stat.key.slice(1)} — ${dice}`}
                             className={`rounded-none p-1 text-center border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                               isRolling ? "border-primary bg-primary/10 animate-pulse"
@@ -3093,7 +2987,7 @@ export default function CharacterSheet() {
                           key={d}
                           die={d}
                           rolling={rollingDice === customRollTitle(d)}
-                          disabled={!!rollingDice}
+                          disabled={!!rollingDice || !!critChain}
                           onClick={() => handleRoll(d, customRollTitle(d), undefined, 0)}
                         />
                       ))}
@@ -3111,7 +3005,7 @@ export default function CharacterSheet() {
                         <Button
                           size="sm"
                           onClick={handleCustomFormulaRoll}
-                          disabled={!customFormula.trim() || !!rollingDice}
+                          disabled={!customFormula.trim() || !!rollingDice || !!critChain}
                           className="h-7 text-xs font-serif rounded-none px-3 bg-primary text-primary-foreground cursor-pointer"
                         >
                           Roll
@@ -3258,6 +3152,15 @@ export default function CharacterSheet() {
             })}
           </FavoritesGrid>
 
+          <Dialog open={rollAttributePicker !== null} onOpenChange={open => { if (!open) setRollAttributePicker(null); }}>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader><DialogTitle>Choose roll attribute</DialogTitle></DialogHeader>
+              {rollAttributePicker && <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">{rollAttributePicker.label}</p>
+                <div className="flex flex-wrap gap-2">{rollAttributePicker.stats.map(stat => <Button key={stat} variant="outline" onClick={() => { const { choose } = rollAttributePicker; setRollAttributePicker(null); choose(stat); }}>{stat.slice(0, 3).toUpperCase()}</Button>)}</div>
+              </div>}
+            </DialogContent>
+          </Dialog>
           <Dialog open={familiarRollPicker !== null} onOpenChange={open => { if (!open) setFamiliarRollPicker(null); }}><DialogContent><DialogHeader><DialogTitle>Choose target roll</DialogTitle></DialogHeader><div className="space-y-2">{familiarRollPicker && (() => {
             const familiar = character.familiars?.find(entry => entry.id === familiarRollPicker.familiarId); const ability = familiar?.abilities.find(entry => entry.id === familiarRollPicker.abilityId);
             if (!familiar || !ability?.definition) return null;
@@ -3311,7 +3214,7 @@ export default function CharacterSheet() {
                       {equipment.map(eq => (
                         <Button 
                           key={`eq-${eq.id}`} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
-                          onClick={() => handleAssignFavorite(assigningSlotIndex!, "item", eq.id, eq.name)}
+                          onClick={() => handleAssignFavorite(assigningSlotIndex!, "weapon", eq.id, eq.name)}
                         >
                           {eq.name} {eq.equipped ? "[Equipped]" : ""} {eq.diceType ? `(${eq.diceType})` : ""}
                         </Button>
@@ -3380,7 +3283,7 @@ export default function CharacterSheet() {
                           key={sk.id} variant="outline" size="sm" className="h-6 text-[10px] rounded-none font-serif"
                           onClick={() => handleAssignFavorite(assigningSlotIndex!, "skill", sk.id, sk.name)}
                         >
-                          {sk.name} (-{sk.value})
+                          {sk.name} ({signedModifier(skillBaseModifier(sk, character.rank))})
                         </Button>
                       ))}
                     </div>
@@ -3398,13 +3301,13 @@ export default function CharacterSheet() {
                           <h6 className="font-bold text-[9px] text-muted-foreground uppercase block mb-1">Attributes</h6>
                           <div className="flex flex-wrap gap-1">
                             {STATS.map(stat => {
-                              const val = (fam as any)[stat.key] as number;
+                              const mod = getFamiliarAdjusted(fam).modifiers[stat.key];
                               return (
                                 <Button 
                                   key={stat.key} variant="outline" size="sm" className="h-6 text-[9px] rounded-md font-mono"
                                   onClick={() => handleAssignFavorite(assigningSlotIndex!, "familiar-attribute", stat.key, `${fam.name}:${stat.label}`, fam.id)}
                                 >
-                                  {stat.label} (+{Math.floor(val/3)})
+                                  {stat.label} ({signedModifier(mod)})
                                 </Button>
                               );
                             })}
@@ -3461,6 +3364,7 @@ export default function CharacterSheet() {
             <div className="attribute-stat-grid">
             {STATS.map(stat => {
               const baseValue = (character as any)[stat.key] as number;
+              const effectiveValue = finalStats[stat.key];
               const trainingKey = `${stat.key}Training`;
               const curTraining = (character as any)[trainingKey] as number;
               const fullName = stat.key.charAt(0).toUpperCase() + stat.key.slice(1);
@@ -3476,15 +3380,15 @@ export default function CharacterSheet() {
                     <div className="attribute-stat-heading">
                       <h4 className="attribute-stat-name font-serif font-extrabold text-foreground group-hover:text-primary transition-colors capitalize">{fullName}</h4>
                       <Badge variant="outline" className="attribute-stat-die font-mono text-[10px] border-primary/30 text-primary bg-background/45 rounded-none h-5 px-1 py-0">
-                        {getDiceLabel(baseValue)}
+                        {diceLabels[stat.key]}
                       </Badge>
                     </div>
 
                     <div className="attribute-stat-value-row">
                       <div className="flex items-baseline gap-1 whitespace-nowrap">
-                        <span className="text-3xl font-serif font-bold text-primary">{baseValue}</span>
+                        <span className="text-3xl font-serif font-bold text-primary" title={effectiveValue !== baseValue ? `Base score: ${baseValue}` : undefined}>{effectiveValue}</span>
                         <span className="text-[11px] font-mono text-primary/80 font-bold">
-                          +{autoModifiers[stat.key]}
+                          {signedModifier(autoModifiers[stat.key])}
                         </span>
                       </div>
                       <span className="attribute-stat-roll font-mono text-muted-foreground/60 flex items-center gap-1 group-hover:text-primary transition-colors">
@@ -3727,7 +3631,7 @@ export default function CharacterSheet() {
 
                                     <div className="flex items-baseline gap-1 py-0.5">
                                       <span className="text-2xl font-serif text-foreground font-bold">{skill.value}</span>
-                                      <span className="text-[10px] font-mono text-primary font-bold">+{getModifierForStat(skill.value, character?.rank)}</span>
+                                      <span className="text-[10px] font-mono text-primary font-bold">{signedModifier(skillBaseModifier(skill, character.rank))}</span>
                                     </div>
 
                                     {/* Skill training */}
@@ -3862,7 +3766,8 @@ export default function CharacterSheet() {
                             </div>
 
                             <div className="flex shrink-0 items-center gap-1">
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" onClick={() => triggerEditInventory("equipment", eq)}>
+                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${eq.name}`} title={previewInventoryAbilities ? "Preview new equipment ability" : "Add equipment ability"} onClick={() => triggerEditInventory("equipment", eq, null)}><Plus className="w-3 h-3" /></Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" aria-label={`Edit equipment: ${eq.name}`} onClick={() => triggerEditInventory("equipment", eq)}>
                                 <Edit2 className="w-3 h-3" />
                               </Button>
                               <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive rounded-none cursor-pointer" onClick={() => deleteEq.mutate({ id: eq.id, charId: id })}>
@@ -3901,7 +3806,7 @@ export default function CharacterSheet() {
 
                                             {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                             {(() => {
-                                               const badges = ab.definition ? [] : getAbilityActiveModifierBadges(ab, finalStats);
+                                               const badges = ab.definition ? [] : getAbilityActiveModifierBadges(ab, { ...finalStats, rank: character.rank });
                                                if (badges.length === 0) return null;
                                                return (
                                                  <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -3931,6 +3836,7 @@ export default function CharacterSheet() {
                                              })()}
                                           </div>
                                           <div className="flex flex-wrap shrink-0 items-center gap-1.5">
+                                            <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`${previewInventoryAbilities ? "Preview" : "Edit"} equipment ability: ${ab.name}`} onClick={() => triggerEditInventory("equipment", eq, ab)}><Edit2 className="w-3 h-3" /></Button>
                                             <button
                                               type="button"
                                               onClick={() => ab.definition ? handleAbilityRoll(ab) : toggleAbilityActive(ab)}
@@ -4058,7 +3964,8 @@ export default function CharacterSheet() {
                             {item.description && <p className="text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">{item.description}</p>}
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" onClick={() => triggerEditInventory("item", item)}>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${item.name}`} title={previewInventoryAbilities ? "Preview new item ability" : "Add item ability"} onClick={() => triggerEditInventory("item", item, null)}><Plus className="w-3 h-3" /></Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" aria-label={`Edit item: ${item.name}`} onClick={() => triggerEditInventory("item", item)}>
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                             <Button 
@@ -4099,6 +4006,7 @@ export default function CharacterSheet() {
                                         {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                       </div>
                                       <div className="flex flex-wrap shrink-0 items-center gap-1.5">
+                                        <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`${previewInventoryAbilities ? "Preview" : "Edit"} item ability: ${ab.name}`} onClick={() => triggerEditInventory("item", item, ab)}><Edit2 className="w-3 h-3" /></Button>
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -4168,22 +4076,14 @@ export default function CharacterSheet() {
 
             <EditInventoryDialog
               characterId={id}
+              characterName={character.name}
               isOpen={isInvOpen}
               onOpenChange={setIsInvOpen}
               mode={invMode}
               type={invType}
               initialData={invInitialData}
-              onAddAbilityClick={(eqId, invItemId) => triggerAddItemAbility(eqId, invItemId)}
-              onEditAbilityClick={(ab) => triggerEditItemAbility(ab)}
-            />
-
-            <EditItemAbilityDialog
-              isOpen={isItemAbOpen}
-              onOpenChange={setIsItemAbOpen}
-              characterId={id}
-              equipmentId={itemAbEquipmentId}
-              inventoryItemId={itemAbInventoryItemId}
-              initialData={itemAbInitialData}
+              initialAbilityPreview={invAbilityPreview}
+              returnFocus={() => inventoryReturnFocus.current?.focus()}
             />
           </div>
         </div>
@@ -4202,6 +4102,7 @@ export default function CharacterSheet() {
               </div>
               <EditAbilitiesDialog 
                 characterId={id} 
+                characterName={character.name}
                 abilities={abilities} 
                 open={isEditAbilitiesOpen} 
                 onOpenChange={(open) => { 
@@ -4332,7 +4233,7 @@ export default function CharacterSheet() {
                               </div>
 
                               {/* Active Modifiers Summary Badges */}
-                              {(!ability.definition ? getAbilityActiveModifierBadges(ability, finalStats) : []).map((b: ActiveModifierBadge, i: number) => (
+                              {(!ability.definition ? getAbilityActiveModifierBadges(ability, { ...finalStats, rank: character.rank }) : []).map((b: ActiveModifierBadge, i: number) => (
                                 <span 
                                   key={i} 
                                   title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}
@@ -4468,7 +4369,13 @@ export default function CharacterSheet() {
                               vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
                               confirmations={character.triggerConfirmations ?? {}} applications={character.effectApplications ?? []}
                               onApplicationsChange={changeAbilityApplications}
-                              onRoll={handleAbilityResultRoll} />}
+                              onRoll={(formula, label) => {
+                                const roll = (stat?: string): void => {
+                                  const prepared = prepareAbilityRoll(formula, label, [...(ability.linkedStats ?? []), ...(ability.primaryStat ? [ability.primaryStat] : []), ...(ability.linkedStat ? [ability.linkedStat] : [])], undefined, stat, roll);
+                                  if (prepared?.formula) handleAbilityResultRoll(prepared.formula, label, undefined, undefined, resultRollPurpose(ability.type), prepared.stat);
+                                };
+                                roll();
+                              }} />}
                             {ability.definition && <AbilityResultList ability={ability} rank={character.rank} stats={finalStats}
                               vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
                               confirmations={character.triggerConfirmations ?? {}} applications={character.effectApplications ?? []}
@@ -4566,7 +4473,13 @@ export default function CharacterSheet() {
                                           ) : subRollFormula ? (
                                             <Button
                                               size="sm"
-                                              onClick={() => handleRoll(subRollFormula || "d20", `Sub: ${subTitle}`)}
+                                              onClick={() => {
+                                                const roll = (stat?: string): void => {
+                                                  const prepared = prepareAbilityRoll(subRollFormula, subTitle, [...(ability.linkedStats ?? []), ...(ability.primaryStat ? [ability.primaryStat] : []), ...(ability.linkedStat ? [ability.linkedStat] : [])], undefined, stat, roll);
+                                                  if (prepared?.formula) handleAbilityResultRoll(prepared.formula, `Sub: ${subTitle}`, undefined, undefined, resultRollPurpose(sub.type), prepared.stat);
+                                                };
+                                                roll();
+                                              }}
                                               className="bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 h-6 text-[10px] font-serif rounded-none cursor-pointer px-2"
                                             >
                                               <Dice5 className="w-3 h-3 mr-1" /> Activate
@@ -4956,22 +4869,22 @@ export default function CharacterSheet() {
                         <Input value={famRace} onChange={e => setFamRace(e.target.value)} placeholder="e.g. Golem, Aviary" className="bg-background rounded-md h-8 text-sm" />
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Rank</label>
+                        <label htmlFor="new-familiar-rank" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Familiar rank</label>
                         <select 
+                          id="new-familiar-rank"
                           value={famClassName} 
                           onChange={e => setFamClassName(e.target.value)} 
                           className="w-full h-8 bg-background border border-input rounded-md px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                         >
-                          <option value="Iron">Iron</option>
-                          <option value="Bronze">Bronze</option>
-                          <option value="Silver">Silver</option>
-                          <option value="Gold">Gold</option>
-                          <option value="Diamond">Diamond</option>
+                          {FAMILIAR_RANKS.map(rank => <option key={rank}>{rank}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Speed (Feet)</label>
-                        <Input type="number" min={5} step={5} value={famSpeed} onChange={e => setFamSpeed(Number(e.target.value))} required className="bg-background rounded-md h-8 text-sm font-mono" />
+                        <label htmlFor="new-familiar-movement" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1">Movement (ft)</label>
+                        <Input id="new-familiar-movement" value={famMovement} onChange={e => setFamMovement(e.target.value)} required className="bg-background rounded-md h-8 text-sm font-mono" aria-describedby="new-familiar-movement-help" aria-invalid={familiarDraftSpeed === undefined || undefined} />
+                        <p id="new-familiar-movement-help" className={`mt-1 text-xs ${familiarDraftSpeed === undefined ? "text-destructive" : "text-muted-foreground"}`}>
+                          {familiarDraftSpeed === undefined ? "Enter a valid movement formula or a number of feet, including 0." : `Fixed feet or a formula. Base speed: ${familiarDraftSpeed} ft.`}
+                        </p>
                       </div>
                     </div>
 
@@ -5030,7 +4943,7 @@ export default function CharacterSheet() {
                     </div>
 
                     <div className="flex justify-end pt-4 border-t border-border/20">
-                      <Button type="submit" className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Familiar</Button>
+                      <Button type="submit" disabled={familiarDraftSpeed === undefined} className="bg-primary text-primary-foreground font-serif rounded-md cursor-pointer">Add Familiar</Button>
                     </div>
                   </form>
                 </CardContent>
@@ -5052,7 +4965,7 @@ export default function CharacterSheet() {
                 <div className="grid grid-cols-1 gap-6">
                   {character.familiars.map(fam => {
                     const fMax = getFamiliarMaxValues(fam);
-                    const adjustedFamStats = getFamiliarAdjusted(fam).stats;
+                    const adjustedFamStats = fMax.stats;
                     const isExpanded = expandedFamiliars[fam.id] ?? false;
                     const flash = famDtFlashes[fam.id] ?? null;
                     const inputs = famInputs[fam.id] || {};
@@ -5142,7 +5055,7 @@ export default function CharacterSheet() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleFamiliarStatRoll(fam.id, "agility", "Initiative", fam.agility)}
+                              onClick={() => handleFamiliarStatRoll(fam.id, "agility", "Initiative", true)}
                               className="familiar-init-action h-7 px-2.5 border border-cyan-400/80 bg-cyan-950/80 text-cyan-200 hover:bg-cyan-900 font-bold font-serif text-[10px] rounded-md cursor-pointer flex items-center gap-1 shadow-[0_0_10px_rgba(34,211,238,0.3)] transition-all"
                               title="Roll Initiative (Agility Check)"
                               aria-label={`Roll ${fam.name} initiative`}
@@ -5170,7 +5083,7 @@ export default function CharacterSheet() {
                               <TabsTrigger value="abilities">Abilities ({fam.abilities.length})</TabsTrigger>
                             </TabsList>
                             <div className="familiar-management flex flex-wrap items-center gap-2">
-                              <EditFamiliarDialog characterId={id} familiar={fam} onSave={(updated) => updateFamiliarData(fam.id, updated)} />
+                              <EditFamiliarDialog characterId={id} familiar={fam} onSave={(updated, callbacks) => updateFamiliarData(fam.id, updated, callbacks)} />
                             <Button variant="outline" size="sm" className="border-destructive/40 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer h-7 text-[10px] font-bold px-2" 
                               onClick={() => handleReleaseFamiliarClick(fam.id)}>
                               Release
@@ -5191,7 +5104,7 @@ export default function CharacterSheet() {
                                   {/* Stat Roll Button */}
                                   <button
                                     type="button"
-                                    onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label, effectiveVal)}
+                                    onClick={() => handleFamiliarStatRoll(fam.id, stat.key, stat.label)}
                                     className="hover:border-primary transition-all cursor-pointer text-center w-full"
                                     aria-label={`Roll ${fam.name} ${stat.label}`}
                                   >
@@ -5267,7 +5180,7 @@ export default function CharacterSheet() {
                                             {ab.rollFormula && <Badge variant="outline" className="text-[8px] font-mono border-border/50 text-muted-foreground rounded-none bg-background/50">Formula: {ab.rollFormula}</Badge>}
 
                                             {/* Active Modifiers Summary Badges */}
-                                            {(!ab.definition ? getAbilityActiveModifierBadges(ab, getFamiliarAdjusted(fam).stats) : []).map((b: ActiveModifierBadge, i: number) => (
+                                            {(!ab.definition ? getAbilityActiveModifierBadges(ab, { ...adjustedFamStats, rank: fam.className }) : []).map((b: ActiveModifierBadge, i: number) => (
                                               <span 
                                                 key={i} 
                                                 title={b.rawFormula ? `Formula: ${b.rawFormula}` : undefined}

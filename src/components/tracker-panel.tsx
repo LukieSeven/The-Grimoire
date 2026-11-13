@@ -39,7 +39,7 @@ interface Props {
   onInspect: (abilityId: number, familiarId?: string | number) => void;
   onRestoreEffects: (snapshot: { applications: EffectApplication[]; manual: ManualTrackedEffect[]; familiars: Familiar[] }) => void;
   onLifetimeEvent: (event: "turn" | "combat", combatant?: Combatant) => void;
-  onRoll: (formula: string, label: string, familiar?: Familiar) => void;
+  onRoll: (entry: ResolvedEffect) => void;
   combatantSources: string[];
   recentCombatants: Omit<Combatant, "id">[];
   onRememberCombatant: (combatant: Omit<Combatant, "id">) => void;
@@ -139,12 +139,12 @@ export function TrackerPanel(props: Props) {
       {!entry.createdEffect && entry.component?.targetRules && <p className="whitespace-pre-wrap">{entry.component.targetRules}</p>}
       {entry.component?.cost && <p className="text-xs">Cost: {entry.component.cost}</p>}
       {entry.component?.uses && <p className="text-xs">Uses: {entry.component.uses}</p>}
-      {controls && entry.effect.rollFormula && <div className="flex flex-wrap items-center gap-2"><code className="text-xs">{entry.effect.rollFormula}</code><Button size="sm" variant="outline" disabled={entry.progression !== "unlocked" || (!active && entry.applicability !== "available")} onClick={() => props.onRoll(entry.effect.rollFormula!, entry.input?.name ?? entry.ability.name, entry.familiar)}>Roll</Button></div>}
+      {controls && entry.effect.rollFormula && <div className="flex flex-wrap items-center gap-2"><code className="text-xs">{entry.effect.rollFormula}</code><Button size="sm" variant="outline" disabled={entry.progression !== "unlocked" || (!active && entry.applicability !== "available")} onClick={() => props.onRoll(entry)}>Roll</Button></div>}
       {entry.input && !entry.result && <div className="text-xs space-y-1">
         {entry.input.manaCost !== undefined && <p>Activation: {entry.input.manaCost} mana</p>}
         {entry.input.manaPerTurn !== undefined && <p>Per turn: {entry.input.manaPerTurn} mana</p>}
         {(entry.input.reaction || entry.input.timeCost !== undefined) && <p>Time cost: {entry.input.reaction ? "Reaction" : `${entry.input.timeCost} seconds`}</p>}
-        {entry.input.cooldown !== undefined && <p>Cooldown: {entry.input.cooldown} {entry.input.cooldownUnit.toLowerCase()} · starts {entry.input.cooldownStarts === "activation" ? "on activation" : "on ending"}</p>}
+        {entry.input.cooldown !== undefined && <p>Cooldown (reference): {entry.input.cooldown} {entry.input.cooldownUnit.toLowerCase()} · starts {entry.input.cooldownStarts === "activation" ? "on activation" : "when ability ends"}</p>}
       </div>}
       {controls && entry.input && <>{!!entry.input.trigger.conditions.length && <><p className="text-xs text-primary">When triggered</p>{requirements(entry.input.trigger.conditions, true)}</>}
         {!!entry.input.ending.conditions.length && <><p className="text-xs text-primary">Ends when</p>{requirements(entry.input.ending.conditions, true)}</>}
