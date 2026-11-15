@@ -3,6 +3,7 @@ import { AbilityRuleReference } from "./ability-rule-reference";
 import { effectDetails, outcomeLabel, saveReference } from "../lib/effect-details";
 import { applyTrackedEffect } from "../lib/effect-stacking";
 import { rangedAreaSummary } from "../lib/ability-input";
+import { isInstantSelfRestore } from "../lib/ability-resource-restoration";
 import { useState } from "react";
 import type { Ability, Familiar } from "../lib/storage";
 import type { EffectApplication } from "../lib/tracker-types";
@@ -13,12 +14,10 @@ interface Props {
   ability: Ability; rank: string; stats: Record<string, number>; vitals: TriggerContext;
   confirmations: Record<string, boolean>; applications: EffectApplication[];
   onApplicationsChange: (applications: EffectApplication[]) => void;
-  onRoll: (formula: string, label: string, familiar?: Familiar) => void;
   onUse: (nodeId: string) => void;
   onUseResult: (resultId: string) => void;
   onPayMana?: (amount: number, label: string, familiar?: Familiar) => void;
   familiars?: Familiar[];
-  movementSpeed?: number;
   timing?: Record<string, { elapsed?: string; spent?: string }>;
   onTimingChange?: (id: string, patch: { elapsed?: string; spent?: string }) => void;
 }
@@ -46,7 +45,7 @@ export function AbilityResultList(props: Props) {
       {node.cooldown !== undefined && <p className="text-xs">Cooldown (reference): {node.cooldown} {node.cooldownUnit.toLowerCase()} · starts {node.cooldownStarts === "activation" ? "on activation" : "when ability ends"}</p>}
       {(node.uses || node.recharge) && <p className="text-xs">Use limits (reference): {[node.uses, node.recharge].filter(Boolean).join(" · ")}</p>}
       <div className="flex flex-wrap gap-2">
-        {node.durationType !== "When Triggered" && node.id !== props.ability.definition?.id && !parent.permanent && node.trigger.mode !== "reference" && <Button size="sm" variant="outline" disabled={!record(node.id) && parent.applicability !== "available"} onClick={() => record(node.id) ? toggle(node.id, parent.effect.duration) : props.onUse(node.id)}>{record(node.id) ? "End Ability" : "Use Ability"}</Button>}
+        {node.durationType !== "When Triggered" && node.id !== props.ability.definition?.id && !parent.permanent && <Button size="sm" variant="outline" disabled={!record(node.id) && parent.applicability !== "available"} onClick={() => record(node.id) ? toggle(node.id, parent.effect.duration) : props.onUse(node.id)}>{record(node.id) ? "End Ability" : "Use Ability"}</Button>}
         {!["Always On", "When Triggered"].includes(node.durationType) && props.onPayMana && node.manaPerTurn !== undefined && <Button size="sm" variant="outline" onClick={() => props.onPayMana!(node.manaPerTurn!, `${node.name}: per turn`, parent.familiar)}>Pay {node.manaPerTurn} mana / turn</Button>}
       </div>
       {entries.filter(entry => entry.input?.id === node.id && entry.result).map(entry => entry.result?.attachedEffectOnly ? <EffectChip key={entry.effect.id} name={effectDetails(entry.result.templateId!, props.ability.definition!.options).name} description={outcomeLabel(entry.result.effectOutcome) + "\n" + (entry.result.effectOutcome && entry.result.effectOutcome !== "always" ? saveReference(entry.result) + "\n" : "") + effectDetails(entry.result.templateId!, props.ability.definition!.options).description}/> : <article key={entry.effect.id} className="border border-border/40 p-3 space-y-2">
@@ -54,11 +53,13 @@ export function AbilityResultList(props: Props) {
         {entry.result?.templateId && <EffectChip name={effectDetails(entry.result.templateId, props.ability.definition!.options).name} description={outcomeLabel(entry.result.effectOutcome) + "\n" + effectDetails(entry.result.templateId, props.ability.definition!.options).description}/>}
         {(entry.result?.templateId ? entry.result.rules : entry.effect.description)?.trim() && <p className="text-sm whitespace-pre-wrap">{entry.result?.templateId ? entry.result.rules : entry.effect.description}</p>}
         {entry.result?.durationType?.trim() && entry.effect.duration !== parent.effect.duration && <p className="text-xs">{entry.effect.duration}</p>}
-        <div className="flex gap-2 flex-wrap">{entry.result?.target === "Self" && entry.result.stacking === "Stack" && <Button size="sm" variant="outline" disabled={!isEffectApplied(entry, "self", props.applications) || entry.result.maxStacks !== undefined && (props.applications.find(application => application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1) >= entry.result.maxStacks} onClick={() => props.onApplicationsChange(applyTrackedEffect(props.applications, entry, "self"))}>Add stack ({props.applications.find(application => application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1}{entry.result.maxStacks ? "/" + entry.result.maxStacks : ""})</Button>}{entry.effect.rollFormula && <Button size="sm" variant="outline" disabled={!isEffectApplied(entry, "self", props.applications) && entry.applicability !== "available"} onClick={() => props.onUseResult(entry.effect.id)}>Use & Roll</Button>}
-        {node.durationType !== "When Triggered" && !entry.sharedActivation && entry.result?.target === "Self" && entry.result.trigger.mode !== "reference" && <Button size="sm" variant="outline" disabled={!record(entry.effect.id) && entry.applicability !== "available"} onClick={() => toggle(entry.effect.id, entry.effect.duration)}>{record(entry.effect.id) ? "End effect" : "Apply effect"}</Button>}</div>
+        <div className="flex gap-2 flex-wrap">{!isInstantSelfRestore(entry) && entry.result?.target === "Self" && entry.result.stacking === "Stack" && <Button size="sm" variant="outline" disabled={!isEffectApplied(entry, "self", props.applications) || entry.result.maxStacks !== undefined && (props.applications.find(application => application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1) >= entry.result.maxStacks} onClick={() => props.onApplicationsChange(applyTrackedEffect(props.applications, entry, "self"))}>Add stack ({props.applications.find(application => application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1}{entry.result.maxStacks ? "/" + entry.result.maxStacks : ""})</Button>}{entry.effect.rollFormula && <Button size="sm" variant="outline" disabled={!isEffectApplied(entry, "self", props.applications) && entry.applicability !== "available"} onClick={() => props.onUseResult(entry.effect.id)}>Use & Roll</Button>}
+        {node.durationType !== "When Triggered" && (entry.result?.durationType || node.durationType) !== "When Triggered" && !entry.sharedActivation && entry.result?.target === "Self" && (isInstantSelfRestore(entry)
+          ? !entry.effect.rollFormula && <Button size="sm" variant="outline" disabled={entry.applicability !== "available"} onClick={() => props.onUseResult(entry.effect.id)}>Restore resource</Button>
+          : <Button size="sm" variant="outline" disabled={!record(entry.effect.id) && entry.applicability !== "available"} onClick={() => toggle(entry.effect.id, entry.effect.duration)}>{record(entry.effect.id) ? "End effect" : "Apply effect"}</Button>)}</div>
         {entry.result?.target !== "Self" && entry.result?.templateId && <p className="text-xs text-muted-foreground">Apply to an individual target through Combat.</p>}
       </article>)}
-      {parent.applicability === "requires judgment" && <p className="text-xs text-muted-foreground">Resource requirements are not currently met.</p>}
+      {parent.applicability === "requires judgment" && <p className="text-xs text-muted-foreground">Confirm any manual event in Triggers before using this ability.</p>}
     </section>;
   })}</div>;
 }

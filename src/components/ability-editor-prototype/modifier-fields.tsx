@@ -27,7 +27,7 @@ const modifierChoices = choices.filter(([key]) => !legacy.has(key) && key !== "i
 const resourceKeys = new Set<ModifierKey>(["hpAdd", "hpBuff", "manaAdd", "manaBuff", "dtAdd", "dtBuff", "bonusHp", "bonusMana", "bonusDt"]);
 const rollKeys = new Set<ModifierKey>(["bonusInitiative", "bonusAttackRoll", "bonusSkillCheck", "bonusResistanceRoll"]);
 const textKeys = new Set<ModifierKey>(["resistances", "immunities", "vulnerabilities"]);
-const defenseKeys = new Set<ModifierKey>([...textKeys, "damageReduction", "armorPenetration", "dtPenetration"]);
+const defenseKeys = new Set<ModifierKey>([...textKeys, "bonusDodgeRoll", "damageReduction", "armorPenetration", "dtPenetration"]);
 const groups = ["Attributes & movement", "Resources", "Rolls", "Defense"] as const;
 const groupFor = (key: ModifierKey) => resourceKeys.has(key) ? groups[1] : rollKeys.has(key) ? groups[2] : defenseKeys.has(key) ? groups[3] : groups[0];
 const attributeNames = ["power", "vitality", "spirit", "agility", "endurance", "precision", "willpower", "charisma"];

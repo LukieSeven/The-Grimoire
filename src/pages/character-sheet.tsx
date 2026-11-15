@@ -71,9 +71,9 @@ import { expireEffectApplications } from "@/lib/effect-stacking";
 import { resolveTrackerEffects, isEffectApplied } from "@/lib/tracker";
 import { favoriteRollChoices, resolveFavoriteItem } from "@/lib/favorite-rolls";
 import { removeResourceBonus } from "@/lib/resource-bonus-transition";
-import { shouldEndAbilityOnUse } from "@/lib/ability-use-action";
+import { instantSelfRestoration, restoredResourceFields, type AbilityResourcePools } from "@/lib/ability-resource-restoration";
+import { isManualTriggerActivation, recordsAbilityActivation, shouldEndAbilityOnUse } from "@/lib/ability-use-action";
 import { AbilityComponentList } from "@/components/ability-component-list";
-import { isAbilityEditorPreview } from "@/components/ability-editor-prototype/preview-mode";
 
 const STATS = [
   { key: "power",     label: "POW" },
@@ -523,7 +523,6 @@ export default function CharacterSheet() {
   const [invAbilityPreview, setInvAbilityPreview] = useState<{ ability: Ability | null; requestId: number }>();
   const invAbilityPreviewRequest = useRef(0);
   const inventoryReturnFocus = useRef<HTMLButtonElement | null>(null);
-  const previewInventoryAbilities = isAbilityEditorPreview();
 
   // ── Essence input State ───────────────────────────────────
   const [essenceSlotInput, setEssenceSlotInput] = useState<number | null>(null);
@@ -1311,9 +1310,11 @@ export default function CharacterSheet() {
     if (entry.applicability !== "available" && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability's resource requirements are not currently met."); return; }
     if (!entry.input || rollingDice || critChain || updateChar.isPending) return;
     const node = entry.input;
-    if (node.durationType === "When Triggered" && node.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(entry, "self", character.effectApplications ?? [])) { toast.info("This ability is activated only by its resource trigger while its parent is active."); return; }
+    const sourceApplications = character.effectApplications ?? [];
+    if (entry.triggerParent && !isEffectApplied(entry.triggerParent, "self", sourceApplications)) { toast.info("Activate the parent ability first."); return; }
+    if (node.durationType === "When Triggered" && node.trigger.mode !== "reference" && !isManualTriggerActivation(node) && node.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(entry, "self", sourceApplications)) { toast.info("This ability is activated only by its resource trigger while its parent is active."); return; }
     const parentRecorded = (character.effectApplications ?? []).some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self");
-    if (shouldEndAbilityOnUse(parentRecorded, node.durationType, toggle)) {
+    if (shouldEndAbilityOnUse(parentRecorded, node.durationType, toggle, isManualTriggerActivation(node))) {
       changeAbilityApplications((character.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self")));
       return;
     }
@@ -1322,15 +1323,26 @@ export default function CharacterSheet() {
     const prepared = prepareAbilityRoll(entry.effect.rollFormula, node.name, node.linkedStats, actor, selectedStat, stat => executeFavoriteResult(entry, toggle, stat));
     if (!prepared) return;
     const cost = node.manaCost ?? 0;
-    if (cost > (actor ? actor.currentMana + (actor.tempMana ?? 0) : (mana ?? character.currentMana) + (character.tempMana ?? 0))) { toast.error("Not enough mana to use this ability."); return; }
+    const characterPools = { currentHp: hp ?? character.currentHp, currentMana: mana ?? character.currentMana, currentDt: currentDt ?? character.currentDt, tempMana: character.tempMana };
+    const pools: AbilityResourcePools = actor ?? characterPools;
+    if (cost > pools.currentMana + (pools.tempMana ?? 0)) { toast.error("Not enough mana to use this ability."); return; }
+    const payment = spendTemporary(pools, { currentMana: pools.currentMana - cost });
+    const actorValues = actor ? getFamiliarAdjusted(actor) : null;
+    const resolved = resolveTrackerEffects([entry.ability], character.rank, finalStats, { hp: characterPools.currentHp, mana: characterPools.currentMana, dt: characterPools.currentDt, maxHp, maxMana, maxDt }, character.triggerConfirmations ?? {}, character.familiars);
+    const restore = instantSelfRestoration(resolved, node.id, { ...pools, ...payment }, actorValues ?? { maxHp, maxMana, maxDt }, actorValues?.stats ?? finalStats, actor?.className ?? character.rank, sourceApplications, entry);
     const effectApplications = [...(character.effectApplications ?? [])];
-    if (!["Instant", "When Triggered"].includes(node.durationType) && !entry.permanent && !effectApplications.some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self")) {
+    if (recordsAbilityActivation(node) && !entry.permanent && !effectApplications.some(application => application.abilityId === entry.ability.id && application.effectId === node.id && application.targetId === "self")) {
       effectApplications.push({ id: crypto.randomUUID(), abilityId: entry.ability.id, effectId: node.id, targetId: "self", startedAt: new Date().toISOString(), duration: entry.effect.duration });
     }
-    const data = actor ? { familiars: character.familiars!.map(familiar => familiar.id === actor.id ? { ...familiar, currentMana: familiar.currentMana - cost } : familiar), effectApplications } : { currentMana: (mana ?? character.currentMana) - cost, effectApplications };
+    const resourcePatch = { ...payment, ...restore.patch };
+    const data = actor ? { familiars: character.familiars!.map(familiar => familiar.id === actor.id ? { ...familiar, ...resourcePatch } : familiar), effectApplications } : { ...resourcePatch, effectApplications };
     updateChar.mutate({ id, data, consumeAbilityId: actor ? undefined : entry.ability.id }, { onSuccess: updated => {
       setHp(updated.currentHp); setMana(updated.currentMana); setCurrentDt(updated.currentDt);
       if (cost > 0) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: node.name, ...(actor ? { familiarId: actor.id } : {}) } });
+      for (const [resource, , , diceType] of restoredResourceFields) {
+        const amount = restore.restored[resource];
+        if (amount) createRoll.mutate({ id, data: { diceType, modifier: amount, label: `${node.name}: restored resource`, ...(actor ? { familiarId: actor.id } : {}) } });
+      }
       if (prepared.formula) handleAbilityResultRoll(prepared.formula, node.name, actor, entry.effect.duration?.startsWith("Until Used") ? () => changeAbilityApplications((updated.effectApplications ?? []).filter(application => !(application.abilityId === entry.ability.id && application.targetId === "self" && (application.effectId === entry.effect.id || application.effectId === node.id)))) : undefined, resultRollBonusKind(entry.result), prepared.stat);
       else { createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `Activated ${node.name}`, ...(actor ? { familiarId: actor.id } : {}) } }); toast.success(`Used ${node.name}`); }
     }, onError: error => toast.error(error.message) });
@@ -1341,7 +1353,7 @@ export default function CharacterSheet() {
       const entries = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars);
       const selectedId = inputId ?? ability.definition.id;
       const parent = entries.find(entry => entry.input?.id === selectedId && !entry.result);
-      if (parent && !parent.permanent && (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === selectedId && application.targetId === "self") && !["Instant", "When Triggered"].includes(parent.input!.durationType)) { executeFavoriteResult(parent); return; }
+      if (parent && !parent.permanent && (character.effectApplications ?? []).some(application => application.abilityId === ability.id && application.effectId === selectedId && application.targetId === "self") && recordsAbilityActivation(parent.input!)) { executeFavoriteResult(parent); return; }
       const choices = favoriteRollChoices(entries, ability.id, selectedId);
       if (choices.length === 1) executeFavoriteResult(choices[0]);
       else if (choices.length > 1) setFavoriteRollPicker({ abilityId: ability.id, inputId: selectedId });
@@ -1563,15 +1575,15 @@ export default function CharacterSheet() {
     if (!ability.definition) return null;
     const values = familiar ? getFamiliarAdjusted(familiar) : adjustedStats;
     const context = familiar ? { hp: familiar.currentHp, maxHp: values.maxHp, mana: familiar.currentMana, maxMana: values.maxMana, dt: familiar.currentDt, maxDt: values.maxDt } : { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt };
-    return <AbilityResultList ability={ability} rank={familiar?.className ?? character.rank} stats={values.stats} vitals={context} confirmations={familiar?.triggerConfirmations ?? character.triggerConfirmations ?? {}} applications={familiar?.effectApplications ?? character.effectApplications ?? []}
+    return <AbilityResultList ability={ability} rank={familiar?.className ?? character.rank} stats={values.stats} vitals={context} confirmations={(familiar ? familiar.triggerConfirmations : character.triggerConfirmations) ?? {}} applications={(familiar ? familiar.effectApplications : character.effectApplications) ?? []}
       onApplicationsChange={applications => {
         if (!familiar) { changeAbilityApplications(applications); return; }
         const next = { ...familiar, effectApplications: applications }; const after = getFamiliarAdjusted(next);
         next.currentHp = removeResourceBonus(familiar.currentHp, values.maxHp, after.maxHp); next.currentMana = removeResourceBonus(familiar.currentMana, values.maxMana, after.maxMana); next.currentDt = removeResourceBonus(familiar.currentDt, values.maxDt, after.maxDt);
         updateChar.mutate({ id, resourceMode: "exact", data: { familiars: character.familiars!.map(entry => entry.id === familiar.id ? next : entry) } });
-      }} onRoll={(formula, label) => handleAbilityResultRoll(formula, label, familiar)} onUse={nodeId => familiar ? handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, nodeId) : handleAbilityRoll(ability, undefined, nodeId)}
-      onUseResult={resultId => { const entry = resolveTrackerEffects([ability], familiar?.className ?? character.rank, values.stats, context, familiar?.triggerConfirmations ?? character.triggerConfirmations ?? {}).find(entry => entry.effect.id === resultId); if (!entry) return; if (familiar) handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, entry.input?.id, resultId); else executeFavoriteResult(entry, false); }}
-      onPayMana={(amount, label) => handleAbilityManaPayment(amount, label, familiar)} movementSpeed={values.speed} familiars={familiar ? [] : character.familiars} timing={familiar?.abilityTiming ?? character.abilityTiming}
+      }} onUse={nodeId => familiar ? handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, nodeId) : handleAbilityRoll(ability, undefined, nodeId)}
+      onUseResult={resultId => { const entry = resolveTrackerEffects([ability], familiar?.className ?? character.rank, values.stats, context, (familiar ? familiar.triggerConfirmations : character.triggerConfirmations) ?? {}).find(entry => entry.effect.id === resultId); if (!entry) return; if (familiar) handleFamiliarAbilityRoll(familiar, ability as FamiliarAbility, entry.input?.id, resultId); else executeFavoriteResult(entry, false); }}
+      onPayMana={(amount, label) => handleAbilityManaPayment(amount, label, familiar)} familiars={familiar ? [] : character.familiars} timing={familiar?.abilityTiming ?? character.abilityTiming}
       onTimingChange={(nodeId, patch) => familiar ? updateFamiliarData(familiar.id, { ...familiar, abilityTiming: { ...familiar.abilityTiming, [nodeId]: { ...familiar.abilityTiming?.[nodeId], ...patch } } }) : updateChar.mutate({ id, data: { abilityTiming: { ...character.abilityTiming, [nodeId]: { ...character.abilityTiming?.[nodeId], ...patch } } } })}/>
   };
   const handleFamiliarAbilityRoll = (fam: Familiar, ability: FamiliarAbility, inputId?: string, resultId?: string, selectedStat?: string) => {
@@ -1586,9 +1598,9 @@ export default function CharacterSheet() {
       if (!parent) return;
       const applications = current.effectApplications ?? [];
       const recorded = applications.some(application => application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self");
-      const ending = !resultId && shouldEndAbilityOnUse(recorded, parent.input!.durationType, true);
+      const ending = !resultId && shouldEndAbilityOnUse(recorded, parent.input!.durationType, true, isManualTriggerActivation(parent.input!));
       if (!ending && parent.applicability !== "available") { toast.info("This familiar ability's resource condition is not met."); return; }
-      if (parent.input!.durationType === "When Triggered" && parent.input!.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(parent, "self", applications)) return;
+      if (parent.input!.durationType === "When Triggered" && parent.input!.trigger.mode !== "reference" && !isManualTriggerActivation(parent.input!) && parent.input!.trigger.conditions.some(condition => condition.kind === "resource") && !isEffectApplied(parent, "self", applications)) return;
       const choices = favoriteRollChoices(entries, ability.id, nodeId);
       if (!ending && !resultId && choices.length > 1) { setFamiliarRollPicker({ familiarId: current.id, abilityId: ability.id, inputId: nodeId }); return; }
       const result = resultId ? entries.find(entry => entry.effect.id === resultId) : choices[0] ?? parent;
@@ -1598,16 +1610,20 @@ export default function CharacterSheet() {
       if (!prepared) return;
       const cost = ending ? 0 : parent.input!.manaCost ?? 0;
       if (current.currentMana + (current.tempMana ?? 0) < cost) { toast.error("Not enough familiar mana."); return; }
-      const nextApplications = ending ? applications.filter(application => !(application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self")) : recorded || parent.permanent || ["Instant", "When Triggered"].includes(parent.input!.durationType) ? applications : [...applications, { id: crypto.randomUUID(), abilityId: ability.id, effectId: nodeId, targetId: "self", startedAt: new Date().toISOString(), duration: parent.effect.duration }];
+      const nextApplications = ending ? applications.filter(application => !(application.abilityId === ability.id && application.effectId === nodeId && application.targetId === "self")) : recorded || parent.permanent || !recordsAbilityActivation(parent.input!) ? applications : [...applications, { id: crypto.randomUUID(), abilityId: ability.id, effectId: nodeId, targetId: "self", startedAt: new Date().toISOString(), duration: parent.effect.duration }];
       const next = { ...current, ...spendTemporary(current, { effectApplications: nextApplications, currentMana: current.currentMana - cost }) };
+      const restore = ending ? undefined : instantSelfRestoration(entries, nodeId, next, before, before.stats, current.className, applications, result);
+      if (restore) Object.assign(next, restore.patch);
       const after = getFamiliarAdjusted(next);
-      next.currentHp = removeResourceBonus(current.currentHp, before.maxHp, after.maxHp);
+      next.currentHp = removeResourceBonus(next.currentHp, before.maxHp, after.maxHp);
       next.currentMana = removeResourceBonus(next.currentMana, before.maxMana, after.maxMana);
-      next.currentDt = removeResourceBonus(current.currentDt, before.maxDt, after.maxDt);
+      next.currentDt = removeResourceBonus(next.currentDt, before.maxDt, after.maxDt);
       updateChar.mutate({ id, resourceMode: "exact", data: { familiars: character.familiars!.map(familiar => familiar.id === next.id ? next : familiar) } }, { onSuccess: () => {
         createRoll.mutate({ id, data: { diceType: "action-log", modifier: 0, label: `${ending ? "Ended" : "Used"} ${parent.input!.name}`, familiarId: current.id } });
-        for (const [key, diceType] of [["currentHp", "hp-log"], ["currentMana", "mana-log"], ["currentDt", "dt-log"]] as const) {
-          const delta = next[key] - current[key] + (key === "currentMana" ? Math.max(0, cost - (current.tempMana ?? 0)) : 0);
+        for (const [key, , , diceType] of restoredResourceFields) {
+          const restored = restore?.restored[key] ?? 0;
+          if (restored) createRoll.mutate({ id, data: { diceType, modifier: restored, label: `${parent.input!.name}: restored resource`, familiarId: current.id } });
+          const delta = next[key] - current[key] - restored + (key === "currentMana" ? Math.max(0, cost - (current.tempMana ?? 0)) : 0);
           if (delta) createRoll.mutate({ id, data: { diceType, modifier: delta, label: `${parent.input!.name}: bonus/debuff source changed`, familiarId: current.id } });
         }
         if (cost) createRoll.mutate({ id, data: { diceType: "mana-log", modifier: -cost, label: parent.input!.name, familiarId: current.id } });
@@ -2907,15 +2923,20 @@ export default function CharacterSheet() {
           onCombatantsChange={setCombatants} onTurnChange={setCurrentTurnIdx}
           onApplicationsChange={changeAbilityApplications}
           onManualEffectsChange={manualTrackedEffects => updateChar.mutate({ id, data: { manualTrackedEffects } }, { onError: error => toast.error(error.message) })}
-          onConfirmationsChange={triggerConfirmations => updateChar.mutate({ id, data: { triggerConfirmations } }, { onError: error => toast.error(error.message) })}
-          onRoll={entry => {
-            const actor = entry.familiar ?? entry.ownerFamiliar;
-            const label = entry.result?.name || entry.input?.name || entry.ability.name;
-            const roll = (selectedStat?: string) => {
-              const prepared = prepareAbilityRoll(entry.effect.rollFormula, label, entry.input?.linkedStats ?? entry.ability.linkedStats ?? [], actor, selectedStat, roll);
-              if (prepared?.formula) handleAbilityResultRoll(prepared.formula, label, actor, undefined, entry.result ? resultRollBonusKind(entry.result) : undefined, prepared.stat);
-            };
-            roll();
+          onConfirmationsChange={(triggerConfirmations, familiarId) => {
+            const data = familiarId === undefined ? { triggerConfirmations } : { familiars: character.familiars?.map(familiar => familiar.id === familiarId ? { ...familiar, triggerConfirmations } : familiar) };
+            updateChar.mutate({ id, data }, { onSuccess: syncResourceState, onError: error => toast.error(error.message) });
+          }}
+          onUseTriggeredAbility={entry => {
+            if (entry.ownerFamiliar) {
+              const familiar = entry.ownerFamiliar;
+              const ability = familiar.abilities.find(ability => ability.id === entry.ability.id);
+              if (ability) handleFamiliarAbilityRoll(familiar, ability, entry.input?.id);
+            } else handleAbilityRoll(entry.ability, undefined, entry.input?.id);
+          }}
+          onFamiliarApplicationsChange={(familiarId, effectApplications) => {
+            const familiar = character.familiars?.find(familiar => familiar.id === familiarId);
+            if (familiar) updateFamiliarData(familiarId, { ...familiar, effectApplications }, { onSuccess: () => {}, onError: error => toast.error(error.message) });
           }}
           onInspect={(abilityId, familiarId) => {
             if (familiarId !== undefined) {
@@ -3766,7 +3787,7 @@ export default function CharacterSheet() {
                             </div>
 
                             <div className="flex shrink-0 items-center gap-1">
-                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${eq.name}`} title={previewInventoryAbilities ? "Preview new equipment ability" : "Add equipment ability"} onClick={() => triggerEditInventory("equipment", eq, null)}><Plus className="w-3 h-3" /></Button>
+                              <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${eq.name}`} title="Add equipment ability" onClick={() => triggerEditInventory("equipment", eq, null)}><Plus className="w-3 h-3" /></Button>
                               <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" aria-label={`Edit equipment: ${eq.name}`} onClick={() => triggerEditInventory("equipment", eq)}>
                                 <Edit2 className="w-3 h-3" />
                               </Button>
@@ -3836,7 +3857,7 @@ export default function CharacterSheet() {
                                              })()}
                                           </div>
                                           <div className="flex flex-wrap shrink-0 items-center gap-1.5">
-                                            <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`${previewInventoryAbilities ? "Preview" : "Edit"} equipment ability: ${ab.name}`} onClick={() => triggerEditInventory("equipment", eq, ab)}><Edit2 className="w-3 h-3" /></Button>
+                                            <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`Edit equipment ability: ${ab.name}`} onClick={() => triggerEditInventory("equipment", eq, ab)}><Edit2 className="w-3 h-3" /></Button>
                                             <button
                                               type="button"
                                               onClick={() => ab.definition ? handleAbilityRoll(ab) : toggleAbilityActive(ab)}
@@ -3964,7 +3985,7 @@ export default function CharacterSheet() {
                             {item.description && <p className="text-[10px] text-muted-foreground whitespace-pre-wrap leading-relaxed mt-1">{item.description}</p>}
                           </div>
                           <div className="flex shrink-0 items-center gap-1">
-                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${item.name}`} title={previewInventoryAbilities ? "Preview new item ability" : "Add item ability"} onClick={() => triggerEditInventory("item", item, null)}><Plus className="w-3 h-3" /></Button>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-primary" aria-label={`Add ability to ${item.name}`} title="Add item ability" onClick={() => triggerEditInventory("item", item, null)}><Plus className="w-3 h-3" /></Button>
                             <Button variant="ghost" size="icon" className="h-6 w-6 text-primary rounded-none cursor-pointer" aria-label={`Edit item: ${item.name}`} onClick={() => triggerEditInventory("item", item)}>
                               <Edit2 className="w-3.5 h-3.5" />
                             </Button>
@@ -4006,7 +4027,7 @@ export default function CharacterSheet() {
                                         {ab.rollFormula && <p className="text-[9px] text-muted-foreground/60 font-mono mt-0.5">Formula: {ab.rollFormula}</p>}
                                       </div>
                                       <div className="flex flex-wrap shrink-0 items-center gap-1.5">
-                                        <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`${previewInventoryAbilities ? "Preview" : "Edit"} item ability: ${ab.name}`} onClick={() => triggerEditInventory("item", item, ab)}><Edit2 className="w-3 h-3" /></Button>
+                                        <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-primary" aria-label={`Edit item ability: ${ab.name}`} onClick={() => triggerEditInventory("item", item, ab)}><Edit2 className="w-3 h-3" /></Button>
                                         <Button
                                           size="sm"
                                           variant="outline"
@@ -4380,7 +4401,7 @@ export default function CharacterSheet() {
                               vitals={{ hp: hp ?? character.currentHp, mana: mana ?? character.currentMana, dt: currentDt ?? character.currentDt, maxHp, maxMana, maxDt }}
                               confirmations={character.triggerConfirmations ?? {}} applications={character.effectApplications ?? []}
                               onApplicationsChange={changeAbilityApplications}
-                              onRoll={handleAbilityResultRoll} onUse={nodeId => handleAbilityRoll(ability, undefined, nodeId)} onUseResult={resultId => { const entry = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).find(entry => entry.effect.id === resultId); if (entry) executeFavoriteResult(entry, false); }} familiars={character.familiars} movementSpeed={speed ?? character.speed}
+                              onUse={nodeId => handleAbilityRoll(ability, undefined, nodeId)} onUseResult={resultId => { const entry = resolveTrackerEffects([ability], character.rank, finalStats, { hp: hp ?? character.currentHp, maxHp, mana: mana ?? character.currentMana, maxMana, dt: currentDt ?? character.currentDt, maxDt }, character.triggerConfirmations ?? {}, character.familiars).find(entry => entry.effect.id === resultId); if (entry) executeFavoriteResult(entry, false); }} familiars={character.familiars}
                               timing={character.abilityTiming} onTimingChange={(nodeId, patch) => updateChar.mutate({ id, data: { abilityTiming: { ...character.abilityTiming, [nodeId]: { ...character.abilityTiming?.[nodeId], ...patch } } } })}
                               onPayMana={handleAbilityManaPayment} />}
                             {!ability.definition && displayRollFormula && (

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { LiveAbilityEditor } from "./ability-builder";
-import { LocalAbilityDraft, previewAbilityDialogClass, previewAbilityHeaderClass, previewAbilityTitleClass } from "../ability-editor-prototype/preview-entry";
-import { isAbilityEditorPreview } from "../ability-editor-prototype/preview-mode";
+import { previewAbilityDialogClass, previewAbilityHeaderClass, previewAbilityTitleClass } from "../ability-editor-prototype/preview-entry";
 import type { Ability } from "@/lib/storage";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -56,7 +55,6 @@ export function EditFamiliarDialog({ familiar, onSave, characterId }: EditFamili
   const [isEditingAbility, setIsEditingAbility] = useState(false);
   const [abilityIndexToEdit, setAbilityIndexToEdit] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const previewMode = isAbilityEditorPreview();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const returnControl = useRef<HTMLButtonElement>(null);
   const restoreFocus = useRef(false);
@@ -185,13 +183,11 @@ export function EditFamiliarDialog({ familiar, onSave, characterId }: EditFamili
               : `Edit Familiar: ${familiar.name}`
             }
           </DialogTitle>
-          {isEditingAbility && <DialogDescription>{previewMode ? "Local preview for this familiar. Changes are not saved." : "Save an ability for this familiar without changing its other details."}</DialogDescription>}
+          {isEditingAbility && <DialogDescription>Save an ability for this familiar without changing its other details.</DialogDescription>}
         </DialogHeader>
 
         {isEditingAbility ? (
-          previewMode
-            ? <LocalAbilityDraft characterId={characterId} owner={owner} initial={initialAbility} onClose={closeAbilityEditor} />
-            : <LiveAbilityEditor characterId={characterId} owner={owner} initial={initialAbility} source={familiar.name} pending={saving} onSave={saveAbility} onClose={closeAbilityEditor} />
+          <LiveAbilityEditor characterId={characterId} owner={owner} initial={initialAbility} source={familiar.name} pending={saving} onSave={saveAbility} onClose={closeAbilityEditor} />
         ) : (
           <form onSubmit={handleSave} className="space-y-4 mt-4 text-xs font-sans z-10 relative">
             {/* Base Info */}
@@ -303,7 +299,7 @@ export function EditFamiliarDialog({ familiar, onSave, characterId }: EditFamili
                   onClick={() => handleStartAddAbility()}
                   className="h-6 text-[9px] uppercase font-mono tracking-wider border-primary/45 text-primary hover:bg-primary/5 rounded-none"
                 >
-                  {previewMode ? "+ Preview New Ability" : "+ Add Ability"}
+                  + Add Ability
                 </Button>
               </div>
               
@@ -323,13 +319,13 @@ export function EditFamiliarDialog({ familiar, onSave, characterId }: EditFamili
                           type="button"
                           variant="ghost"
                           size="icon"
-                          aria-label={previewMode ? `Preview ability: ${ab.name}` : `Edit ability: ${ab.name}`}
+                          aria-label={`Edit ability: ${ab.name}`}
                           onClick={() => handleStartEditAbility(ab, idx)}
                           className="h-6 w-6 text-primary hover:bg-primary/10 rounded-none cursor-pointer"
                         >
                           <Edit2 className="w-3 h-3" />
                         </Button>
-                        {!previewMode && <Button
+                        <Button
                           type="button"
                           variant="ghost"
                           size="icon"
@@ -342,7 +338,7 @@ export function EditFamiliarDialog({ familiar, onSave, characterId }: EditFamili
                           className="h-6 w-6 text-destructive hover:bg-destructive/10 rounded-none cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
-                        </Button>}
+                        </Button>
                       </div>
                     </div>
                   ))}

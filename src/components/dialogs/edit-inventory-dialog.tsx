@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId, useRef } from "react";
+import React, { useCallback, useState, useEffect, useId, useRef } from "react";
 import {
   useAddEquipment, useUpdateEquipment,
   useAddCurrency, useUpdateCurrency,
@@ -15,8 +15,7 @@ import { toast } from "sonner";
 import type { Ability } from "@/lib/storage";
 import { readGearNote } from "@/lib/gear-note";
 import { needsSelectedStat, validateRollFormulaSyntax, weaponRollFormula } from "@/lib/roll-rules";
-import { isAbilityEditorPreview } from "../ability-editor-prototype/preview-mode";
-import { LocalAbilityDraft, LocalEquipmentBlueprint, previewAbilityDialogClass, previewAbilityHeaderClass, previewAbilityTitleClass } from "../ability-editor-prototype/preview-entry";
+import { LocalEquipmentBlueprint, previewAbilityDialogClass, previewAbilityHeaderClass, previewAbilityTitleClass } from "../ability-editor-prototype/preview-entry";
 import { SectionHelp } from "../ability-editor-prototype/section-help";
 import { OwnedItemAbilityEditor } from "./edit-item-ability-dialog";
 
@@ -91,11 +90,10 @@ export function EditInventoryDialog({
   const { data: abilities = [] } = useListAbilities(characterId);
   const deleteAbility = useDeleteAbility();
 
-  const previewEnabled = isAbilityEditorPreview();
   const abilityButtonId = useId();
   const fieldId = useId();
-  const previewOwnerKey = isOpen && type !== "currency" && (initialData?.id != null || (mode === "add" && previewEnabled))
-    ? `${characterId}:${type}:${mode === "add" ? "new" : initialData.id}`
+  const previewOwnerKey = isOpen && mode === "edit" && type !== "currency" && initialData?.id != null
+    ? `${characterId}:${type}:${initialData.id}`
     : null;
   const abilityOwnerType = type === "equipment" ? "equipment" : "item";
   const isAttachedAbility = (ability: Ability) => mode === "edit" && initialData?.id != null && (
@@ -108,6 +106,10 @@ export function EditInventoryDialog({
   const blueprintOwnerKey = isOpen && type === "equipment" ? `${characterId}:${mode}:${initialData?.id ?? "new"}` : null;
   const [blueprintKey, setBlueprintKey] = useState<string | null>(null);
   const activeBlueprint = blueprintOwnerKey !== null && blueprintKey === blueprintOwnerKey;
+  const blueprintCloseRequest = useRef<(() => void) | null>(null);
+  const registerBlueprintClose = useCallback((request: (() => void) | null) => {
+    blueprintCloseRequest.current = request;
+  }, []);
   const previewBody = !!activePreview || activeBlueprint;
   const previewTitleRef = useRef<HTMLHeadingElement>(null);
 
@@ -311,13 +313,12 @@ export function EditInventoryDialog({
   };
 
   const entryLabel = type === "equipment" ? "equipment" : type === "currency" ? "currency" : "item";
-  const abilityPanel = previewOwnerKey || (mode === "edit" && type !== "currency" && initialData) ? (
+  const abilityPanel = previewOwnerKey ? (
     <GearSection title={type === "equipment" ? "Equipment abilities" : "Item abilities"}
-      help={previewEnabled ? "Draft passives, activations, and other features in the shared ability form. Closing a preview doesn't save it or discard your edits to this entry." : "Add or edit passives, activations, and other abilities attached to this entry."}
+      help="Add or edit passives, activations, and other abilities attached to this entry."
       actions={<Button id={`${abilityButtonId}-add`} type="button" variant="outline" size="sm"
-        aria-label={previewEnabled ? `Preview new ${abilityOwnerType} ability` : undefined}
         onClick={event => openAbilityPreview(null, event.currentTarget.id)}>
-        {previewEnabled ? "Draft ability" : "Add ability"}
+        Add ability
       </Button>}
     >
       {itemAbilities.length ? <ul className="space-y-2">
@@ -328,16 +329,16 @@ export function EditInventoryDialog({
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <Button id={`${abilityButtonId}-${ab.id}`} type="button" variant="outline" size="sm"
-              aria-label={`${previewEnabled ? "Preview" : "Edit"} ${abilityOwnerType} ability: ${ab.name}`}
+              aria-label={`Edit ${abilityOwnerType} ability: ${ab.name}`}
               onClick={event => openAbilityPreview(ab, event.currentTarget.id)}>
-              {previewEnabled ? "Edit in preview" : "Edit ability"}
+              Edit ability
             </Button>
-            {!previewEnabled && <Button type="button" variant="ghost" size="icon" aria-label={`Remove ability: ${ab.name}`} className="size-8 text-destructive" onClick={() => {
+            <Button type="button" variant="ghost" size="icon" aria-label={`Remove ability: ${ab.name}`} className="size-8 text-destructive" onClick={() => {
               if (confirm(`Erase ability "${ab.name}"?`)) deleteAbility.mutate({ id: ab.id, charId: characterId });
-            }}><Trash2 className="size-4" aria-hidden="true" /></Button>}
+            }}><Trash2 className="size-4" aria-hidden="true" /></Button>
           </div>
         </li>)}
-      </ul> : mode === "edit" && <p className="text-sm text-muted-foreground">No abilities attached yet.</p>}
+      </ul> : <p className="text-sm text-muted-foreground">No abilities attached yet.</p>}
     </GearSection>
   ) : null;
 
@@ -373,7 +374,7 @@ export function EditInventoryDialog({
       if (!open && savingAbility) return;
       if (!open && activePreview) { closeAbilityPreview(); return; }
       if (!open && activeBlueprint) {
-        if (window.confirm("Close this equipment preview and discard its temporary draft?")) closeBlueprint();
+        (blueprintCloseRequest.current ?? closeBlueprint)();
         return;
       }
       onOpenChange(open);
@@ -381,10 +382,10 @@ export function EditInventoryDialog({
       <DialogContent className={previewBody ? previewAbilityDialogClass : gearDialogClass} onCloseAutoFocus={returnFocus ? event => { event.preventDefault(); returnFocus(); } : undefined}>
         <DialogHeader className={previewAbilityHeaderClass}>
           <DialogTitle ref={previewBody ? previewTitleRef : undefined} tabIndex={previewBody ? -1 : undefined} className={previewAbilityTitleClass}>
-            {activeBlueprint ? "Equipment set preview" : activePreview ? `${activePreview.initial ? "Edit" : "New"} ${abilityOwnerType} ability` : `${mode === "add" ? "Add" : "Edit"} ${entryLabel}`}
+            {activeBlueprint ? "Equipment set blueprint" : activePreview ? `${activePreview.initial ? "Edit" : "New"} ${abilityOwnerType} ability` : `${mode === "add" ? "Add" : "Edit"} ${entryLabel}`}
           </DialogTitle>
           <DialogDescription>
-            {activePreview ? previewEnabled ? `Ability draft for ${abilityPreviewOwner}. Closing returns to this entry without saving the draft.` : `${abilityPreviewOwner} · Save the ability without changing the gear details.`
+            {activePreview ? `${abilityPreviewOwner} · Save the ability without changing the gear details.`
               : activeBlueprint ? "Draft weapon pieces and their shared features without changing saved gear."
               : type === "currency" ? "Record this currency and its balance."
               : type === "equipment" ? "Set up a weapon, armor piece, or accessory."
@@ -392,15 +393,9 @@ export function EditInventoryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {activeBlueprint ? <LocalEquipmentBlueprint key={blueprintOwnerKey} characterId={characterId} ownerName={characterName}
+        {activeBlueprint ? <LocalEquipmentBlueprint key={blueprintOwnerKey} ownerName={characterName}
           seed={name.trim() ? { name, description, dtBonus: dtBonus === "" ? undefined : dtBonus, damageFormula: weaponRoll.trim() || undefined } : undefined}
-          onClose={closeBlueprint} /> : activePreview ? previewEnabled ? <LocalAbilityDraft
-          key={`${activePreview.ownerKey}:${activePreview.initial?.id ?? "new"}`}
-          characterId={characterId}
-          owner={{ kind: "item", name: abilityPreviewOwner, wielderName: characterName, equipment: type === "equipment" }}
-          initial={activePreview.initial}
-          onClose={closeAbilityPreview}
-        /> : <OwnedItemAbilityEditor
+          onClose={closeBlueprint} onRegisterClose={registerBlueprintClose} /> : activePreview ? <OwnedItemAbilityEditor
           key={`${activePreview.ownerKey}:${activePreview.initial?.id ?? "new"}`}
           characterId={characterId} characterName={characterName} ownerName={abilityPreviewOwner}
           equipmentId={type === "equipment" ? initialData.id : null} inventoryItemId={type === "item" ? initialData.id : null}
@@ -453,8 +448,8 @@ export function EditInventoryDialog({
 
             {abilityPanel}
 
-            {blueprintOwnerKey && <GearSection title="Equipment set" help="Draft paired pieces and features that depend on using them together, such as Kharvask. Export a draft to keep working on it. It doesn't change saved gear."
-              actions={<Button id={`${abilityButtonId}-blueprint`} type="button" variant="outline" size="sm" aria-label={previewEnabled ? "Preview equipment set" : "Open equipment set draft"} onClick={() => setBlueprintKey(blueprintOwnerKey)}>{previewEnabled ? "Open set preview" : "Open set draft"}</Button>} />}
+            {blueprintOwnerKey && <GearSection title="Equipment set" help="Write paired pieces and shared features in a blueprint file. Use Equipment abilities to edit abilities on the saved gear itself."
+              actions={<Button id={`${abilityButtonId}-blueprint`} type="button" variant="outline" size="sm" onClick={() => setBlueprintKey(blueprintOwnerKey)}>Open set blueprint</Button>} />}
           </div>
 
           <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/40 bg-card p-3 sm:px-4">

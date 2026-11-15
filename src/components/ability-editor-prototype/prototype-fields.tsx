@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
 import {
   AREA_SHAPES, CHECK_ROLL_PURPOSES, DURATION_TYPES, EFFECT_ACTIONS, RANGE_TYPES, RANGED_TARGETING, ROLL_PURPOSES, STACKING_RULES, TARGET_TYPES,
-  blankResult, editableTiming, rangedAreaSummary, rangedDimensionKeys, resultRollBonusKind, rollBonusKind, selectSummon, timingForEditor,
+  blankResult, editableTiming, isMovementEffect, rangedAreaSummary, rangedDimensionKeys, resultRollBonusKind, rollBonusKind, selectSummon, timingForEditor,
   type AbilityInput, type AbilityOptions, type RequirementGroup, type TargetResult,
 } from "../../lib/ability-input";
 import type { Familiar } from "../../lib/storage";
 import { hasModifierValue } from "../../lib/ability-bonuses";
+import type { TrackedAbilityUsage } from "../../lib/ability-usage";
 import { attachedEffects } from "../../lib/effect-details";
 import { Button } from "../ui/button";
 import { ConditionEditor } from "../dialogs/condition-editor";
@@ -23,6 +24,7 @@ type PreviewEntryKind = EffectKind | "Roll";
 const effectActions: Record<EffectKind, string> = {
   Damage: "Deal damage", Healing: "Heal", "Temporary resource": "Grant a temporary resource bonus",
   Shielding: "Grant shielding", Modifier: "Modify a stat or roll", Immunity: "Grant immunity", Status: "Apply status",
+  Movement: "Movement", Teleport: "Teleport",
 };
 const basicTargets = new Set(["Self", "Ally", "Enemy"]);
 const makeRollHelp = "Record what to roll without adding damage, healing, or a status. For a contest with success and failure outcomes, use Opposed check in Advanced rules.";
@@ -55,7 +57,7 @@ function Choice({ label, value, choices, onChange, onAdd, blank }: { label: stri
   </div>;
 }
 
-function Requirements({ label, group, options, onChange, hideLegend }: { label: string; group: RequirementGroup; options: AbilityOptions; onChange: (value: RequirementGroup) => void; hideLegend?: boolean }) {
+function Requirements({ label, group, options, onChange, hideLegend, confirmEvents = false }: { label: string; group: RequirementGroup; options: AbilityOptions; onChange: (value: RequirementGroup) => void; hideLegend?: boolean; confirmEvents?: boolean }) {
   return <fieldset className="min-w-0 space-y-3 rounded-md border border-border/40 p-3">
     <legend className={hideLegend ? "sr-only" : "px-1 text-sm font-semibold"}>{label}</legend>
     <ConditionEditor wording="condition" presets={options.triggers} conditions={group.conditions} match={group.match} mode={group.mode} onChange={(conditions, match, mode) => onChange({ conditions, match, mode })} />
@@ -63,7 +65,7 @@ function Requirements({ label, group, options, onChange, hideLegend }: { label: 
       <label className="text-xs">Match<select className={field} value={group.match} onChange={event => onChange({ ...group, match: event.target.value as RequirementGroup["match"] })}><option value="all">All conditions</option><option value="any">Any condition</option></select></label>
       <label className="text-xs">How this is checked<select className={field} value={group.mode} onChange={event => onChange({ ...group, mode: event.target.value as RequirementGroup["mode"] })}><option value="manual">Confirm manually</option><option value="reference">Reference only</option><option value="automatic">Evaluate supported resource conditions</option></select></label>
     </div>}
-    {group.conditions.some(condition => condition.kind === "situation") && <p className="text-xs text-muted-foreground">Combat events are listed in the tracker as reminders. Resolve their timing at the table.</p>}
+    {group.conditions.some(condition => condition.kind === "situation") && <p className="text-xs text-muted-foreground">{confirmEvents && group.mode === "manual" ? "Resolve the event at the table, then mark it Met or Not met in the Triggers tracker. Tracked resource conditions are still checked by the Grimoire." : "Combat events are listed as reminders. The Grimoire does not detect them automatically."}</p>}
   </fieldset>;
 }
 
@@ -75,9 +77,10 @@ function TimingConditions({ value, duration, options, onChange }: { value: Edita
     {(["activation", "ending"] as const).map(side => {
       const group = side === "activation" ? activation : ending;
       const title = side === "activation" ? "Starts when" : "Ends when";
+      const confirmEvents = (duration ?? value.durationType) === (side === "activation" ? "When Triggered" : "Until Triggered");
       return <details key={side} open={group.conditions.length > 0 || undefined}>
-        <summary className="cursor-pointer text-sm">{title}{group.conditions.length ? ` · ${group.conditions.length}` : ""}<SectionHelp label={title}>{side === "activation" ? "Record what starts this ability or effect. Resource conditions can be checked by the tool; combat events are reminders for the table." : "Record what ends this ability or effect. Resource conditions can be checked by the tool; combat events are reminders for the table."}</SectionHelp></summary>
-        <div className="mt-2"><Requirements hideLegend label={title} group={group} options={options} onChange={next => onChange(editableTiming(side === "activation" ? next : activation, side === "ending" ? next : ending, retained))} /></div>
+        <summary className="cursor-pointer text-sm">{title}{group.conditions.length ? ` · ${group.conditions.length}` : ""}<SectionHelp label={title}>{side === "activation" ? "Set what starts this ability or effect. For When Triggered duration, mark manual combat events in the Triggers tracker after resolving them at the table." : "Set what ends this ability or effect. For Until Triggered duration, mark manual combat events in the Triggers tracker after resolving them at the table."}</SectionHelp></summary>
+        <div className="mt-2"><Requirements hideLegend label={title} group={group} options={options} confirmEvents={confirmEvents} onChange={next => onChange(editableTiming(side === "activation" ? next : activation, side === "ending" ? next : ending, retained))} /></div>
       </details>;
     })}
     {!!imported.length && <details className="rounded-md border border-border/40 p-3">
@@ -111,6 +114,11 @@ function ResultFields({ result, input, options, ownerLabel, skillNames, kind, on
   const sharedTiming = bonusCount + statusCount + Number(showFormula) > 1;
   const durationType = result.durationType || input.durationType;
   const outcome = rollBonusKind(result.purpose) ? "" : result.purpose;
+  if (kind !== "Roll" && isMovementEffect(kind)) return <article className="min-w-0 space-y-3 rounded-md border border-border/40 bg-background/30 p-3">
+    <h4 className="font-serif text-sm font-semibold text-primary">{kind}<SectionHelp label={kind}>{kind === "Movement" ? "Record the move, including distance, direction, or restrictions. Use a Movement (ft) modifier for a change to the target’s speed." : "Record the teleport’s distance, allowed destination, and restrictions. These rules are for reference at the table."}</SectionHelp></h4>
+    <label className="block text-sm">{kind} rules<textarea className={field} rows={3} value={result.rules} onChange={event => onChange({ rules: event.target.value })} placeholder={kind === "Movement" ? "e.g. Move up to your speed without provoking reactions." : "e.g. Teleport up to 30 ft to a space you can see."} /></label>
+    <Button type="button" size="sm" variant="ghost" className="text-destructive" onClick={onRemove}>Remove effect</Button>
+  </article>;
   return <article className="min-w-0 space-y-3 rounded-md border border-border/40 bg-background/30 p-3">
     {result.name && <h4 className="break-words font-serif text-sm text-primary">{result.name}<SectionHelp label={result.name}>This is the label for the effect or roll below. It can contain several changes if they were saved together.</SectionHelp></h4>}
     {showFormula && <div className="space-y-2">
@@ -149,15 +157,17 @@ interface Props {
   familiars: Familiar[];
   skillNames?: string[];
   ownerLabel: string;
+  nameLabel?: string;
   fixedSource?: boolean;
   allowSummon?: boolean;
   extraSettings?: ReactNode;
   openExtraSettings?: boolean;
+  trackedUsage?: TrackedAbilityUsage & { canConsumeItem: boolean; onChange: (value: TrackedAbilityUsage) => void };
   onChange: (input: AbilityInput) => void;
 }
 
-/** Isolated authoring prototype: edits only the supplied draft, never storage. */
-export function PrototypeAbilityFields({ input, options, sources, familiars, skillNames = [], ownerLabel, fixedSource, allowSummon = true, extraSettings, openExtraSettings, onChange }: Props) {
+/** Shared fields; the owning editor validates and saves the draft. */
+export function PrototypeAbilityFields({ input, options, sources, familiars, skillNames = [], ownerLabel, nameLabel = "Ability name", fixedSource, allowSummon = true, extraSettings, openExtraSettings, trackedUsage, onChange }: Props) {
   const [customTarget, setCustomTarget] = useState("");
   const [addingTarget, setAddingTarget] = useState(false);
   const [adding, setAdding] = useState<"effect" | "roll" | null>(null);
@@ -190,9 +200,11 @@ export function PrototypeAbilityFields({ input, options, sources, familiars, ski
   const showRange = targets.some(target => target !== "Self") || input.rangeType !== "Self" || !!input.range;
   const needsDistance = ["Aura", "Ranged"].includes(input.rangeType);
   const customRange = !RANGE_TYPES.includes(input.rangeType);
+  const retainedRangeNote = needsDistance && input.range.trim() && !Number.isFinite(Number(input.range)) ? input.range : "";
   const rangeControls = <div className="grid gap-3 sm:grid-cols-2">
     <Choice label="Range" value={input.rangeType} choices={[...RANGE_TYPES, ...options.rangeTypes]} onChange={rangeType => update({ rangeType })} onAdd={value => customChoice("rangeTypes", value)} />
     {(needsDistance || customRange) && <label className="text-sm">{needsDistance ? "Range (ft)" : "Range details"}<input className={field} value={input.range} type={needsDistance ? "number" : "text"} min="0" step="any" onChange={event => update({ range: event.target.value })} /></label>}
+    {retainedRangeNote && <p className="break-words text-xs text-muted-foreground sm:col-span-2">Saved range: {retainedRangeNote}. Enter a distance above only if changing it.</p>}
   </div>;
   const targetChip = (target: string) => <label key={target} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs ${targets.includes(target) ? "border-primary/60 bg-primary/10 text-primary" : "border-border/40"}`}><input type="checkbox" checked={targets.includes(target)} onChange={event => chooseTarget(target, event.target.checked)} />{target}</label>;
   const activationType = input.durationType === "Always On" ? "Passive" : input.reaction ? "Reaction" : "Action";
@@ -214,7 +226,7 @@ export function PrototypeAbilityFields({ input, options, sources, familiars, ski
     <section aria-label="Ability" className={`${sectionFrame} space-y-3 p-4`}>
       <h2 className="font-serif text-base font-semibold text-primary">Ability<SectionHelp label="Ability">Identifies the ability: its name, Essence or source, and linked attributes. Recorded rank requirements and upgrades appear here when present.</SectionHelp></h2>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
-        <label className="block text-sm">Ability name<input className={field} value={input.name} onChange={event => update({ name: event.target.value })} /></label>
+        <label className="block text-sm">{nameLabel}<input className={field} value={input.name} onChange={event => update({ name: event.target.value })} /></label>
         {fixedSource ? <p className="self-end text-sm">Source: {input.source || ownerLabel}</p> : <Choice label="Source" blank="Unassigned" value={input.source} choices={["Innate", ...sources]} onChange={source => update({ source })} />}
       </div>
       {input.unlockRank && <p className="text-xs text-muted-foreground">Unlock rank: {input.unlockRank}</p>}
@@ -230,6 +242,17 @@ export function PrototypeAbilityFields({ input, options, sources, familiars, ski
         <Choice label="Activation type" value={activationType} choices={["Action", "Reaction", "Passive"]} onChange={type => changeDuration(type === "Passive" ? "Always On" : input.durationType === "Always On" ? "Instant" : input.durationType, { reaction: type === "Reaction" })} />
         {(activationType !== "Passive" || !!input.manaCost) && <label className="block text-sm">{activationType === "Passive" ? "MP cost when used" : "MP cost"}<input className={field} type="number" min="0" step="any" value={input.manaCost ?? ""} onChange={event => update({ manaCost: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>}
       </div>
+      {trackedUsage && <div className="space-y-2 rounded-md border border-border/40 p-3">
+        <h3 className="text-sm font-medium">Tracked use<SectionHelp label="Tracked use">Choose whether activation spends a charge or consumes one item. Rechargeable abilities refill on a long rest. Cooldown and recharge notes below are tabletop reference.</SectionHelp></h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">Use type<select className={field} value={trackedUsage.mode} onChange={event => trackedUsage.onChange({ mode: event.target.value as TrackedAbilityUsage["mode"], maximum: trackedUsage.maximum })}>
+            <option value="standard">No item or charge cost</option>
+            {(trackedUsage.canConsumeItem || trackedUsage.mode === "one-time") && <option value="one-time">Consume one item</option>}
+            <option value="rechargeable">Spend one charge</option>
+          </select></label>
+          {trackedUsage.mode === "rechargeable" && <label className="text-sm">Maximum charges<input className={field} type="number" min="1" step="1" value={trackedUsage.maximum} onChange={event => trackedUsage.onChange({ mode: trackedUsage.mode, maximum: event.target.value })} /></label>}
+        </div>
+      </div>}
       <Section id="prototype-activation" title={activationType === "Passive" ? "Passive conditions" : "Duration & conditions"} summary={activationType === "Passive" ? "Always on unless a condition limits it" : activationSummary || "Time cost, duration, and upkeep"} help="Set when this ability starts or ends. Actions and reactions can also have a duration and upkeep. Individual effects may use their own timing.">
         {activationType !== "Passive" && <>
           <div className="grid gap-3 sm:grid-cols-2"><Choice label="Ability duration" value={input.durationType} choices={durationChoices} onChange={value => changeDuration(value)} onAdd={value => {
@@ -253,7 +276,7 @@ export function PrototypeAbilityFields({ input, options, sources, familiars, ski
       </Section>
       <Section id="prototype-limits" title="Use limits · reference" summary={limitsSummary || "Optional · not enforced"} help="Record cooldown, use limits, and recharge for the table. These fields don’t enforce cooldowns or update tracked equipment charges.">
         <div className="grid gap-3 sm:grid-cols-3"><label className="text-sm">Cooldown<input className={field} type="number" min="0" step="any" value={input.cooldown ?? ""} onChange={event => update({ cooldown: event.target.value === "" ? undefined : Number(event.target.value) })} /></label><Choice label="Cooldown unit" value={input.cooldownUnit} choices={["Seconds", "Minutes", "Hours", "Days"]} onChange={value => update({ cooldownUnit: value as AbilityInput["cooldownUnit"] })} /><label className="text-sm">Cooldown starts<select className={field} value={input.cooldownStarts} onChange={event => update({ cooldownStarts: event.target.value as AbilityInput["cooldownStarts"] })}><option value="activation">On activation</option><option value="end">When ability ends</option></select></label></div>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Uses / charges · reference<input className={field} value={input.uses} onChange={event => update({ uses: event.target.value })} /></label><label className="text-sm">Recharge rules · reference<input className={field} value={input.recharge} onChange={event => update({ recharge: event.target.value })} /></label></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Use limit notes<input className={field} value={input.uses} onChange={event => update({ uses: event.target.value })} /></label><label className="text-sm">Recharge notes<input className={field} value={input.recharge} onChange={event => update({ recharge: event.target.value })} /></label></div>
       </Section>
     </section>
     <section aria-label="Targeting" className={`${sectionFrame} space-y-3 p-4`}>
@@ -283,7 +306,7 @@ export function PrototypeAbilityFields({ input, options, sources, familiars, ski
     </section>
 
     <section aria-label="Effects" id="prototype-results" className={`${sectionFrame} min-w-0 space-y-3 p-4`}>
-      <h2 className="font-serif text-base font-semibold text-primary">Effects<SectionHelp label="Effects">An effect is one change the ability makes: deal damage, heal, grant a temporary resource bonus, modify a stat or roll, grant immunity, or apply a named status.</SectionHelp></h2>
+      <h2 className="font-serif text-base font-semibold text-primary">Effects<SectionHelp label="Effects">Record what the ability does, such as damage, healing, modifiers, statuses, movement, or teleportation.</SectionHelp></h2>
       {!targets.length && <p className="text-sm text-muted-foreground">Select a target to add an effect or roll.</p>}
       {targets.filter(target => effects.some(result => result.target === target)).map(target => <section key={target} aria-label={`${target} effects`} className="min-w-0 space-y-2">
         <h3 className="break-words text-sm font-semibold text-foreground">{target}<SectionHelp label={`${target} effects`}>The effects listed here apply to this target. Add effect lets you add another change to this target or to a different selected target.</SectionHelp></h3>

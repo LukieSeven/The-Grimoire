@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { isAbilityEditorPreview } from "./components/ability-editor-prototype/preview-mode";
 
 // Catch stale chunk 404s from dynamic lazy imports after a new build deploy
 window.addEventListener("unhandledrejection", (event) => {
@@ -22,11 +21,4 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 });
 
-async function start() {
-  if (import.meta.env.DEV && !isAbilityEditorPreview() && !location.pathname.endsWith("/ability-editor-preview")) {
-    try { await (await import("./lib/local-preview")).refreshLocalPreview(); }
-    catch (error) { console.error("Local preview refresh did not complete; saved data was retained.", error); }
-  }
-  createRoot(document.getElementById("root")!).render(<App />);
-}
-void start();
+createRoot(document.getElementById("root")!).render(<App />);

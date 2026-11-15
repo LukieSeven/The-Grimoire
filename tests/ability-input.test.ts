@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DURATION_TYPES, blankAbilityInput, blankResult, duplicateInput, durationTriggerGroups, editableTiming, emptyRequirements, inputFromAbility, resultRollBonusKind, timingForEditor, validateAbilityInput, validateAbilityRolls } from "../src/lib/ability-input.ts";
 import { resolveTrackerEffects, isEffectApplied } from "../src/lib/tracker.ts";
-import { storage, importCharacterJSON } from "../src/lib/storage.ts";
+import { getAdjustedStats, storage, importCharacterJSON } from "../src/lib/storage.ts";
 import type { Ability } from "../src/lib/storage.ts";
 import { mergeOptions, rangedDimensionKeys, rangedAreaSummary, normalizeAbilityInput } from "../src/lib/ability-input.ts";
 
@@ -181,6 +181,34 @@ test("component conversion retains all targets and independently created effects
   assert.deepEqual(converted.targets, ["Ally", "Enemy"]);
   assert.ok(converted.results.some(result => result.name === "Mark" && result.lifetime === "independent"));
 });
+test("legacy components retain unspecified and written ranges without blocking unrelated saves", () => {
+  const component = { name: "Part", kinds: ["custom" as const], behaviors: [], targets: ["enemies" as const], rules: "Existing rules" };
+  const legacy = { id: 58, name: "Old components", description: "", cost: 0, range: "", linkedStats: [], components: [
+    { ...component, id: "missing" },
+    { ...component, id: "prose", range: "Inside the ward's boundary" },
+    { ...component, id: "distance", range: "25 ft" },
+    { ...component, id: "aura", kinds: ["aura"], range: "While within earshot" },
+  ] } as Ability;
+  const original = structuredClone(legacy);
+  const saved = inputFromAbility(legacy, "");
+  assert.deepEqual([saved, ...saved.subAbilities].map(node => [node.rangeType, node.range]), [
+    ["Unspecified", ""], ["Custom", "Inside the ward's boundary"], ["Ranged", "25"], ["Aura", "While within earshot"],
+  ]);
+  assert.equal(validateAbilityInput({ ...saved, description: "Updated rules" }, saved), undefined);
+  assert.deepEqual(legacy, original);
+});
+test("previously saved invalid ranges can be preserved but not newly introduced", () => {
+  const { definition } = fixture();
+  const prior = { ...definition, rangeType: "Ranged", range: "" };
+  const edit = { ...prior, name: "Renamed ability" };
+  assert.equal(validateAbilityInput(edit, prior), undefined);
+  assert.match(validateAbilityInput(edit)!, /range in feet/i);
+  assert.match(validateAbilityInput({ ...edit, rangeType: "Aura" }, prior)!, /range in feet/i);
+  assert.match(validateAbilityInput({ ...edit, range: "across the hall" }, prior)!, /range in feet/i);
+  assert.match(validateAbilityInput({ ...edit, range: "-5" }, prior)!, /range in feet/i);
+  assert.equal(validateAbilityInput({ ...edit, range: "5" }, prior), undefined);
+  assert.match(validateAbilityInput({ ...definition, subAbilities: [{ ...prior, id: "new-part" }] }, definition)!, /range in feet/i);
+});
 test("Lyth's legacy scoped Stealth bonus is an editable modifier, not a roll", () => {
   const legacy = { id: 57, name: "Background Adaptation", description: "Applies within the aura.", range: "20ft radius", linkedStats: ["spirit"], rollFormula: "+3 to Stealth" } as Ability;
   const converted = inputFromAbility(legacy, "Adapt");
@@ -197,6 +225,23 @@ test("file import preserves custom definitions, target results and Sub-Abilities
   const imported = storage.getAbilities(loaded.id)[0];
   assert.deepEqual(imported.definition, definition); assert.deepEqual(loaded.abilityOptions, definition.options);
   assert.equal(loaded.favorites![0]!.targetId, imported.id);
+});
+test("Movement and Teleport save as rules, never as movement bonuses or dice rolls", () => {
+  const { ability, definition } = fixture();
+  definition.durationType = "Always On";
+  definition.targets = ["Self"];
+  definition.results = [
+    { ...blankResult("Self"), effectAction: "Movement", rules: "bonusMovement: 20" },
+    { ...blankResult("Self"), effectAction: "Teleport", rules: "Teleport up to 30 ft to a space you can see." },
+  ];
+  const actor = importCharacterJSON(JSON.stringify({ character: { name: "Movement test", agility: 8, speedFormula: "AGI * 5" }, abilities: [ability] }));
+  const imported = storage.getAbilities(actor.id)[0];
+  assert.deepEqual(normalizeAbilityInput(imported.definition!).results, normalizeAbilityInput(definition).results);
+  const [, move, teleport] = resolveTrackerEffects([imported], actor.rank, { agility: actor.agility });
+  assert.equal(move.effect.description, "Movement\nbonusMovement: 20");
+  assert.equal(teleport.effect.description, "Teleport\nTeleport up to 30 ft to a space you can see.");
+  assert.ok(!move.effect.rollFormula && !teleport.effect.rollFormula);
+  assert.equal(getAdjustedStats(actor, [], [imported]).speed, 40);
 });
 test("Instant effect duration overrides a timed source without inheriting its time value", () => {
   const { ability, definition } = fixture(); definition.durationType = "Time"; definition.duration = "60 seconds"; definition.targets = ["Self"];

@@ -5,7 +5,7 @@ export const BONUS_FIELDS = [
   ["dtAdd", "DT Add"], ["dtBuff", "DT Buff"], ["bonusInitiative", "Initiative"],
   ["bonusHp", "HP Buff"], ["bonusMana", "Mana Buff"], ["bonusDt", "DT Buff"],
   ["bonusMovement", "Movement (ft)"], ["bonusAttackRoll", "Attack Roll"], ["bonusSkillCheck", "Skill / Check Roll"],
-  ["bonusResistanceRoll", "Resistance Roll"], ["damageReduction", "Damage Reduction"], ["armorPenetration", "Armor Penetration"], ["dtPenetration", "DT Penetration"],
+  ["bonusResistanceRoll", "Resistance Roll"], ["bonusDodgeRoll", "Dodge"], ["damageReduction", "Damage Reduction"], ["armorPenetration", "Armor Penetration"], ["dtPenetration", "DT Penetration"],
 ] as const;
 export type AbilityBonuses = Partial<Record<typeof BONUS_FIELDS[number][0], number | string>> & { resistances?: string; immunities?: string; vulnerabilities?: string; resistanceAttributes?: string[]; checkSkills?: string[] };
 /** Blank fields and legacy zero placeholders do not belong in player readouts. */

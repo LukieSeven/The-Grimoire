@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import type { AbilityInput } from "../../lib/ability-input";
 import { isRuleRecord, MechanicsFields, type RuleRecord, type RuleValue } from "./mechanics-fields";
@@ -7,9 +7,9 @@ import { equipmentDraftFormat, equipmentDraftVersion, readCompleteEquipmentDraft
 import { SectionHelp } from "./section-help";
 
 export interface EquipmentBlueprintProps {
-  characterId: number;
   ownerName?: string;
   seed?: { name: string; description?: string; dtBonus?: number | string; damageFormula?: string };
+  onRegisterClose?: (requestClose: (() => void) | null) => void;
   onClose: () => void;
 }
 
@@ -158,7 +158,7 @@ function PairRequirement({ requirement, weapons, onChange }: { requirement: Rule
   </section>;
 }
 
-export default function EquipmentBlueprint({ characterId, ownerName, seed, onClose }: EquipmentBlueprintProps) {
+export default function EquipmentBlueprint({ ownerName, seed, onRegisterClose, onClose }: EquipmentBlueprintProps) {
   const [draft, setDraft] = useState<BlueprintDraft>(() => ({
     fields: { id: "", name: seed?.name ?? "", owner: ownerName ?? "", type: "", quality: "", essences: [] },
     weapons: seed ? [newWeapon(seed)] : [], paired: null,
@@ -169,6 +169,18 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
   const [notice, setNotice] = useState<{ text: string; error: boolean }>();
   const [edited, setEdited] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  const requestClose = useCallback(() => {
+    if (loading) return;
+    // Escape or the dialog X inside a feature editor returns to the set,
+    // just as Cancel does. It must not discard previously kept set changes.
+    if (selected) { setSelected(null); return; }
+    if (!edited || window.confirm("Close this equipment set draft without exporting its changes?")) onClose();
+  }, [edited, loading, onClose, selected]);
+  useEffect(() => {
+    onRegisterClose?.(requestClose);
+    return () => onRegisterClose?.(null);
+  }, [onRegisterClose, requestClose]);
 
   const update = (edit: (previous: BlueprintDraft) => BlueprintDraft) => { setDraft(edit); setEdited(true); };
   const updateGroup = (key: string, edit: (group: GroupDraft) => GroupDraft) => update(previous => ({
@@ -182,28 +194,13 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
     setOpenGroup(null);
     setEdited(false);
   };
-  const loadExample = async () => {
-    if (edited && !window.confirm("Replace this preview draft with the Emberclasp example?")) return;
-    setLoading(true);
-    setNotice(undefined);
-    try {
-      const response = await fetch("/tmp/emberclasp.blueprint.json", { cache: "no-store" });
-      if (!response.ok || !response.headers.get("content-type")?.includes("json")) throw new Error("Emberclasp example not found. Check that the local blueprint file is available.");
-      replaceDraft(fromBlueprint(await response.json()));
-      setNotice({ text: "Emberclasp loaded as a preview. No equipment or character data was changed.", error: false });
-    } catch (error) {
-      setNotice({ text: error instanceof Error ? error.message : "Could not load the Emberclasp example.", error: true });
-    } finally {
-      setLoading(false);
-    }
-  };
   const openFile = async (file: File) => {
-    if (edited && !window.confirm("Replace this equipment preview with the selected file?")) return;
+    if (edited && !window.confirm("Discard unexported changes and open the selected equipment file?")) return;
     setLoading(true);
     setNotice(undefined);
     try {
       replaceDraft(fromEquipmentFile(JSON.parse(await file.text())));
-      setNotice({ text: "Opened in the equipment preview. Saved gear is unchanged.", error: false });
+      setNotice({ text: "Equipment set draft opened. Saved gear is unchanged.", error: false });
     } catch (error) {
       setNotice({ text: error instanceof Error ? error.message : "Could not open this equipment file.", error: true });
     } finally {
@@ -228,7 +225,8 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
       link.download = `${basename}.equipment-draft.json`;
       document.body.appendChild(link);
       try { link.click(); } finally { link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
-      setNotice({ text: "Complete draft exported with shared ability edits. Use Open equipment file to reopen it.", error: false });
+      setEdited(false);
+      setNotice({ text: "Complete draft download started. Use Open equipment file to reopen the downloaded file.", error: false });
     } catch {
       setNotice({ text: "Could not export the equipment draft.", error: true });
     }
@@ -244,7 +242,6 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
   const activeFeature = activeGroup && (selected?.newFeature ?? activeGroup.features.find(feature => feature.key === selected?.featureKey));
   if (activeGroup && activeFeature) return <LocalAbilityDraft
     key={activeFeature.key}
-    characterId={characterId}
     owner={{ kind: "item", equipment: true, name: nameOf(activeGroup.fields, activeGroup === draft.paired ? "Paired equipment" : "Weapon piece"), wielderName: typeof draft.fields.owner === "string" && draft.fields.owner.trim() ? draft.fields.owner : ownerName }}
     initial={null}
     reference={activeFeature.reference}
@@ -281,13 +278,13 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
             <div className="min-w-0"><p className="break-words text-sm">{nameOf(feature.reference, "Unnamed feature")}</p>{typeof feature.reference.category === "string" && feature.reference.category && <p className="break-words text-xs text-muted-foreground">{feature.reference.category}</p>}</div>
             <div className="flex flex-wrap gap-1">
               <Button type="button" variant="outline" size="sm" aria-label={`Edit ${nameOf(feature.reference, "unnamed feature")}`} onClick={() => select(group.key, feature.key)}>Edit feature</Button>
-              <Button type="button" variant="ghost" size="sm" className="text-destructive" aria-label={`Remove ${nameOf(feature.reference, "unnamed feature")}`} onClick={() => { if (window.confirm("Remove this feature from the preview draft?")) updateGroup(group.key, previous => ({ ...previous, features: previous.features.filter(entry => entry.key !== feature.key) })); }}>Remove</Button>
+              <Button type="button" variant="ghost" size="sm" className="text-destructive" aria-label={`Remove ${nameOf(feature.reference, "unnamed feature")}`} onClick={() => { if (window.confirm("Remove this feature from the equipment set draft?")) updateGroup(group.key, previous => ({ ...previous, features: previous.features.filter(entry => entry.key !== feature.key) })); }}>Remove</Button>
             </div>
           </div>)}
         </div>
         <OtherDetails record={group.fields} presets={kind === "paired" ? pairedPresets : weaponPresets} covered={covered} onChange={updateFields} />
         <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={() => {
-          if (window.confirm(`Remove ${name} and its features from the preview draft?`)) update(previous => kind === "paired" ? { ...previous, paired: null } : { ...previous, weapons: previous.weapons.filter(entry => entry.key !== group.key) });
+          if (window.confirm(`Remove ${name} and its features from the equipment set draft?`)) update(previous => kind === "paired" ? { ...previous, paired: null } : { ...previous, weapons: previous.weapons.filter(entry => entry.key !== group.key) });
         }}>{kind === "paired" ? "Remove paired bonuses" : "Remove weapon piece"}</Button>
       </div>
     </details>;
@@ -303,9 +300,8 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
       <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-muted-foreground">Set each weapon’s strike, then add its passives and abilities. Use paired bonuses for features that require the set.</p><div className="flex flex-wrap gap-2">
         <input ref={fileInput} hidden type="file" accept=".json,application/json" onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; if (file) void openFile(file); }} />
         <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => fileInput.current?.click()}>Open equipment file</Button>
-        {import.meta.env.DEV && <Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void loadExample()}>Load Emberclasp example</Button>}
       </div></div>
-      {loading && <p role="status" className="text-xs text-muted-foreground">Opening equipment preview…</p>}
+      {loading && <p role="status" className="text-xs text-muted-foreground">Opening equipment set draft…</p>}
       {notice && <p role={notice.error ? "alert" : "status"} className={`text-xs ${notice.error ? "text-destructive" : "text-muted-foreground"}`}>{notice.text}</p>}
       <fieldset disabled={loading} className="min-w-0 space-y-4">
         <section aria-label="Equipment set" className="min-w-0 space-y-3 rounded-md border border-border/50 bg-card p-4">
@@ -318,10 +314,10 @@ export default function EquipmentBlueprint({ characterId, ownerName, seed, onClo
         <section aria-label="Paired bonuses" className="space-y-2"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-serif text-base text-primary">Paired bonuses</h3>{!draft.paired && <Button type="button" variant="outline" size="sm" onClick={() => { const paired = newPaired(); update(previous => ({ ...previous, paired })); setOpenGroup(paired.key); }}>Add paired bonuses</Button>}</div>{draft.paired && renderGroup(draft.paired, "paired")}</section>
       </fieldset>
     </div>
-    <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-card p-3 sm:px-4"><p className="text-xs text-muted-foreground">Preview only · saved gear is unchanged</p><div className="flex flex-wrap items-center gap-2">
+    <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/40 bg-card p-3 sm:px-4"><p className="text-xs text-muted-foreground">Export the complete draft to keep it. This does not change saved gear.</p><div className="flex flex-wrap items-center gap-2">
       <div className="flex items-center gap-1"><Button type="button" variant="outline" size="sm" disabled={loading} onClick={() => void copyReference()}>Copy reference only</Button><SectionHelp label="Copy reference only">Copies the equipment and feature reference JSON. It leaves out shared ability settings such as costs, targets, and formulas.</SectionHelp></div>
       <Button type="button" size="sm" disabled={loading} onClick={exportDraft}>Export complete draft</Button>
-      <Button type="button" variant="ghost" size="sm" onClick={onClose}>Close equipment preview</Button>
+      <Button type="button" variant="ghost" size="sm" disabled={loading} onClick={requestClose}>Close equipment set draft</Button>
     </div></footer>
   </div>;
 }

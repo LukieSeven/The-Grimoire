@@ -80,7 +80,8 @@ try {
     assert.equal(await page.locator("[data-ability-editor-preview]").count(), 0, "The release uses the live form, not a preview draft");
   };
   const saveDraft = async area => {
-    await button(dialog(), "Save ability").click();
+    assert.equal(await button(dialog(), "Check draft").count(), 0);
+    await button(dialog(), "Save").click();
     await draft.waitFor({ state: "hidden" });
     await button(dialog(), area.kind === "character" ? "Close" : "Cancel").click();
     await dialog().waitFor({ state: "hidden" });
@@ -88,7 +89,7 @@ try {
   const nameField = () => draft.getByLabel("Ability name", { exact: true });
   const formulaField = () => draft.getByLabel("Damage formula", { exact: true });
 
-  await page.goto(new URL(`characters/${characterId}`, base).href);
+  await page.goto(new URL(`characters/${characterId}?ability-editor=preview`, base).href);
   await page.getByRole("heading", { name: "Live Ability Trial Hero", exact: true }).waitFor();
   await tab("Familiars").click();
   await button(page.locator(`[id="familiar-card-${familiarId}"]`), "Edit").click();
@@ -102,10 +103,27 @@ try {
   const createdIds = new Map();
   for (const area of areas) {
     await openDraft(area, false);
+    if (area.kind === "character") {
+      const before = await readSaved();
+      await button(dialog(), "Save").click();
+      assert.match(await dialog().getByRole("alert").textContent(), /Name the ability/);
+      assert.deepEqual(await readSaved(), before, "Invalid Save does not write to storage");
+    }
     await nameField().fill(area.abilityName);
+    if (area.kind === "equipment" || area.kind === "item") {
+      await draft.getByLabel("Use type", { exact: true }).selectOption(area.kind === "equipment" ? "rechargeable" : "one-time");
+      if (area.kind === "equipment") await draft.getByLabel("Maximum charges", { exact: true }).fill("3");
+    }
     await draft.getByRole("checkbox", { name: "Enemy", exact: true }).check();
     await button(draft, "+ Add effect").click();
     await draft.getByRole("combobox", { name: "Effect type", exact: true }).selectOption("Damage");
+    if (area.kind === "character") {
+      const before = await readSaved();
+      await formulaField().fill("2d6 + (");
+      await button(dialog(), "Save").click();
+      assert.match(await dialog().getByRole("alert").textContent(), /roll formula/i);
+      assert.deepEqual(await readSaved(), before, "Invalid roll formula does not write to storage");
+    }
     await formulaField().fill("WILr + 1D6");
     await saveDraft(area);
     const created = getAbility(await readSaved(), area, area.abilityName);
@@ -140,13 +158,19 @@ try {
       assert.equal(ability.equipmentId ?? null, area.kind === "equipment" ? equipmentId : null);
       assert.equal(ability.inventoryItemId ?? null, area.kind === "item" ? itemId : null);
     }
+    if (area.kind === "equipment") {
+      assert.equal(ability.usageType, "rechargeable");
+      assert.equal(ability.maxCharges, 3);
+      assert.equal(ability.currentCharges, 3);
+    }
+    if (area.kind === "item") assert.equal(ability.usageType, "one-time");
   }
   await tab("Bag / Gear").click();
   await button(page, "Edit equipment: Trial Blade").click();
-  await button(dialog(), "Open equipment set draft").click();
+  await button(dialog(), "Open set blueprint").click();
   const blueprint = page.locator("[data-equipment-blueprint-preview]");
   await blueprint.waitFor();
-  assert.equal(await button(blueprint, "Load Emberclasp example").count(), 0, "The private development fixture is not offered in production");
+  assert.equal(await button(blueprint, "Load Emberclasp example").count(), 0, "The temporary demo launcher is gone");
   assert.equal(await button(blueprint, "Open equipment file").isVisible(), true);
   assert.deepEqual(runtimeErrors, [], "The live editor runs without browser errors");
   console.log("PASS: live character, equipment, item, and familiar ability creation/editing with owner links and formulas preserved across reloads");

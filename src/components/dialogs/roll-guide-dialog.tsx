@@ -53,7 +53,7 @@ export function RollGuideDialog() {
 
           <div>
             <h4 className="font-bold text-foreground mb-1 uppercase tracking-wider text-[10px]">5. Opposed Checks</h4>
-            <p>A formula rolls for its owner only. In the ability editor preview, use Advanced rules to record each side’s stats and outcomes. Roll the other side separately and compare the totals manually; the tool does not resolve opposed outcomes automatically.</p>
+            <p>A formula rolls for its owner only. In the ability editor, use Advanced rules to record each side’s stats and outcomes. Roll the other side separately and compare the totals manually; the tool does not resolve opposed outcomes automatically.</p>
             <p className="mt-1">Static fields such as resource caps and bonuses don’t roll. Use <code>WIL</code> for the score or <code>WILm</code> for the rank modifier. Older static formulas using <code>WILr</code> still read the score to preserve saved behavior.</p>
           </div>
 

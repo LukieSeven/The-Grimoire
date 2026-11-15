@@ -1,5 +1,5 @@
 import type { AbilityInput } from "../../lib/ability-input";
-import { durationLabel, rangedAreaSummary, resultRollBonusKind, rollBonusKind } from "../../lib/ability-input";
+import { durationLabel, isMovementEffect, rangedAreaSummary, resultRollBonusKind, rollBonusKind } from "../../lib/ability-input";
 import { BONUS_FIELDS, hasModifierValue } from "../../lib/ability-bonuses";
 import { attachedEffects, effectDetails, outcomeLabel } from "../../lib/effect-details";
 import { EffectChip } from "../effect-chip";
@@ -44,8 +44,9 @@ export function PrototypePreviewCard({ input, ownerLabel, reference }: { input: 
         const defenses = (["resistances", "immunities", "vulnerabilities"] as const).filter(key => result.bonuses?.[key]?.trim());
         const effects = attachedEffects(result);
         const bonusKind = resultRollBonusKind(result);
+        const title = result.name || (isMovementEffect(result.effectAction) ? result.effectAction : "");
         return <section key={result.id} className="rounded-md border border-border/40 bg-background/25 p-3 space-y-2">
-        <h4 className="font-serif text-sm text-primary break-words">{result.name || result.target}{result.name ? ` · ${result.target}` : ""}</h4>
+        <h4 className="font-serif text-sm text-primary break-words">{title ? `${title} · ${result.target}` : result.target}</h4>
         <PreviewText label="Effect rules" text={result.rules} className="text-xs" />
         {result.formula.trim() && <div className="rounded border border-primary/25 px-2 py-1.5 text-xs"><span className="block text-muted-foreground mb-1">{result.rollOnly ? "Standalone roll" : rollBonusKind(result.purpose) ? "Roll formula" : result.purpose || "Roll formula"}</span><code className="break-all text-primary">{result.formula}</code>{bonusKind && <p className="mt-1 text-muted-foreground">Applies {bonusKind} roll bonuses</p>}</div>}
         {(modifiers.length > 0 || defenses.length > 0) && <div className="space-y-1 text-xs">{modifiers.map(([key, label]) => <p key={key} className="flex justify-between gap-3"><span className="text-muted-foreground">{label}</span><span className="font-mono break-all text-right">{result.bonuses![key]}</span></p>)}

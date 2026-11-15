@@ -16,6 +16,7 @@ import { spendTemporary } from "./temporary-resources.ts";
 import { selectStackedEffects } from "./effect-stacking.ts";
 import type { AbilityComponent, ManualTrackedEffect } from "./ability-components.ts";
 import type { AbilityInput, AbilityOptions } from "./ability-input.ts";
+import { isMovementEffect, normalizeDurationType } from "./ability-input.ts";
 import { resolveTrackerEffects, isEffectApplied } from "./tracker.ts";
 import { BONUS_FIELDS, bonusesFromSummary } from "./ability-bonuses.ts";
 import { getFamiliarAdjusted } from "./familiar-values.ts";
@@ -875,11 +876,17 @@ function calculateAdjustedStats(char: Character, equipment: Equipment[], abiliti
     return selectedStructured.filter(entry => entry.ability.id === ability.id)
       .filter(entry => !entry.familiar && entry.result?.target === "Self" && isEffectApplied(entry, "self", char.effectApplications ?? []))
       .flatMap(entry => {
+        if (isMovementEffect(entry.result?.effectAction)) return [];
         let bonuses = entry.result!.bonuses ?? bonusesFromSummary(entry.result!.rules);
         if (!bonuses) return [];
         const vars = buildVars(stats);
         const stacks = entry.result!.stacking === "Stack" ? Math.min(entry.result!.maxStacks ?? Number.POSITIVE_INFINITY, (char.effectApplications ?? []).find(application => application.abilityId === ability.id && application.effectId === entry.effect.id && application.targetId === "self")?.stacks ?? 1) : 1;
         bonuses = { ...bonuses, ...Object.fromEntries(BONUS_FIELDS.map(([key]) => [key, parseFormulaOrNum(bonuses![key], vars) * stacks])) };
+        // Instant restoration is applied once on use, never added to maximums by an activation record.
+        if (normalizeDurationType(entry.result!.durationType || entry.input?.durationType || "") === "Instant") {
+          const { hpAdd, manaAdd, dtAdd, ...persistentBonuses } = bonuses;
+          bonuses = persistentBonuses;
+        }
         return [{ ...ability, ...Object.fromEntries(BONUS_FIELDS.map(([key]) => [key, undefined])), ...bonuses, active: true, definition: undefined, components: undefined, subAbilities: undefined, triggers: undefined,
           hpBuff: parseFormulaOrNum(bonuses.hpBuff, vars) + parseFormulaOrNum(bonuses.bonusHp, vars),
           manaBuff: parseFormulaOrNum(bonuses.manaBuff, vars) + parseFormulaOrNum(bonuses.bonusMana, vars),

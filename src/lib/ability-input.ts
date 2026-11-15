@@ -14,7 +14,10 @@ export const AREA_SHAPES = ["Circle / Sphere", "Cube / Box", "Cylinder / Column"
 export type CustomChoiceCategory = "durationTypes" | "rangeTypes" | "targets" | "rangedTargeting" | "areaShapes" | "triggers" | "effects" | "effectTypes";
 export const ROLL_PURPOSES = ["Damage", "Healing", "Shielding"];
 export const CHECK_ROLL_PURPOSES = ["Attack", "Check", "Resistance"];
-export const EFFECT_ACTIONS = ["Damage", "Healing", "Temporary resource", "Shielding", "Modifier", "Immunity", "Status"] as const;
+export const EFFECT_ACTIONS = ["Damage", "Healing", "Temporary resource", "Shielding", "Modifier", "Immunity", "Status", "Movement", "Teleport"] as const;
+export function isMovementEffect(action?: typeof EFFECT_ACTIONS[number]): action is "Movement" | "Teleport" {
+  return action === "Movement" || action === "Teleport";
+}
 export type RollBonusKind = "attack" | "check" | "resistance";
 export function rollBonusKind(value?: string): RollBonusKind | undefined {
   const kind = value?.trim().toLowerCase();
@@ -154,7 +157,7 @@ export function normalizeAbilityInput(input: AbilityInput): AbilityInput {
     if (node.rangeType === "Ranged" && node.rangedTargeting === "Cone" && !node.range.trim() && node.areaDimensions?.length?.trim()) node.range = node.areaDimensions.length;
     node.durationType = normalizeDurationType(node.durationType);
     node.results = node.results.map(result => {
-      const recovered = result.bonuses === undefined ? bonusesFromSummary(result.rules) : undefined;
+      const recovered = result.bonuses === undefined && !isMovementEffect(result.effectAction) ? bonusesFromSummary(result.rules) : undefined;
       return { ...result, bonuses: result.bonuses ? normalizeBonuses(result.bonuses) : recovered, rules: recovered ? "" : result.rules, durationType: normalizeDurationType(result.durationType) };
     });
     node.options.durationTypes = [...new Set(node.options.durationTypes.map(normalizeDurationType))];
@@ -177,6 +180,17 @@ function existingRange(value: string): Pick<AbilityInput, "rangeType" | "range">
     return { rangeType: /^(aura|radius)$/i.test(type) ? "Aura" : type || "Ranged", range: distance[1] };
   }
   return { rangeType: value.trim() || "Self", range: "" };
+}
+function componentRange(component: NonNullable<Ability["components"]>[number]): Pick<AbilityInput, "rangeType" | "range"> {
+  const recorded = component.radius === undefined ? component.range ?? "" : String(component.radius);
+  const distance = recorded.trim().match(/^(\d+(?:\.\d+)?|\.\d+)\s*(?:(?:ft\.?|feet|foot)(?:\s+(?:aura|radius))?|['′])?$/i)?.[1];
+  // A missing radius doesn't make an old aura cease to be an aura. Keep its original text when not measurable.
+  if (component.kinds.includes("aura")) return { rangeType: "Aura", range: distance ?? recorded };
+  if (distance !== undefined) return { rangeType: "Ranged", range: distance };
+  const label = recorded.trim();
+  if (!label) return { rangeType: "Unspecified", range: "" };
+  const known = RANGE_TYPES.find(type => type.toLowerCase() === label.toLowerCase());
+  return known ? { rangeType: known, range: "" } : { rangeType: "Custom", range: recorded };
 }
 function existingBonuses(value: Partial<Ability | SubAbility | AbilityEffect>): string {
   return Object.entries(value).filter(([key, entry]) => (/^bonus|^(hp|mana|dt)(Add|Buff)$/.test(key) || ["resistances", "immunities"].includes(key)) && entry !== undefined && entry !== "" && entry !== 0).map(([key, entry]) => `${key}: ${entry}`).join("\n");
@@ -230,7 +244,7 @@ export function inputFromAbility(ability: Ability, source: string): AbilityInput
   const fromComponent = (component: NonNullable<Ability["components"]>[number]): AbilityInput => {
     const node = { ...blankAbilityInput(), id: component.id, name: component.name, source,
       durationType: component.behaviors.includes("always-on") ? "Always On" : "Time", duration: component.duration ?? "",
-      rangeType: component.kinds.includes("aura") ? "Aura" : "Ranged", range: component.radius !== undefined ? String(component.radius) : component.range ?? "",
+      ...componentRange(component),
       targets: component.targets.map(target => target === "allies" ? "Ally" : target === "enemies" ? "Enemy" : target === "self" ? "Self" : "Custom"),
       unlockRank: ability.evolutionModifiers?.find(modifier => modifier.id === component.unlockedByModifierId)?.rankLabel ?? component.unlockedByModifierId, linkedStats: root.linkedStats,
       trigger: { conditions: structuredClone(component.conditions ?? []), match: component.conditionMatch ?? "all", mode: component.triggerMode ?? "manual" } as RequirementGroup,
@@ -310,13 +324,18 @@ export function validateAbilityRolls(input: AbilityInput, previous?: AbilityInpu
   }
 }
 
-export function validateAbilityInput(input: AbilityInput): string | undefined {
+export function validateAbilityInput(input: AbilityInput, previous?: AbilityInput): string | undefined {
+  const referencedTemplates = new Set<string>();
+  const savedNodes = new Map(previous ? flattenInputs(previous).map(node => [node.id, node]) : []);
   for (const node of flattenInputs(input)) {
     if (!node.name.trim()) return "Name the ability and each Sub-Ability.";
     if (node.targets.includes("Summon") && !node.summon) return "Choose a recorded minion for each Summon target.";
     for (const value of [node.manaCost, node.manaPerTurn, node.timeCost, node.cooldown]) if (value !== undefined && (!Number.isFinite(value) || value < 0)) return "Costs and cooldowns must be nonnegative numbers.";
     for (const result of node.results) if (result.stacking === "Stack" && result.maxStacks !== undefined && (!Number.isInteger(result.maxStacks) || result.maxStacks < 1)) return "Max Stacks must be a positive whole number.";
-    if (["Aura", "Ranged"].includes(node.rangeType) && (!node.range.trim() || !Number.isFinite(Number(node.range)) || Number(node.range) < 0)) return "Enter a nonnegative range in feet.";
+    const saved = savedNodes.get(node.id);
+    // Don't make an unrelated edit depend on repairing an imported range.
+    const unchangedRange = saved !== undefined && saved.rangeType === node.rangeType && saved.range === node.range;
+    if (!unchangedRange && ["Aura", "Ranged"].includes(node.rangeType) && (!node.range.trim() || !Number.isFinite(Number(node.range)) || Number(node.range) < 0)) return "Enter a nonnegative range in feet.";
     for (const key of rangedDimensionKeys(node)) {
       const value = node.areaDimensions?.[key];
       if (value?.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0 || key === "targetCount" && (!Number.isInteger(Number(value)) || Number(value) < 1))) return "Area dimensions must be nonnegative numbers; target counts must be positive whole numbers.";
@@ -326,9 +345,14 @@ export function validateAbilityInput(input: AbilityInput): string | undefined {
     for (const group of [groups.activation, groups.ending, ...node.results.flatMap(result => { const effective = durationTriggerGroups(result, result.durationType || node.durationType); return [effective.activation, effective.ending]; })]) {
       if (group.conditions.some(condition => condition.kind === "situation" ? !condition.label.trim() : !condition.resource || !condition.operator || (!["depleted", "full"].includes(condition.operator) && (condition.threshold === undefined || !Number.isFinite(condition.threshold))))) return "Complete each trigger or ending condition.";
     }
+    for (const result of node.results) if (node.targets.includes(result.target)) {
+      if (result.templateId) referencedTemplates.add(result.templateId);
+      for (const status of result.effects ?? []) referencedTemplates.add(status.templateId);
+    }
   }
-  for (const effect of input.options.effects) if (effect.definition) {
-    const error = validateAbilityInput(effect.definition);
+  for (const effect of input.options.effects) if (effect.definition && (referencedTemplates.has(effect.id) || previous && !previous.options.effects.some(saved => saved.id === effect.id && JSON.stringify(saved) === JSON.stringify(effect)))) {
+    const saved = previous?.options.effects.find(option => option.id === effect.id && option.definition?.id === effect.definition?.id);
+    const error = validateAbilityInput(effect.definition, saved?.definition);
     if (error) return `${effect.name || "Custom effect"}: ${error}`;
   }
 }

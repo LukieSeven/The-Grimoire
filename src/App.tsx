@@ -66,7 +66,7 @@ function Router() {
         <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/grimoire" component={Dashboard} />
-          {import.meta.env.DEV && <Route path="/characters/:id/ability-editor-preview">{({ id }) => <Redirect to={`/characters/${encodeURIComponent(id)}?ability-editor=preview`} replace />}</Route>}
+          <Route path="/characters/:id/ability-editor-preview">{({ id }) => <Redirect to={`/characters/${encodeURIComponent(id)}`} replace />}</Route>
           <Route path="/characters/:id" component={CharacterSheet} />
           <Route component={NotFound} />
         </Switch>

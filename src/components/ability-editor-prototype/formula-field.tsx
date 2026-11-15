@@ -47,7 +47,7 @@ export function FormulaField({ value, onChange, label = "Roll formula", ownerLab
   return <div className="min-w-0 space-y-2">
     <div className="flex items-center gap-1">
       <label htmlFor={id} className="text-sm font-medium">{label}</label>
-      <SectionHelp label={label}>Enter what the owner rolls, such as WILr + 1d6. The preview checks syntax without rolling. Record opposing stats and outcomes in Advanced rules.</SectionHelp>
+      <SectionHelp label={label}>Enter what the owner rolls, such as WILr + 1d6. Save validates the syntax without rolling. Record opposing stats and outcomes in Advanced rules.</SectionHelp>
     </div>
     <input ref={input} id={id} value={value} onChange={event => onChange(event.target.value)}
       aria-describedby={`${id}-feedback`} aria-invalid={feedback?.invalid || undefined} spellCheck={false}

@@ -1,4 +1,4 @@
-// Focused local preview check; all storage lives in a disposable browser context.
+// Regression coverage for old preview links and the standard editor's cancel behavior.
 import { createRequire } from "node:module";
 import { readFile, mkdir } from "node:fs/promises";
 import assert from "node:assert/strict";
@@ -38,18 +38,18 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   page.on("dialog", dialog => dialog.accept());
   await page.goto(`${base}/characters/${actorId}/ability-editor-preview`, { waitUntil: "domcontentloaded" });
-  await page.waitForURL(url => url.pathname === `/characters/${actorId}` && url.searchParams.get("ability-editor") === "preview");
+  await page.waitForURL(url => url.pathname === `/characters/${actorId}` && !url.searchParams.has("ability-editor"));
 
-  const allPreviews = page.locator("[data-ability-editor-preview]");
+  const allEditors = page.locator("[data-ability-editor]");
   const tab = name => page.getByRole("tab", { name, exact: true });
   const button = (scope, name) => scope.getByRole("button", { name, exact: true });
   const select = (scope, name) => scope.getByRole("combobox", { name, exact: true });
   const nameField = preview => preview.getByLabel("Ability name", { exact: true });
   const snapshot = () => page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) => key.startsWith("aetherborne_"))));
   const expectPreview = async (kind, owner, expectedName) => {
-    const preview = page.locator(`[data-ability-editor-preview="${kind}"]`);
+    const preview = page.locator(`[data-ability-editor="${kind}"]`);
     await preview.waitFor();
-    assert.equal(await allPreviews.count(), 1, "Only the area being edited has an open draft");
+    assert.equal(await allEditors.count(), 1, "Only the area being edited has an open draft");
     assert.equal(await page.getByRole("dialog").count(), 1, "Draft stays in the area's own dialog, not a nested modal");
     assert.ok((await page.getByRole("dialog").textContent()).includes(owner), "Draft displays its recorded owner");
     assert.equal(await nameField(preview).inputValue(), expectedName, "Create is blank; edit loads the selected ability");
@@ -65,11 +65,12 @@ try {
     assert.equal(await preview.getByLabel("Result recipient", { exact: true }).count(), 0, "No duplicate recipient picker");
     assert.equal(await preview.getByLabel(/^Source/).and(preview.locator("select")).count(), kind === "character" ? 1 : 0, "Only the character draft allows an editable source");
     assert.equal(await preview.getByLabel(/^(Item context|Familiar context|Load an existing ability as a preview copy)$/).count(), 0, "Owner and record cannot be switched from inside the draft");
-    assert.equal(await button(preview, "Save ability").count(), 0, "No live save action is exposed in preview");
+    assert.equal(await button(preview, "Save").isEnabled(), true, "The editor can validate and save in one click");
+    assert.equal(await button(preview, "Check draft").count(), 0, "No separate check is required");
     return preview;
   };
   const closePreview = async preview => {
-    await button(preview, "Close preview").click();
+    await button(preview, "Cancel draft").click();
     await preview.waitFor({ state: "detached" });
   };
   const checkGeometry = async () => {
@@ -92,7 +93,7 @@ try {
   await button(page.getByRole("dialog"), "Create ability").click();
   const characterDraft = await expectPreview("character", bundle.character.name, "");
   const effectHelp = button(characterDraft, "Help: Effects");
-  const effectTip = page.locator('[role="tooltip"]').filter({ hasText: "An effect is one change" });
+  const effectTip = page.locator('[role="tooltip"]').filter({ hasText: "Record what the ability does" });
   await effectHelp.hover();
   await effectTip.waitFor({ state: "visible" });
   await nameField(characterDraft).focus();
@@ -100,11 +101,7 @@ try {
   await button(characterDraft, "Help: More settings").click();
   await page.locator('[role="tooltip"]').filter({ hasText: "Optional mechanics such as" }).waitFor({ state: "visible" });
   assert.equal(await moreSettings.evaluate(summary => summary.parentElement.open), false, "Opening help does not expand the section");
-  const checkDraftHelp = button(characterDraft, "Help: Check draft");
-  await checkDraftHelp.focus();
-  await page.locator('[role="tooltip"]').filter({ hasText: "Validates the standard fields only" }).waitFor({ state: "visible" });
-  assert.equal(await characterDraft.getByRole("alert").count(), 0, "Focusing help does not validate the draft");
-  await button(characterDraft, "Check draft").click();
+  await button(characterDraft, "Save").click();
   assert.match(await characterDraft.getByRole("alert").textContent(), /Name the ability/);
   await nameField(characterDraft).fill("Preview-only strike");
   await characterDraft.getByLabel("MP cost", { exact: true }).fill("2");
@@ -171,10 +168,15 @@ try {
   await select(effects, "Roll for").selectOption("Ally");
   const rolls = effects.getByRole("region", { name: "Standalone rolls", exact: true });
   await rolls.getByLabel("Roll formula", { exact: true }).fill("WILr + 1D6");
-  await button(characterDraft, "Check draft").click();
-  assert.match(await characterDraft.getByRole("status").textContent(), /Nothing was saved/);
+  await addEffect("Movement", "Ally");
+  await allyEffects.getByLabel("Movement rules", { exact: true }).fill("Move up to your speed without provoking reactions.");
+  await addEffect("Teleport", "Ally");
+  await allyEffects.getByLabel("Teleport rules", { exact: true }).fill("Teleport up to 30 ft to a space you can see.");
   await button(characterDraft, "Show preview").click();
-  assert.equal(await characterDraft.getByRole("complementary", { name: "Ability draft preview" }).isVisible(), true);
+  const preview = characterDraft.getByRole("complementary", { name: "Ability draft preview" });
+  assert.equal(await preview.isVisible(), true);
+  assert.equal(await preview.getByRole("heading", { name: "Movement · Ally", exact: true }).isVisible(), true);
+  assert.equal(await preview.getByRole("heading", { name: "Teleport · Ally", exact: true }).isVisible(), true);
   await button(characterDraft, "Hide preview").click();
   await checkGeometry();
   await page.screenshot({ path: "tmp/ability-editor-preview-desktop.png" });
@@ -190,7 +192,7 @@ try {
   await closePreview(characterCopy);
   await button(page.getByRole("dialog"), "Close").click();
   await page.getByRole("dialog").waitFor({ state: "detached" });
-  console.log("PASS: single effect chooser, target-specific damage/modifier/status, draft check/reset, and fresh copies");
+  console.log("PASS: single effect chooser, target-specific damage/modifier/status, invalid Save, reset, and cancel");
 
   await tab("Bag / Gear").click();
   for (const { collection, ability, item } of ownedItemAbilities) {
@@ -198,7 +200,7 @@ try {
     const ownerType = collection === "equipment" ? "equipment" : "item";
     await button(card, `Add ability to ${item.name}`).click();
     const directDraft = await expectPreview("item", item.name, "");
-    assert.equal(await directDraft.getAttribute("data-ability-preview-owner"), ownerType);
+    assert.equal(await directDraft.getAttribute("data-ability-editor-owner"), ownerType);
     await closePreview(directDraft);
     await button(page.getByRole("dialog"), "Cancel").click();
     await button(card, `Edit ${ownerType}: ${item.name}`).click();
@@ -215,12 +217,12 @@ try {
     assert.equal(await button(footer, "Save changes").isVisible(), true);
     const unsaved = `${item.name} (unsaved parent edit)`;
     await parentName.fill(unsaved);
-    await button(parent, `Preview new ${ownerType} ability`).click();
+    await button(parent, "Add ability").click();
     const itemDraft = await expectPreview("item", item.name, "");
     await nameField(itemDraft).fill("Unsaved new item ability");
     await closePreview(itemDraft);
     assert.equal(await parentName.inputValue(), unsaved, "Closing a new item draft restores unsaved parent edits");
-    await button(parent, `Preview ${ownerType} ability: ${ability.name}`).click();
+    await button(parent, `Edit ${ownerType} ability: ${ability.name}`).click();
     const itemCopy = await expectPreview("item", item.name, ability.name);
     await nameField(itemCopy).fill("Unsaved item copy");
     await closePreview(itemCopy);
@@ -236,12 +238,12 @@ try {
   const familiarName = familiarParent.getByRole("textbox").first();
   const unsavedFamiliar = `${familiar.name} (unsaved parent edit)`;
   await familiarName.fill(unsavedFamiliar);
-  await button(familiarParent, "+ Preview New Ability").click();
+  await button(familiarParent, "+ Add Ability").click();
   const familiarDraft = await expectPreview("familiar", familiar.name, "");
   await nameField(familiarDraft).fill("Unsaved new familiar ability");
   await closePreview(familiarDraft);
   assert.equal(await familiarName.inputValue(), unsavedFamiliar);
-  await button(familiarParent, `Preview ability: ${familiar.abilities[0].name}`).click();
+  await button(familiarParent, `Edit ability: ${familiar.abilities[0].name}`).click();
   const familiarCopy = await expectPreview("familiar", familiar.name, familiar.abilities[0].name);
   await nameField(familiarCopy).fill("Unsaved familiar copy");
   await page.setViewportSize({ width: 630, height: 764 });

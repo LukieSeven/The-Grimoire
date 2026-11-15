@@ -2,12 +2,13 @@ import { DockableTool } from "./dockable-workspace";
 import { useListSkills } from "../hooks/useStorage";
 import { EffectChip } from "./effect-chip";
 import { effectDetails, outcomeLabel, saveReference } from "../lib/effect-details";
-import { applyTrackedEffect, expireEffectApplications } from "../lib/effect-stacking";
+import { applyTrackedEffect } from "../lib/effect-stacking";
 import { useEffect, useRef, useState } from "react";
 import { AbilityOptionsFields } from "./dialogs/ability-options";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { COMMON_EFFECTS, mergeOptions } from "../lib/ability-input";
-import type { AbilityOptions } from "../lib/ability-input";
+import type { AbilityOptions, RequirementGroup } from "../lib/ability-input";
+import { hasManualEvent, isManualTriggerActivation } from "../lib/ability-use-action";
 import { applyPresetEffect, presetEffect } from "../lib/preset-effect";
 import { Button, buttonVariants } from "./ui/button";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
@@ -16,10 +17,10 @@ import { RecentCombatantsRow } from "./recent-combatants-row";
 import { moveInitiativeWithinTie } from "../lib/initiative-entry";
 import { resolveTrackerEffects, isEffectApplied, isAbilityTriggerActive } from "../lib/tracker";
 import type { ResolvedEffect } from "../lib/tracker";
-import { groupAbilityTriggers, manualTriggerCategories } from "../lib/trigger-groups";
+import { groupAbilityTriggers } from "../lib/trigger-groups";
 import { resolveFamiliarTrackerEffects } from "../lib/familiar-values";
 import { combatEffectName } from "../lib/combat-effect-tags";
-import { evaluateRequirements, conditionText, TRIGGER_CHOICES } from "../lib/ability-components";
+import { evaluateRequirements, conditionText } from "../lib/ability-components";
 import type { ManualTrackedEffect, TriggerCondition, TriggerContext } from "../lib/ability-components";
 import { calculateAbilityEvolutions } from "../lib/storage";
 import type { Ability, Character, Familiar } from "../lib/storage";
@@ -35,11 +36,12 @@ interface Props {
   onTurnChange: (turn: number) => void;
   onApplicationsChange: (applications: EffectApplication[]) => void;
   onManualEffectsChange: (effects: ManualTrackedEffect[]) => void;
-  onConfirmationsChange: (confirmations: Record<string, boolean>) => void;
+  onConfirmationsChange: (confirmations: Record<string, boolean>, familiarId?: Familiar["id"]) => void;
+  onUseTriggeredAbility: (entry: ResolvedEffect) => void;
+  onFamiliarApplicationsChange: (familiarId: Familiar["id"], applications: EffectApplication[]) => void;
   onInspect: (abilityId: number, familiarId?: string | number) => void;
   onRestoreEffects: (snapshot: { applications: EffectApplication[]; manual: ManualTrackedEffect[]; familiars: Familiar[] }) => void;
   onLifetimeEvent: (event: "turn" | "combat", combatant?: Combatant) => void;
-  onRoll: (entry: ResolvedEffect) => void;
   combatantSources: string[];
   recentCombatants: Omit<Combatant, "id">[];
   onRememberCombatant: (combatant: Omit<Combatant, "id">) => void;
@@ -84,14 +86,14 @@ export function TrackerPanel(props: Props) {
   const effectKey = (entry: ResolvedEffect) => `${entry.ownerFamiliar?.id ?? "character"}:${entry.ability.id}:${entry.effect.id}`;
   const activeSelfEffects = effects.filter(entry => !entry.familiar && !entry.ownerFamiliar && isEffectApplied(entry, "self", applications));
   const selfEffects = activeSelfEffects.filter(entry => !(entry.input && !entry.result));
-  const manualActive = (effect: ManualTrackedEffect) => {
-    const state = evaluateRequirements(effect.conditions, effect.conditionMatch, props.vitals, confirmations);
-    return state === "met" && (effect.active || (effect.triggerMode === "automatic" && !!effect.conditions?.length));
-  };
-  const selfManual: ManualTrackedEffect[] = [];
+  const manualRequirements = (effect: ManualTrackedEffect) => effect.triggerMode === "reference" ? "met"
+    : evaluateRequirements(effect.conditions, effect.conditionMatch, props.vitals, confirmations);
+  const manualActive = (effect: ManualTrackedEffect) => manualRequirements(effect) === "met"
+    && (effect.active || (effect.triggerMode === "automatic" && !!effect.conditions?.length));
+  const selfManual = manual.filter(effect => effect.targetId === "self");
   const rings = [...new Set([
     ...activeSelfEffects.filter(entry => entry.effect.tracking?.radius !== undefined).map(entry => ringKey(entry.effect.tracking!.radius!, entry.effect.tracking?.radiusUnit)),
-    ...selfManual.filter(effect => effect.radius !== undefined).map(effect => ringKey(effect.radius!, effect.radiusUnit)),
+    ...selfManual.filter(effect => manualActive(effect) && effect.radius !== undefined).map(effect => ringKey(effect.radius!, effect.radiusUnit)),
   ])].sort((left, right) => Number(left.split("|")[0]) - Number(right.split("|")[0]));
   const selectedRadius = radius && rings.includes(radius) ? radius : null;
   const triggerGroups = groupAbilityTriggers(effects, props.abilities);
@@ -104,13 +106,28 @@ export function TrackerPanel(props: Props) {
     if (duplicates.length) props.onManualEffectsChange(manual.filter(effect => !duplicates.includes(effect)));
     props.onApplicationsChange(applyTrackedEffect(applications, entry, targetId));
   };
-  const requirements = (conditions: TriggerCondition[] = [], grouped = false) => <div className="space-y-2">{conditions.map(condition => <div key={condition.id} className="text-xs border-t border-border/30 pt-2"><p>{conditionText(condition)}</p>{condition.kind === "situation" && (!grouped || !TRIGGER_CHOICES.includes(condition.label)) && <div className="flex gap-2 mt-1">{([true, false, undefined] as const).map((value, index) => <button type="button" key={index} aria-pressed={confirmations[condition.id] === value} className={`border px-2 py-1 ${confirmations[condition.id] === value ? "border-primary text-primary" : "border-border"}`} onClick={() => { const next = { ...confirmations }; if (value === undefined) delete next[condition.id]; else next[condition.id] = value; props.onConfirmationsChange(next); }}>{value === true ? "Met" : value === false ? "Not met" : "Undecided"}</button>)}</div>}</div>)}</div>;
+  const requirements = (conditions: TriggerCondition[] = [], canConfirm = false, familiar?: Familiar) => {
+    const saved = familiar ? familiar.triggerConfirmations ?? {} : confirmations;
+    return <div className="space-y-2">{conditions.map(condition => <div key={condition.id} className="text-xs border-t border-border/30 pt-2">
+      <p>{conditionText(condition)}</p>
+      {canConfirm && condition.kind === "situation" && <div role="group" aria-label={condition.label} className="flex flex-wrap gap-2 mt-1">
+        {([true, false, undefined] as const).map((value, index) => <button type="button" key={index} aria-pressed={saved[condition.id] === value} disabled={props.optionsPending}
+          className={`border px-2 py-1 ${saved[condition.id] === value ? "border-primary text-primary" : "border-border"}`}
+          onClick={() => { const next = { ...saved }; if (value === undefined) delete next[condition.id]; else next[condition.id] = value; props.onConfirmationsChange(next, familiar?.id); }}>
+          {value === true ? "Met" : value === false ? "Not met" : "Undecided"}
+        </button>)}
+      </div>}
+    </div>)}</div>;
+  };
+  const renderRequirements = (group: RequirementGroup, label: string, confirmEvents: boolean, familiar?: Familiar) => group.conditions.length > 0 && <div>
+    <p className="text-xs text-primary">{label}{group.mode === "reference" ? " · reference" : ""}</p>
+    {requirements(group.conditions, confirmEvents && hasManualEvent(group), familiar)}
+  </div>;
   const canApply = (entry: ResolvedEffect, targetId: string) => {
     if (targetId !== "self" && !combatEffectName(entry)) return false;
     if (entry.progression !== "unlocked" || entry.applicability !== "available") return false;
     if ((entry.createdEffect ? entry.createdEffect.triggerMode ?? "manual" : entry.component?.triggerMode) === "reference") return false;
     if (entry.input) {
-      if ((entry.result?.trigger.mode ?? entry.input.trigger.mode) === "reference") return false;
       if (!entry.result) return targetId === "self";
       if (!entry.sharedActivation) return targetId === "self" ? entry.result.target === "Self" : entry.result.target !== "Self";
     }
@@ -123,10 +140,22 @@ export function TrackerPanel(props: Props) {
     const targets = entry.createdEffect?.targets ?? entry.component?.targets ?? entry.effect.tracking?.targets;
     return !targets?.length || (targetId === "self" ? targets.includes("self") || !!entry.component?.kinds.includes("aura") || !!entry.component?.createdEffects?.some(effect => effect.delivery === "ongoing") : targets.includes("enemies") || targets.includes("allies") || targets.includes("custom"));
   };
-  const renderEffect = (entry: ResolvedEffect, targetId: string, controls = true) => {
-    const active = isEffectApplied(entry, targetId, applications);
-    const recorded = applications.some(application => application.familiarId === entry.ownerFamiliar?.id && application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === targetId);
-    const automatic = entry.permanent && targetId === "self";
+  const renderEffect = (entry: ResolvedEffect, inTriggers = false) => {
+    const owner = entry.ownerFamiliar ?? entry.familiar;
+    const ownerApplications = entry.ownerFamiliar ? entry.ownerFamiliar.effectApplications ?? [] : applications;
+    const active = isEffectApplied(entry, "self", ownerApplications);
+    const recorded = ownerApplications.some(application => application.abilityId === entry.ability.id && application.effectId === entry.effect.id && application.targetId === "self");
+    const automatic = entry.permanent;
+    const triggerReady = !entry.triggerParent || isEffectApplied(entry.triggerParent, "self", ownerApplications);
+    const sourceTrigger = inTriggers && !entry.result && !!entry.input && isManualTriggerActivation(entry.input);
+    const resultDuration = entry.result?.durationType || entry.input?.durationType;
+    const effectTrigger = inTriggers && resultDuration === "When Triggered" && entry.result?.target === "Self" && !entry.sharedActivation && hasManualEvent(entry.result.trigger);
+    const changeEffect = () => {
+      const next = recorded ? ownerApplications.filter(application => application.abilityId !== entry.ability.id || application.effectId !== entry.effect.id || application.targetId !== "self")
+        : applyTrackedEffect(ownerApplications, { ...entry, ownerFamiliar: undefined }, "self");
+      if (entry.ownerFamiliar) props.onFamiliarApplicationsChange(entry.ownerFamiliar.id, next);
+      else props.onApplicationsChange(next);
+    };
     return <article key={effectKey(entry)} className="border border-border/40 p-3 space-y-2 text-sm">
       <div className="flex justify-between gap-2"><button type="button" className="font-semibold text-primary hover:underline text-left" onClick={() => props.onInspect(entry.ability.id, entry.ownerFamiliar?.id)}>{entry.effect.name}</button><span className="text-xs text-primary">{active ? "Active" : entry.progression !== "unlocked" ? entry.progression : entry.applicability}</span></div>
       {entry.ownerFamiliar && <p className="text-xs text-primary">Familiar: {entry.ownerFamiliar.name}</p>}
@@ -139,28 +168,31 @@ export function TrackerPanel(props: Props) {
       {!entry.createdEffect && entry.component?.targetRules && <p className="whitespace-pre-wrap">{entry.component.targetRules}</p>}
       {entry.component?.cost && <p className="text-xs">Cost: {entry.component.cost}</p>}
       {entry.component?.uses && <p className="text-xs">Uses: {entry.component.uses}</p>}
-      {controls && entry.effect.rollFormula && <div className="flex flex-wrap items-center gap-2"><code className="text-xs">{entry.effect.rollFormula}</code><Button size="sm" variant="outline" disabled={entry.progression !== "unlocked" || (!active && entry.applicability !== "available")} onClick={() => props.onRoll(entry)}>Roll</Button></div>}
+      {inTriggers && entry.effect.rollFormula && <p className="text-xs font-mono break-words">{entry.effect.rollFormula}</p>}
       {entry.input && !entry.result && <div className="text-xs space-y-1">
         {entry.input.manaCost !== undefined && <p>Activation: {entry.input.manaCost} mana</p>}
         {entry.input.manaPerTurn !== undefined && <p>Per turn: {entry.input.manaPerTurn} mana</p>}
         {(entry.input.reaction || entry.input.timeCost !== undefined) && <p>Time cost: {entry.input.reaction ? "Reaction" : `${entry.input.timeCost} seconds`}</p>}
         {entry.input.cooldown !== undefined && <p>Cooldown (reference): {entry.input.cooldown} {entry.input.cooldownUnit.toLowerCase()} · starts {entry.input.cooldownStarts === "activation" ? "on activation" : "when ability ends"}</p>}
       </div>}
-      {controls && entry.input && <>{!!entry.input.trigger.conditions.length && <><p className="text-xs text-primary">When triggered</p>{requirements(entry.input.trigger.conditions, true)}</>}
-        {!!entry.input.ending.conditions.length && <><p className="text-xs text-primary">Ends when</p>{requirements(entry.input.ending.conditions, true)}</>}
-        {entry.result && <>{requirements(entry.result.trigger.conditions, true)}{!!entry.result.ending.conditions.length && <><p className="text-xs text-primary">Effect ends when</p>{requirements(entry.result.ending.conditions, true)}</>}</>}
+      {inTriggers && entry.input && <>
+        {!entry.result && renderRequirements(entry.input.trigger, "Starts when", entry.input.durationType === "When Triggered", owner)}
+        {!entry.result && renderRequirements(entry.input.ending, "Ends when", entry.input.durationType === "Until Triggered", owner)}
+        {entry.result && renderRequirements(entry.result.trigger, "Effect starts when", resultDuration === "When Triggered", owner)}
+        {entry.result && renderRequirements(entry.result.ending, "Effect ends when", resultDuration === "Until Triggered", owner)}
       </>}
-      {controls && requirements(entry.component?.conditions, true)}
-      {controls && entry.createdEffect && requirements(entry.createdEffect.conditions, true)}
-      {controls && entry.input?.durationType !== "When Triggered" && !automatic && !(entry.sharedActivation && targetId === "self") && <Button type="button" size="sm" disabled={!recorded && !canApply(entry, targetId)} onClick={() => record(entry, targetId)}>{recorded ? "End effect" : "Apply effect"}</Button>}
+      {inTriggers && requirements(entry.component?.conditions)}
+      {inTriggers && entry.createdEffect && requirements(entry.createdEffect.conditions)}
+      {sourceTrigger && !automatic && <Button type="button" size="sm" disabled={props.optionsPending || (!recorded && (entry.applicability !== "available" || !triggerReady))} onClick={() => recorded ? changeEffect() : props.onUseTriggeredAbility(entry)}>{recorded ? "End ability" : "Use ability"}</Button>}
+      {effectTrigger && !automatic && <Button type="button" size="sm" disabled={props.optionsPending || (!recorded && (entry.applicability !== "available" || !triggerReady))} onClick={changeEffect}>{recorded ? "End effect" : "Apply effect"}</Button>}
       {automatic && <p className="text-xs text-muted-foreground">{entry.input?.durationType === "Always On" || entry.component?.behaviors.includes("always-on") ? "Always on" : "Automatic condition"}</p>}
     </article>;
   };
-  const renderManual = (effect: ManualTrackedEffect, controls = false) => <article key={effect.id} className="border border-border/40 p-3 space-y-2 text-sm">
+  const renderManual = (effect: ManualTrackedEffect) => <article key={effect.id} className="border border-border/40 p-3 space-y-2 text-sm">
     <div className="flex justify-between gap-2"><strong>{effect.name}</strong><span className="text-xs text-primary">{manualActive(effect) ? "Active" : "Inactive"}</span></div><p className="text-xs text-muted-foreground">Manual effect</p><p className="whitespace-pre-wrap">{effect.rules}</p>
     {effect.radius !== undefined && <p className="text-xs">Radius: {effect.radius} {effect.radiusUnit}</p>}{effect.duration && <p className="text-xs">Duration: {effect.duration}</p>}
-    {controls && requirements(effect.conditions)}
-    <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setManualDraft({ targetId: effect.targetId, initial: effect })}>Edit</Button><Button size="sm" variant="outline" disabled={!manualActive(effect) && evaluateRequirements(effect.conditions, effect.conditionMatch, props.vitals, confirmations) !== "met"} onClick={() => props.onManualEffectsChange(manual.map(entry => entry.id === effect.id ? { ...entry, active: !manualActive(entry), triggerMode: manualActive(entry) && entry.triggerMode === "automatic" ? "manual" : entry.triggerMode } : entry))}>{manualActive(effect) ? "End" : "Activate"}</Button></div>
+    {requirements(effect.conditions, effect.triggerMode !== "reference" && effect.triggerMode !== "automatic")}
+    <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={props.optionsPending} onClick={() => setManualDraft({ targetId: effect.targetId, initial: effect })}>Edit</Button><Button size="sm" variant="outline" disabled={props.optionsPending || (!manualActive(effect) && manualRequirements(effect) !== "met")} onClick={() => props.onManualEffectsChange(manual.map(entry => entry.id === effect.id ? { ...entry, active: !manualActive(entry), triggerMode: manualActive(entry) && entry.triggerMode === "automatic" ? "manual" : entry.triggerMode } : entry))}>{manualActive(effect) ? "End" : "Activate"}</Button></div>
   </article>;
   const updateCombatants = (combatants: Combatant[], remember = true) => {
     if (remember) rememberCombatChange();
@@ -225,9 +257,10 @@ export function TrackerPanel(props: Props) {
           <div className="flex flex-wrap justify-center gap-1">{rings.map(ring => <button type="button" key={ring} aria-pressed={selectedRadius === ring} className={`border px-2 py-1 text-xs ${selectedRadius === ring ? "border-primary text-primary" : "border-border"}`} onClick={() => setRadius(ring)}>{ring.replace("|", " ")}</button>)}</div>
         </div>
         <div tabIndex={0} role="region" aria-label="Active effect details" data-tracker-scroll="passive" className="workspace-scroll space-y-3 flex-1 min-h-0 border border-border/50 bg-background/30 p-3">
-          {selfEffects.filter(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined).map(entry => renderEffect(entry, "self", false))}
+          {selfEffects.filter(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined).map(entry => renderEffect(entry))}
+          {selfManual.filter(effect => selectedRadius ? effect.radius !== undefined && ringKey(effect.radius, effect.radiusUnit) === selectedRadius : effect.radius === undefined || !manualActive(effect)).map(renderManual)}
           {!selectedRadius && props.abilities.filter(ability => !ability.definition && !ability.components && ability.active).map(ability => <article key={ability.id} className="border border-border/40 p-3 text-sm space-y-2"><button type="button" className="text-primary underline" onClick={() => props.onInspect(ability.id)}>{ability.name}</button>{calculateAbilityEvolutions(ability, props.character.rank, props.stats).activeModifiers.filter(modifier => modifier.assignedToMechanicsTracker).map(modifier => <p key={modifier.id}>{modifier.name}: {modifier.effect}</p>)}</article>)}
-          {!selfEffects.some(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined) && !selfManual.some(effect => selectedRadius ? effect.radius !== undefined && ringKey(effect.radius, effect.radiusUnit) === selectedRadius : effect.radius === undefined) && !(!selectedRadius && props.abilities.some(ability => !ability.definition && !ability.components && ability.active)) && <p className="text-xs text-muted-foreground">No active effects in this view.</p>}
+          {!selfEffects.some(entry => selectedRadius ? entry.effect.tracking?.radius !== undefined && ringKey(entry.effect.tracking.radius, entry.effect.tracking.radiusUnit) === selectedRadius : entry.effect.tracking?.radius === undefined) && !selfManual.some(effect => selectedRadius ? effect.radius !== undefined && ringKey(effect.radius, effect.radiusUnit) === selectedRadius : effect.radius === undefined || !manualActive(effect)) && !(!selectedRadius && props.abilities.some(ability => !ability.definition && !ability.components && ability.active)) && <p className="text-xs text-muted-foreground">No effects in this view.</p>}
         </div>
       </div></DockableTool>
       <DockableTool id="triggers"><div className="tracker-triggers">
@@ -238,7 +271,7 @@ export function TrackerPanel(props: Props) {
               <h4 className="text-sm text-primary font-semibold">{group.name}</h4>
 
             </div>}
-            {group.entries.filter(entry => !(entry.input && !entry.result)).map(entry => renderEffect(entry, "self", false))}
+            {group.entries.map(entry => renderEffect(entry, true))}
             {group.legacy.map(({ ability, trigger }) => <article key={`${ability.id}:${trigger.id}`} className="border border-border/40 p-3 space-y-2 text-sm"><strong>{trigger.name}</strong><p className="text-xs">{trigger.resource.toUpperCase()} · {trigger.operator.replaceAll("_", " ")} · {trigger.threshold}</p><p className="text-xs text-primary">{isAbilityTriggerActive(trigger, props.vitals) ? "Trigger met" : "Trigger unmet"}</p><p className="whitespace-pre-wrap">{trigger.description}</p><button type="button" className="text-xs text-primary underline" onClick={() => props.onInspect(ability.id)}>{ability.name}</button></article>)}
           </section>)}
           {!triggerGroups.length && <p className="text-xs text-muted-foreground">No abilities have tagged triggers.</p>}
